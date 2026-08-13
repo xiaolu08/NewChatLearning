@@ -31,6 +31,10 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert schema["reply"]["items"]["regex_enabled"]["default"] is True
     assert schema["reply"]["items"]["similarity_enabled"]["default"] is False
     assert schema["reply"]["items"]["similarity_threshold"]["default"] == 0.5
+    assert schema["library"]["items"]["mode"]["default"] == "group"
+    assert schema["library"]["items"]["group_tags"]["type"] == "template_list"
+    assert schema["library"]["items"]["group_tags"]["default"] == []
     assert schema["tts"]["items"]["enabled"]["default"] is False
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
+    assert 'id="library"' in dashboard

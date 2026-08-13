@@ -86,3 +86,51 @@ def test_media_settings_convert_units_and_enforce_bounds():
     assert settings["quota_bytes"] == 1024**3
     assert settings["max_file_bytes"] == 2 * 1024**2
     assert settings["timeout_seconds"] == 1.0
+
+
+def test_group_library_scope_isolated_by_default():
+    service = ConfigService({})
+
+    assert service.reply_library_scopes("10001", ["10001", "10002"]) == (("10001",),)
+
+
+def test_global_library_excludes_groups_and_tagged_libraries():
+    service = ConfigService(
+        {
+            "library": {
+                "mode": "global",
+                "excluded_group_ids": ["10003"],
+                "group_tags": [
+                    {"group_id": "10002", "tags": ["friends"]},
+                    {"group_id": "10004", "tags": ["friends"]},
+                ],
+            }
+        }
+    )
+
+    assert service.reply_library_scopes("10001", ["10001", "10002", "10003", "10004"]) == (
+        ("10001",),
+    )
+    assert service.reply_library_scopes("10002", ["10001", "10002", "10003", "10004"]) == (
+        ("10002", "10004"),
+    )
+
+
+def test_multiple_tags_create_separate_weighted_scopes_and_accept_legacy_dict():
+    service = ConfigService(
+        {
+            "library": {
+                "mode": "global",
+                "group_tags": {
+                    "10001": ["friends", "games", "friends"],
+                    "10002": ["friends"],
+                    "10003": ["games"],
+                },
+            }
+        }
+    )
+
+    assert service.reply_library_scopes("10001", ["10001", "10002", "10003"]) == (
+        ("10001", "10002"),
+        ("10001", "10003"),
+    )

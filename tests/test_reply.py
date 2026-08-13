@@ -10,11 +10,11 @@ from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
 
-def message(message_id: str, timestamp: int, text: str):
+def message(message_id: str, timestamp: int, text: str, group_id: str = "10001"):
     component = {"type": "Plain", "data": {"text": text}}
     return NormalizedMessage(
         platform="aiocqhttp",
-        group_id="10001",
+        group_id=group_id,
         sender_id="42",
         message_id=message_id,
         timestamp=timestamp,
@@ -28,6 +28,22 @@ async def seed_pair(store: SQLiteStore):
     question = message("q1", 1000, "你好")
     await learning.observe(question)
     await learning.observe(message("a1", 1001, "你好呀"))
+    return question
+
+
+async def seed_group_pair(
+    store: SQLiteStore,
+    group_id: str,
+    question_text: str,
+    answer_text: str,
+    timestamp: int,
+):
+    learning = LearningService(store, interval_seconds=900)
+    question = message(f"q-{group_id}-{timestamp}", timestamp, question_text, group_id)
+    await learning.observe(question)
+    await learning.observe(
+        message(f"a-{group_id}-{timestamp}", timestamp + 1, answer_text, group_id)
+    )
     return question
 
 
@@ -363,3 +379,191 @@ def test_filtered_exact_match_does_not_fall_back_to_similarity(tmp_path):
     decision = asyncio.run(scenario())
 
     assert decision.reason == "no_match"
+
+
+def test_default_group_library_does_not_leak_other_groups(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "isolated.sqlite3")
+        await store.open()
+        question = await seed_group_pair(store, "10002", "跨群问题", "跨群答案", 1000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                }
+            }
+        )
+        try:
+            return await ReplyService(store, config).decide("10001", question.normalized_key)
+        finally:
+            await store.close()
+
+    decision = asyncio.run(scenario())
+
+    assert decision.reason == "no_match"
+
+
+def test_global_library_combines_untagged_groups_and_honors_exclusions(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "global.sqlite3")
+        await store.open()
+        included = await seed_group_pair(store, "10002", "公共问题", "公共答案", 1000)
+        excluded = await seed_group_pair(store, "10003", "排除问题", "排除答案", 2000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                },
+                "library": {
+                    "mode": "global",
+                    "excluded_group_ids": ["10003"],
+                },
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            found = await reply.decide("10001", included.normalized_key)
+            hidden = await reply.decide("10001", excluded.normalized_key)
+        finally:
+            await store.close()
+        return found, hidden
+
+    found, hidden = asyncio.run(scenario())
+
+    assert found.candidate.components[0]["data"]["text"] == "公共答案"
+    assert hidden.reason == "no_match"
+
+
+def test_tagged_group_queries_only_shared_tag_members(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "tags.sqlite3")
+        await store.open()
+        shared = await seed_group_pair(store, "10002", "标签问题", "标签答案", 1000)
+        outsider = await seed_group_pair(store, "10003", "外部问题", "外部答案", 2000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                },
+                "library": {
+                    "mode": "global",
+                    "group_tags": [
+                        {"group_id": "10001", "tags": ["friends"]},
+                        {"group_id": "10002", "tags": ["friends"]},
+                        {"group_id": "10003", "tags": ["games"]},
+                    ],
+                },
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            found = await reply.decide("10001", shared.normalized_key)
+            hidden = await reply.decide("10001", outsider.normalized_key)
+        finally:
+            await store.close()
+        return found, hidden
+
+    found, hidden = asyncio.run(scenario())
+
+    assert found.candidate.components[0]["data"]["text"] == "标签答案"
+    assert hidden.reason == "no_match"
+
+
+def test_multiple_tags_repeat_candidates_like_upstream_tag_libraries(tmp_path):
+    class CapturingRandom(random.Random):
+        def __init__(self):
+            super().__init__(1)
+            self.population = None
+            self.weights = None
+
+        def choices(self, population, weights=None, *, cum_weights=None, k=1):
+            self.population = list(population)
+            self.weights = list(weights or [])
+            return [self.population[0]]
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "multi-tag.sqlite3")
+        await store.open()
+        question = await seed_group_pair(store, "10001", "多标签问题", "多标签答案", 1000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                },
+                "library": {
+                    "mode": "global",
+                    "group_tags": [
+                        {"group_id": "10001", "tags": ["friends", "games"]},
+                    ],
+                },
+            }
+        )
+        random_source = CapturingRandom()
+        try:
+            decision = await ReplyService(store, config, random_source=random_source).decide(
+                "10001", question.normalized_key
+            )
+        finally:
+            await store.close()
+        return decision, random_source
+
+    decision, random_source = asyncio.run(scenario())
+
+    assert decision.should_reply is True
+    assert len(random_source.population) == 2
+    assert random_source.weights == [1, 1]
+
+
+def test_global_scope_supports_cross_group_regex_and_similarity(tmp_path):
+    path = tmp_path / "fallback-scope.sqlite3"
+
+    async def scenario():
+        store = SQLiteStore(path)
+        await store.open()
+        await seed_group_pair(store, "10002", "你.*好", "正则答案", 1000)
+        await seed_group_pair(store, "10003", "今天天气不错", "相似答案", 2000)
+        await store.close()
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute(
+                "UPDATE questions SET is_regex = 1 WHERE group_id = '10002' AND plain_text = '你.*好'"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        await store.open()
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "similarity_enabled": True,
+                },
+                "library": {"mode": "global"},
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            regex_result = await reply.decide("10001", "missing-regex", plain_text="你今天好")
+            similarity_result = await reply.decide(
+                "10001", "missing-similarity", plain_text="今天天气不错啊"
+            )
+        finally:
+            await store.close()
+        return regex_result, similarity_result
+
+    regex_result, similarity_result = asyncio.run(scenario())
+
+    assert regex_result.reason == "regex"
+    assert regex_result.candidate.components[0]["data"]["text"] == "正则答案"
+    assert similarity_result.reason == "similarity"
+    assert similarity_result.candidate.components[0]["data"]["text"] == "相似答案"

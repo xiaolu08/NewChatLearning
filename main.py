@@ -139,7 +139,8 @@ class NewChatLearningPlugin(star.Star):
                 f"答案：{status['statistics']['answers']}\n"
                 f"待固化消息：{status['statistics']['pending_messages']}\n"
                 f"群聊学习：{'已启用' if status['automatic_learning'] else '未启用'}\n"
-                f"精确匹配回复：{'已启用' if status['automatic_reply'] else '未启用'}"
+                f"本地词库回复：{'已启用' if status['automatic_reply'] else '未启用'}\n"
+                f"词库范围：{'全局/标签' if status['library']['mode'] == 'global' else '仅本群'}"
             )
         event.set_result(MessageEventResult().message(text))
 

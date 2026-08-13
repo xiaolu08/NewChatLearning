@@ -182,6 +182,52 @@
       }
     }
   },
+  "library": {
+    "description": "词库范围",
+    "type": "object",
+    "hint": "普通模式只查询本群；全局模式实时联合查询，不复制词库文件。配置标签的群只查询共享标签范围。",
+    "items": {
+      "mode": {
+        "description": "回复词库模式",
+        "type": "string",
+        "options": ["group", "global"],
+        "default": "group"
+      },
+      "excluded_group_ids": {
+        "description": "不进入全局词库的群号",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "仅影响未配置标签群使用的全局词库；不停止该群自身学习。",
+        "default": []
+      },
+      "group_tags": {
+        "description": "群聊共享标签",
+        "type": "template_list",
+        "hint": "添加群聊并填写标签名称列表。共享任一标签的群会进入同一个实时词库范围。",
+        "templates": {
+          "group_tags": {
+            "name": "群聊标签",
+            "display_item": "group_id",
+            "hide_hint_in_list": true,
+            "items": {
+              "group_id": {
+                "description": "群号",
+                "type": "string",
+                "default": ""
+              },
+              "tags": {
+                "description": "标签名称",
+                "type": "list",
+                "items": {"type": "string"},
+                "default": []
+              }
+            }
+          }
+        },
+        "default": []
+      }
+    }
+  },
   "webui": {
     "description": "管理页面",
     "type": "object",

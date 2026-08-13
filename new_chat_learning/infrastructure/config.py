@@ -29,6 +29,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "similarity_max_length": 35,
         "type_frequency_thresholds": {},
     },
+    "library": {
+        "mode": "group",
+        "excluded_group_ids": [],
+        "group_tags": [],
+    },
     "permissions": {"plugin_admin_ids": []},
     "storage": {
         "media_persistence_enabled": True,
@@ -135,6 +140,77 @@ class ConfigService:
                 storage.get("media_download_timeout_seconds"), 15.0, 1.0, 300.0
             ),
         }
+
+    def reply_library_scopes(
+        self,
+        group_id: str,
+        available_group_ids: list[str],
+    ) -> tuple[tuple[str, ...], ...]:
+        library = self.snapshot()["library"]
+        group_id = str(group_id)
+        if str(library.get("mode", "group")).lower() != "global":
+            return ((group_id,),)
+
+        group_tags = self._normalized_group_tags(library.get("group_tags"))
+        requested_tags = group_tags.get(group_id, ())
+        if requested_tags:
+            scopes = []
+            for tag in requested_tags:
+                members = tuple(
+                    member
+                    for member, tags in group_tags.items()
+                    if tag in tags and member in available_group_ids
+                )
+                if members:
+                    scopes.append(members)
+            return tuple(scopes)
+
+        excluded = {str(item).strip() for item in library.get("excluded_group_ids", [])}
+        tagged_groups = set(group_tags)
+        members = tuple(
+            candidate
+            for candidate in available_group_ids
+            if candidate not in excluded and candidate not in tagged_groups
+        )
+        return (members,) if members else ()
+
+    def library_status(self) -> dict[str, Any]:
+        library = self.snapshot()["library"]
+        group_tags = self._normalized_group_tags(library.get("group_tags"))
+        return {
+            "mode": (
+                "global" if str(library.get("mode", "group")).lower() == "global" else "group"
+            ),
+            "excluded_group_ids": sorted(
+                {
+                    str(item).strip()
+                    for item in library.get("excluded_group_ids", [])
+                    if str(item).strip()
+                }
+            ),
+            "tagged_groups": len(group_tags),
+            "tags": sorted({tag for tags in group_tags.values() for tag in tags}),
+        }
+
+    @staticmethod
+    def _normalized_group_tags(value: Any) -> dict[str, tuple[str, ...]]:
+        if isinstance(value, list):
+            entries = (
+                (item.get("group_id"), item.get("tags")) for item in value if isinstance(item, dict)
+            )
+        elif isinstance(value, dict):
+            entries = value.items()
+        else:
+            return {}
+        result = {}
+        for raw_group_id, raw_tags in entries:
+            if not isinstance(raw_tags, (list, tuple)):
+                continue
+            group_id = str(raw_group_id).strip()
+            tags = tuple(dict.fromkeys(str(tag).strip() for tag in raw_tags if str(tag).strip()))
+            if group_id and tags:
+                result[group_id] = tags
+        return result
 
     @classmethod
     def _type_frequency_thresholds(cls, value: Any) -> dict[str, int]:

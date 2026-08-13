@@ -54,6 +54,7 @@ class RuntimeApplication:
             "automatic_learning": learning_enabled,
             "learning_capture_enabled": learning_enabled,
             "automatic_reply": bool(self.config.snapshot()["reply"]["enabled"]),
+            "library": self.config.library_status(),
             "data_dir": str(self.data_dir),
             "config_revision": self.config.revision,
             "database": database,

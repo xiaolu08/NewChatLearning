@@ -308,18 +308,35 @@ class SQLiteStore:
             connection.commit()
             return cursor.rowcount > 0
 
-    async def find_exact_answers(self, group_id: str, normalized_key: str) -> list[ReplyCandidate]:
+    async def list_question_group_ids(self) -> list[str]:
         async with self._lock:
             connection = self._require_connection()
             rows = connection.execute(
+                "SELECT DISTINCT group_id FROM questions ORDER BY group_id"
+            ).fetchall()
+            return [str(row["group_id"]) for row in rows]
+
+    async def find_exact_answers(
+        self,
+        group_ids: tuple[str, ...],
+        normalized_key: str,
+    ) -> list[ReplyCandidate]:
+        if not group_ids:
+            return []
+        async with self._lock:
+            connection = self._require_connection()
+            placeholders = ",".join("?" for _ in group_ids)
+            rows = connection.execute(
                 "SELECT a.id AS answer_id, a.question_id, a.weight, "
-                "COALESCE(aq.frequency, 0) AS answer_question_frequency, a.components_json "
+                f"COALESCE((SELECT SUM(aq.frequency) FROM questions AS aq "
+                f"WHERE aq.group_id IN ({placeholders}) "
+                "AND aq.normalized_key = a.normalized_key), 0) "
+                "AS answer_question_frequency, a.components_json "
                 "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
-                "LEFT JOIN questions AS aq ON aq.group_id = q.group_id "
-                "AND aq.normalized_key = a.normalized_key "
-                "WHERE q.group_id = ? AND q.normalized_key = ? AND a.weight > 0 "
+                f"WHERE q.group_id IN ({placeholders}) "
+                "AND q.normalized_key = ? AND a.weight > 0 "
                 "ORDER BY a.id",
-                (str(group_id), normalized_key),
+                (*group_ids, *group_ids, normalized_key),
             ).fetchall()
             return [
                 ReplyCandidate(
@@ -332,35 +349,55 @@ class SQLiteStore:
                 for row in rows
             ]
 
-    async def find_matchable_questions(self, group_id: str) -> list[QuestionCandidate]:
+    async def find_matchable_questions(
+        self,
+        group_ids: tuple[str, ...],
+    ) -> list[QuestionCandidate]:
+        if not group_ids:
+            return []
         async with self._lock:
             connection = self._require_connection()
+            placeholders = ",".join("?" for _ in group_ids)
             rows = connection.execute(
-                "SELECT id, plain_text, is_regex FROM questions "
-                "WHERE group_id = ? AND plain_text != '' ORDER BY id",
-                (str(group_id),),
+                "SELECT q.id, q.normalized_key, q.plain_text, q.is_regex "
+                "FROM questions AS q WHERE q.id IN ("
+                "SELECT MIN(grouped.id) FROM questions AS grouped "
+                f"WHERE grouped.group_id IN ({placeholders}) "
+                "AND grouped.plain_text != '' GROUP BY grouped.normalized_key"
+                ") ORDER BY q.id",
+                group_ids,
             ).fetchall()
             return [
                 QuestionCandidate(
                     question_id=int(row["id"]),
+                    normalized_key=str(row["normalized_key"]),
                     plain_text=str(row["plain_text"]),
                     is_regex=bool(row["is_regex"]),
                 )
                 for row in rows
             ]
 
-    async def find_answers_for_question(self, question_id: int) -> list[ReplyCandidate]:
+    async def find_answers_for_question(
+        self,
+        group_ids: tuple[str, ...],
+        normalized_key: str,
+    ) -> list[ReplyCandidate]:
+        if not group_ids:
+            return []
         async with self._lock:
             connection = self._require_connection()
+            placeholders = ",".join("?" for _ in group_ids)
             rows = connection.execute(
                 "SELECT a.id AS answer_id, a.question_id, a.weight, "
-                "COALESCE(aq.frequency, 0) AS answer_question_frequency, "
+                f"COALESCE((SELECT SUM(aq.frequency) FROM questions AS aq "
+                f"WHERE aq.group_id IN ({placeholders}) "
+                "AND aq.normalized_key = a.normalized_key), 0) "
+                "AS answer_question_frequency, "
                 "a.components_json FROM answers AS a "
                 "JOIN questions AS q ON q.id = a.question_id "
-                "LEFT JOIN questions AS aq ON aq.group_id = q.group_id "
-                "AND aq.normalized_key = a.normalized_key "
-                "WHERE a.question_id = ? AND a.weight > 0 ORDER BY a.id",
-                (int(question_id),),
+                f"WHERE q.group_id IN ({placeholders}) "
+                "AND q.normalized_key = ? AND a.weight > 0 ORDER BY a.id",
+                (*group_ids, *group_ids, normalized_key),
             ).fetchall()
             return [
                 ReplyCandidate(

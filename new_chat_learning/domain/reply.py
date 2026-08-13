@@ -36,5 +36,6 @@ class ReplyDecision:
 @dataclass(frozen=True, slots=True)
 class QuestionCandidate:
     question_id: int
+    normalized_key: str
     plain_text: str
     is_regex: bool

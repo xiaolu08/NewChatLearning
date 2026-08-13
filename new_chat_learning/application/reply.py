@@ -49,24 +49,39 @@ class ReplyService:
         if last_reply is not None and now - last_reply < cooldown:
             return ReplyDecision(None, "cooldown")
 
-        reason = "exact"
-        exact_candidates = await self.store.find_exact_answers(group_id, normalized_key)
-        candidates = self._eligible_candidates(
-            exact_candidates,
-            settings["type_frequency_thresholds"],
-        )
-        if not exact_candidates and plain_text:
+        available_groups = await self.store.list_question_group_ids()
+        scopes = self.config.reply_library_scopes(group_id, available_groups)
+        selections: list[tuple[ReplyCandidate, str]] = []
+        for scope in scopes:
+            exact_candidates = await self.store.find_exact_answers(scope, normalized_key)
+            if exact_candidates:
+                selections.extend(
+                    (candidate, "exact")
+                    for candidate in self._eligible_candidates(
+                        exact_candidates, settings["type_frequency_thresholds"]
+                    )
+                )
+                continue
+            if not plain_text:
+                continue
             question, reason = await self._find_fallback_question(
-                group_id,
+                scope,
                 plain_text,
                 settings,
             )
-            if question is not None:
-                candidates = self._eligible_candidates(
-                    await self.store.find_answers_for_question(question.question_id),
+            if question is None:
+                continue
+            selections.extend(
+                (candidate, reason)
+                for candidate in self._eligible_candidates(
+                    await self.store.find_answers_for_question(
+                        scope,
+                        question.normalized_key,
+                    ),
                     settings["type_frequency_thresholds"],
                 )
-        if not candidates:
+            )
+        if not selections:
             return ReplyDecision(None, "no_match")
 
         force_reply = mentioned_bot and bool(settings["at_force_reply"])
@@ -74,9 +89,9 @@ class ReplyService:
         if not force_reply and self.random.random() > probability:
             return ReplyDecision(None, "probability")
 
-        candidate = self.random.choices(
-            candidates,
-            weights=[max(1, item.weight) for item in candidates],
+        candidate, reason = self.random.choices(
+            selections,
+            weights=[max(1, item.weight) for item, _reason in selections],
             k=1,
         )[0]
         base_wait = float(settings["wait_seconds"])
@@ -89,11 +104,11 @@ class ReplyService:
 
     async def _find_fallback_question(
         self,
-        group_id: str,
+        group_ids: tuple[str, ...],
         plain_text: str,
         settings: dict[str, object],
     ) -> tuple[QuestionCandidate | None, str]:
-        questions = await self.store.find_matchable_questions(group_id)
+        questions = await self.store.find_matchable_questions(group_ids)
         if settings["regex_enabled"]:
             timeout = float(settings["regex_timeout_ms"]) / 1000.0
             for question in questions:

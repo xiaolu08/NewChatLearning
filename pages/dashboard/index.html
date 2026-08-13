@@ -30,7 +30,7 @@
   <body>
     <header><h1>NewChatLearning</h1><span class="beta">BETA</span></header>
     <main>
-      <div class="notice">当前为 Beta 开发版本，已支持受控学习、三级匹配和媒体本地持久化；旧词库迁移、完整管理和 TTS 尚未完成。</div>
+      <div class="notice">当前为 Beta 开发版本，已支持受控学习、三级匹配、媒体持久化和实时共享词库；旧词库迁移、完整管理和 TTS 尚未完成。</div>
       <div class="grid">
         <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
         <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
@@ -45,6 +45,7 @@
             <tr><th>插件版本</th><td id="version">-</td></tr>
             <tr><th>数据库</th><td id="database">-</td></tr>
             <tr><th>配置版本</th><td id="revision">-</td></tr>
+            <tr><th>词库范围</th><td id="library">-</td></tr>
             <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
             <tr><th>数据目录</th><td id="data-dir">-</td></tr>
           </tbody>
@@ -75,6 +76,9 @@
           setText("version", `${status.version} (${status.release_stage})`);
           setText("database", `schema v${status.database.schema_version}, ${status.database.integrity}`);
           setText("revision", status.config_revision);
+          setText("library", status.library.mode === "global"
+            ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）`
+            : "仅本群");
           setText("data-dir", status.data_dir);
         } catch (error) {
           setText("state", "读取失败");
