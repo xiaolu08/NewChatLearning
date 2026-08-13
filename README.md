@@ -31,6 +31,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 媒体持久化、内容去重、空间配额和失效媒体清理
 - 受限导入旧 `.cl` 词库，并生成兼容性与媒体状态报告
 - `/ncl migrate-scan` 隔离扫描旧 `.cl` 词库；当前只生成报告，不自动导入
+- `/ncl migrate-prepare` 与显式确认的 `migrate-apply` 两阶段导入，写入前自动备份
 - 定时任务、备份恢复、导入导出和成员贡献删除
 - Windows 本地 TTS、GPT-SoVITS、本地 HTTP TTS 和可选云端 TTS
 - 内置管理 WebUI，覆盖统计、词库、群组、媒体、语音、权限、任务、备份和诊断
@@ -82,6 +83,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - SQLite schema v5 回复消息追踪、精确答案删除、空问题清理与审计
 - 本群词库搜索、详情、文本/正则问答添加、权重修改和按 ID 删除命令
 - 旧 `.cl` 受限扫描器：独立进程、opcode 拒绝、基础容器结构统计
+- 旧词库隔离转换为 JSONL，并在单个 SQLite 事务中合并频次和原版权重
+- 2.1 MB 真实共享词库已通过临时 SQLite 完整导入验证，未写入插件运行数据
 
 尚未完成：
 

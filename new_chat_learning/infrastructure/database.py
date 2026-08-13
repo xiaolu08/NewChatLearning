@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS reply_records (
     UNIQUE(platform, group_id, sent_message_id)
 );
 
+CREATE TABLE IF NOT EXISTS legacy_imports (
+    import_id TEXT PRIMARY KEY,
+    group_id TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    staging_sha256 TEXT NOT NULL,
+    question_count INTEGER NOT NULL,
+    answer_count INTEGER NOT NULL,
+    actor_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_group ON questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(group_id, user_id);
@@ -170,6 +181,7 @@ class SQLiteStore:
                 "media_assets",
                 "audit_log",
                 "reply_records",
+                "legacy_imports",
             )
             result: dict[str, int] = {}
             for table in tables:
@@ -180,6 +192,130 @@ class SQLiteStore:
             ).fetchone()
             result["media_bytes"] = int(media_bytes[0])
             return result
+
+    async def import_legacy_jsonl(
+        self,
+        *,
+        import_id: str,
+        group_id: str,
+        source_name: str,
+        staging_path: Path,
+        staging_sha256: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            return await asyncio.to_thread(
+                self._import_legacy_jsonl_sync,
+                connection,
+                import_id=import_id,
+                group_id=str(group_id),
+                source_name=source_name,
+                staging_path=Path(staging_path),
+                staging_sha256=staging_sha256,
+                actor_id=str(actor_id),
+            )
+
+    async def backup_to(self, destination: Path) -> Path:
+        async with self._lock:
+            connection = self._require_connection()
+            destination = Path(destination)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            backup = sqlite3.connect(destination)
+            try:
+                connection.backup(backup)
+                integrity = backup.execute("PRAGMA quick_check").fetchone()[0]
+                if integrity != "ok":
+                    raise RuntimeError(f"backup_integrity:{integrity}")
+            finally:
+                backup.close()
+            return destination
+
+    def _import_legacy_jsonl_sync(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        import_id: str,
+        group_id: str,
+        source_name: str,
+        staging_path: Path,
+        staging_sha256: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        import hashlib
+        import json
+
+        digest = hashlib.sha256()
+        with staging_path.open("rb") as stream:
+            for raw_line in stream:
+                digest.update(raw_line)
+        if digest.hexdigest() != staging_sha256:
+            raise ValueError("staging_checksum_mismatch")
+
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            if connection.execute(
+                "SELECT 1 FROM legacy_imports WHERE import_id = ?", (import_id,)
+            ).fetchone():
+                connection.rollback()
+                return {"imported": False, "reason": "already_imported"}
+            connection.execute(
+                "INSERT INTO groups(group_id) VALUES(?) ON CONFLICT(group_id) DO NOTHING",
+                (group_id,),
+            )
+            question_count = 0
+            answer_count = 0
+            with staging_path.open("rb") as stream:
+                for raw_line in stream:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    record = json.loads(line)
+                    if not isinstance(record, dict) or not isinstance(
+                        record.get("answers"), list
+                    ):
+                        raise TypeError("invalid_staging_record")
+                    question_id = self._merge_legacy_question(connection, group_id, record)
+                    question_count += 1
+                    for answer in record["answers"]:
+                        if not isinstance(answer, dict):
+                            raise TypeError("invalid_staging_answer")
+                        self._merge_legacy_answer(connection, question_id, answer)
+                        answer_count += 1
+            connection.execute(
+                "INSERT INTO legacy_imports(import_id, group_id, source_name, staging_sha256, "
+                "question_count, answer_count, actor_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (
+                    import_id,
+                    group_id,
+                    source_name,
+                    staging_sha256,
+                    question_count,
+                    answer_count,
+                    actor_id,
+                ),
+            )
+            self._insert_audit(
+                connection,
+                actor_id=actor_id,
+                action="import_legacy_library",
+                target=f"group:{group_id}",
+                details={
+                    "import_id": import_id,
+                    "source_name": source_name,
+                    "question_count": question_count,
+                    "answer_count": answer_count,
+                },
+            )
+            connection.commit()
+            return {
+                "imported": True,
+                "question_count": question_count,
+                "answer_count": answer_count,
+            }
+        except Exception:
+            connection.rollback()
+            raise
 
     async def register_reply(
         self,
@@ -847,6 +983,56 @@ class SQLiteStore:
             (question_id, message.normalized_key),
         ).fetchone()
         return int(row[0])
+
+    @staticmethod
+    def _merge_legacy_question(
+        connection: sqlite3.Connection,
+        group_id: str,
+        record: dict[str, Any],
+    ) -> int:
+        frequency = max(1, int(record.get("frequency", 1)))
+        connection.execute(
+            "INSERT INTO questions(group_id, normalized_key, components_json, plain_text, "
+            "is_regex, frequency) VALUES(?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(group_id, normalized_key) DO UPDATE SET "
+            "frequency=questions.frequency + excluded.frequency, "
+            "plain_text=CASE WHEN questions.plain_text = '' THEN excluded.plain_text "
+            "ELSE questions.plain_text END, "
+            "is_regex=CASE WHEN excluded.is_regex = 1 THEN 1 ELSE questions.is_regex END, "
+            "updated_at=CURRENT_TIMESTAMP",
+            (
+                group_id,
+                str(record["normalized_key"]),
+                str(record["components_json"]),
+                str(record.get("plain_text", "")),
+                int(bool(record.get("is_regex", False))),
+                frequency,
+            ),
+        )
+        row = connection.execute(
+            "SELECT id FROM questions WHERE group_id = ? AND normalized_key = ?",
+            (group_id, str(record["normalized_key"])),
+        ).fetchone()
+        return int(row[0])
+
+    @staticmethod
+    def _merge_legacy_answer(
+        connection: sqlite3.Connection,
+        question_id: int,
+        answer: dict[str, Any],
+    ) -> None:
+        weight = max(1, int(answer.get("weight", 1)))
+        connection.execute(
+            "INSERT INTO answers(question_id, components_json, normalized_key, weight) "
+            "VALUES(?, ?, ?, ?) ON CONFLICT(question_id, normalized_key) DO UPDATE SET "
+            "weight=answers.weight + excluded.weight, updated_at=CURRENT_TIMESTAMP",
+            (
+                question_id,
+                str(answer["components_json"]),
+                str(answer["normalized_key"]),
+                weight,
+            ),
+        )
 
     @staticmethod
     def _migrate_schema(connection: sqlite3.Connection) -> None:

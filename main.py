@@ -181,7 +181,9 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl weight <答案ID> <权重> - 修改答案权重\n"
                 "/ncl delete-answer <答案ID> - 删除答案\n"
                 "/ncl delete-question <问题ID> - 删除问题及全部答案\n"
-                "/ncl migrate-scan <文件或目录> - 安全扫描旧 .cl 词库"
+                "/ncl migrate-scan <文件或目录> - 安全扫描旧 .cl 词库\n"
+                "/ncl migrate-prepare <文件> - 准备旧词库导入\n"
+                "/ncl migrate-apply <导入ID> confirm - 备份并导入当前群"
             )
         )
 
@@ -355,6 +357,69 @@ class NewChatLearningPlugin(star.Star):
         if len(reports) > 10:
             lines.append(f"其余 {len(reports) - 10} 个文件请在本地日志或 WebUI 查看。")
         event.set_result(MessageEventResult().message("\n".join(lines)))
+
+    @ncl.command("migrate-prepare")
+    async def ncl_migrate_prepare(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        raw_path = self._command_tail(event, "migrate-prepare")
+        path = Path(raw_path.strip().strip('"')) if raw_path else None
+        if path is None or not path.is_file() or path.suffix.lower() != ".cl":
+            event.set_result(MessageEventResult().message("用法：/ncl migrate-prepare <.cl 文件>"))
+            return
+        report = await self.app.migration.prepare(path)
+        if report.get("status") != "prepared":
+            event.set_result(
+                MessageEventResult().message(
+                    f"旧词库准备失败：{report.get('reason', '未知原因')}"
+                )
+            )
+            return
+        event.set_result(
+            MessageEventResult().message(
+                "旧词库已完成隔离转换，尚未导入。\n"
+                f"导入 ID：{report['import_id']}\n"
+                f"可导入问题：{report['question_count']}，可处理答案记录：{report['answer_count']}\n"
+                f"跳过问题：{report['skipped_questions']}，"
+                f"跳过答案：{report['skipped_answers']}，"
+                f"未知组件：{report['unknown_components']}\n"
+                f"确认导入当前群：/ncl migrate-apply {report['import_id']} confirm"
+            )
+        )
+
+    @ncl.command("migrate-apply")
+    async def ncl_migrate_apply(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        parts = self._command_tail(event, "migrate-apply").split()
+        if len(parts) != 2 or parts[1].lower() != "confirm":
+            event.set_result(
+                MessageEventResult().message(
+                    "用法：/ncl migrate-apply <导入ID> confirm\n"
+                    "该操作会先备份数据库，再把准备内容导入当前群。"
+                )
+            )
+            return
+        result = await self.app.migration.apply(
+            import_id=parts[0],
+            group_id=event.get_group_id(),
+            actor_id=event.get_sender_id(),
+        )
+        if not result.get("imported"):
+            event.set_result(
+                MessageEventResult().message(
+                    f"导入未执行：{result.get('reason', '未知原因')}"
+                )
+            )
+            return
+        event.set_result(
+            MessageEventResult().message(
+                f"旧词库已导入当前群：合并问题记录 {result['question_count']}，"
+                f"合并答案记录 {result['answer_count']}。\n"
+                f"导入前备份：{Path(result['backup_path']).name}\n"
+                "本次导入不会自动开启学习或词库回复。"
+            )
+        )
 
     async def _add_library_pair(
         self,

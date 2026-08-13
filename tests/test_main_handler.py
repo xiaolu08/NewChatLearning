@@ -290,3 +290,87 @@ def test_migrate_scan_returns_report_without_importing(monkeypatch, tmp_path):
 
     assert "仅扫描，不导入" in event.result.text
     assert "sample.cl：compatible，问题 2，答案 3" in event.result.text
+
+
+def test_migrate_prepare_returns_confirmable_import_id(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+
+    class Migration:
+        async def prepare(self, path):
+            assert path == tmp_path / "sample.cl"
+            return {
+                "status": "prepared",
+                "import_id": "a" * 32,
+                "question_count": 2,
+                "answer_count": 3,
+                "skipped_questions": 0,
+                "skipped_answers": 1,
+                "unknown_components": 2,
+            }
+
+    source = tmp_path / "sample.cl"
+    source.write_bytes(b"placeholder")
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.migration = Migration()
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = f'/ncl migrate-prepare "{source}"'
+
+    asyncio.run(plugin.ncl_migrate_prepare(event))
+
+    assert f"导入 ID：{'a' * 32}" in event.result.text
+    assert "尚未导入" in event.result.text
+    assert "跳过答案：1" in event.result.text
+
+
+def test_migrate_apply_requires_literal_confirmation(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Migration:
+        called = False
+
+        async def apply(self, **_kwargs):
+            self.called = True
+            return {"imported": True}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    migration = Migration()
+    plugin.app.migration = migration
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = f"/ncl migrate-apply {'a' * 32}"
+
+    asyncio.run(plugin.ncl_migrate_apply(event))
+
+    assert migration.called is False
+    assert "confirm" in event.result.text
+
+
+def test_migrate_apply_targets_current_group_and_reports_backup(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Migration:
+        async def apply(self, **kwargs):
+            assert kwargs == {
+                "import_id": "a" * 32,
+                "group_id": "10001",
+                "actor_id": "7",
+            }
+            return {
+                "imported": True,
+                "question_count": 2,
+                "answer_count": 3,
+                "backup_path": "C:/backup/before-import.sqlite3",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.migration = Migration()
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = f"/ncl migrate-apply {'a' * 32} confirm"
+
+    asyncio.run(plugin.ncl_migrate_apply(event))
+
+    assert "合并问题记录 2，合并答案记录 3" in event.result.text
+    assert "before-import.sqlite3" in event.result.text
+    assert "不会自动开启" in event.result.text
