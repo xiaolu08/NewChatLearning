@@ -51,6 +51,11 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'apiGet("api/tts/settings")' in dashboard
     assert 'api/tts/settings/update' in dashboard
     assert 'api/tts/test' in dashboard
+    assert 'id="tab-migration"' in dashboard
+    assert 'id="migration-view"' in dashboard
+    assert 'bridge.upload(`api/migration/upload?ticket=' in dashboard
+    assert 'postSecure("api/migration/prepare"' in dashboard
+    assert 'postSecure("api/migration/apply"' in dashboard
     assert 'id="library-export"' in dashboard
     assert 'postSecure("api/library/export/prepare"' in dashboard
     assert 'bridge.download("api/library/export", { ticket: prepared.ticket }' in dashboard

@@ -11,7 +11,7 @@ from sys import maxsize
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
-from astrbot.api.web import file_response, json_response, request
+from astrbot.api.web import PluginUploadFile, file_response, json_response, request
 
 from new_chat_learning.application.library import component_preview, parse_add_pair
 from new_chat_learning.application.runtime import RuntimeApplication
@@ -46,6 +46,9 @@ WEB_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 EXPORT_TICKET_TTL_SECONDS = 300
+MIGRATION_UPLOAD_TICKET_TTL_SECONDS = 300
+MIGRATION_UPLOAD_TTL_SECONDS = 3600
+MIGRATION_UPLOAD_MAX_BYTES = 128 * 1024 * 1024
 
 
 class NewChatLearningPlugin(star.Star):
@@ -54,6 +57,8 @@ class NewChatLearningPlugin(star.Star):
         self.config = config if config is not None else {}
         self.app: RuntimeApplication | None = None
         self._export_tickets: dict[str, dict] = {}
+        self._migration_upload_tickets: dict[str, dict] = {}
+        self._migration_uploads: dict[str, dict] = {}
 
     async def initialize(self) -> None:
         data_dir = star.StarTools.get_data_dir(PLUGIN_NAME)
@@ -142,6 +147,36 @@ class NewChatLearningPlugin(star.Star):
                 "NewChatLearning 准备词库导出",
             ),
             ("library/export", self.web_library_export, ["GET"], "NewChatLearning 下载词库导出"),
+            (
+                "migration/upload/authorize",
+                self.web_migration_upload_authorize,
+                ["POST"],
+                "NewChatLearning 授权旧词库上传",
+            ),
+            (
+                "migration/upload",
+                self.web_migration_upload,
+                ["POST"],
+                "NewChatLearning 上传并扫描旧词库",
+            ),
+            (
+                "migration/prepare",
+                self.web_migration_prepare,
+                ["POST"],
+                "NewChatLearning 准备旧词库导入",
+            ),
+            (
+                "migration/apply",
+                self.web_migration_apply,
+                ["POST"],
+                "NewChatLearning 执行旧词库导入",
+            ),
+            (
+                "migration/status",
+                self.web_migration_status,
+                ["GET"],
+                "NewChatLearning 旧词库迁移状态",
+            ),
             ("library/weight", self.web_library_weight, ["POST"], "NewChatLearning 修改权重"),
             (
                 "library/delete-answer",
@@ -1647,6 +1682,290 @@ class NewChatLearningPlugin(star.Star):
         for ticket, export in list(tickets.items()):
             if float(export.get("expires_at", 0)) <= now:
                 tickets.pop(ticket, None)
+
+    async def web_migration_upload_authorize(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        file_name = Path(str(payload.get("file_name", ""))).name
+        size_bytes = self._web_positive_int(
+            payload.get("size_bytes", ""), maximum=MIGRATION_UPLOAD_MAX_BYTES
+        )
+        if (
+            not file_name
+            or file_name in {".", ".."}
+            or Path(file_name).suffix.lower() != ".cl"
+            or size_bytes is None
+        ):
+            return self._web_json(
+                {"status": "error", "message": "请选择不超过 128 MB 的 .cl 词库文件。"},
+                status_code=400,
+            )
+        self._prune_migration_uploads()
+        ticket = secrets.token_urlsafe(24)
+        self._migration_upload_tickets[ticket] = {
+            "session": self._web_actor_id(),
+            "file_name": file_name[:255],
+            "size_bytes": size_bytes,
+            "expires_at": time.monotonic() + MIGRATION_UPLOAD_TICKET_TTL_SECONDS,
+        }
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "ticket": ticket,
+                    "expires_in_seconds": MIGRATION_UPLOAD_TICKET_TTL_SECONDS,
+                },
+            }
+        )
+
+    async def web_migration_upload(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        self._prune_migration_uploads()
+        ticket = str(request.query.get("ticket", ""))
+        authorization = self._migration_upload_tickets.get(ticket)
+        if authorization is None or authorization.get("session") != self._web_actor_id():
+            return self._web_json(
+                {"status": "error", "message": "上传授权无效或已过期。"}, status_code=403
+            )
+        files = await request.files()
+        upload = files.get("file")
+        if not isinstance(upload, PluginUploadFile):
+            return self._web_json(
+                {"status": "error", "message": "没有收到词库文件。"}, status_code=400
+            )
+        upload_name = Path(str(upload.filename or "")).name
+        if (
+            upload_name != authorization["file_name"]
+            or Path(upload_name).suffix.lower() != ".cl"
+            or (
+                upload.content_length is not None
+                and upload.content_length > MIGRATION_UPLOAD_MAX_BYTES
+            )
+        ):
+            return self._web_json(
+                {"status": "error", "message": "上传文件与授权信息不一致。"}, status_code=400
+            )
+        upload_dir = self.app.data_dir / "temp" / "legacy-uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_id = secrets.token_hex(16)
+        target = upload_dir / f"{upload_id}.cl"
+        try:
+            actual_size = 0
+            await upload.seek(0)
+            with target.open("wb") as output:
+                while True:
+                    chunk = await upload.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    actual_size += len(chunk)
+                    if actual_size > MIGRATION_UPLOAD_MAX_BYTES:
+                        raise ValueError("upload_too_large")
+                    output.write(chunk)
+            if actual_size != authorization["size_bytes"]:
+                target.unlink(missing_ok=True)
+                return self._web_json(
+                    {"status": "error", "message": "上传文件大小校验失败。"}, status_code=400
+                )
+            report = await asyncio.to_thread(scan_file, target, timeout_seconds=120.0)
+        except ValueError as exc:
+            target.unlink(missing_ok=True)
+            if str(exc) == "upload_too_large":
+                return self._web_json(
+                    {"status": "error", "message": "词库文件超过 128 MB 上限。"},
+                    status_code=413,
+                )
+            raise
+        except OSError:
+            target.unlink(missing_ok=True)
+            self.logger.exception("Failed to store legacy library upload.")
+            return self._web_json(
+                {"status": "error", "message": "词库文件保存失败。"}, status_code=500
+            )
+        finally:
+            await upload.close()
+        self._migration_upload_tickets.pop(ticket, None)
+        if report.get("status") != "compatible":
+            target.unlink(missing_ok=True)
+            return self._web_json(
+                {
+                    "status": "error",
+                    "message": self._migration_scan_message(report),
+                    "data": self._public_migration_scan(report, file_name=upload_name),
+                },
+                status_code=409,
+            )
+        self._migration_uploads[upload_id] = {
+            "session": self._web_actor_id(),
+            "path": target,
+            "file_name": upload_name,
+            "size_bytes": actual_size,
+            "scan": report,
+            "expires_at": time.monotonic() + MIGRATION_UPLOAD_TTL_SECONDS,
+        }
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "upload_id": upload_id,
+                    "expires_in_seconds": MIGRATION_UPLOAD_TTL_SECONDS,
+                    "scan": self._public_migration_scan(report, file_name=upload_name),
+                },
+            }
+        )
+
+    async def web_migration_prepare(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        upload_id = str(payload.get("upload_id", "")).lower()
+        self._prune_migration_uploads()
+        upload = self._migration_uploads.get(upload_id)
+        if group_id is None:
+            return self._web_json(
+                {"status": "error", "message": "目标群号无效。"}, status_code=400
+            )
+        if (
+            upload is None
+            or upload.get("session") != self._web_actor_id()
+            or not Path(upload["path"]).is_file()
+        ):
+            return self._web_json(
+                {"status": "error", "message": "上传记录无效或已过期，请重新选择文件。"},
+                status_code=409,
+            )
+        try:
+            result = await self.app.migration.prepare(
+                Path(upload["path"]),
+                actor_id=self._web_actor_id(),
+                group_id=group_id,
+                source_name=str(upload["file_name"]),
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to prepare legacy library import from WebUI.")
+            return self._web_json(
+                {"status": "error", "message": "旧词库转换失败，未生成导入计划。"},
+                status_code=500,
+            )
+        Path(upload["path"]).unlink(missing_ok=True)
+        self._migration_uploads.pop(upload_id, None)
+        if result.get("status") != "prepared":
+            return self._web_json(
+                {"status": "error", "message": "旧词库无法转换为可导入格式。"},
+                status_code=409,
+            )
+        return self._web_json(
+            {"status": "ok", "data": self.app.migration.public_manifest(result)}
+        )
+
+    async def web_migration_apply(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        if payload.get("confirmed") is not True:
+            return self._web_json(
+                {"status": "error", "message": "请先确认导入旧词库。"}, status_code=400
+            )
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        import_id = str(payload.get("import_id", "")).lower()
+        if group_id is None:
+            return self._web_json(
+                {"status": "error", "message": "目标群号无效。"}, status_code=400
+            )
+        try:
+            result = await self.app.migration.apply(
+                import_id=import_id,
+                group_id=group_id,
+                actor_id=self._web_actor_id(),
+            )
+        except (OSError, RuntimeError, sqlite3.DatabaseError, ValueError):
+            self.logger.exception("Failed to apply legacy library import from WebUI.")
+            return self._web_json(
+                {"status": "error", "message": "旧词库导入失败，数据库未完成修改。"},
+                status_code=500,
+            )
+        if not result.get("imported"):
+            reasons = {
+                "manifest_not_found": "导入计划不存在、已使用或已过期。",
+                "wrong_actor": "导入计划不属于当前 WebUI 操作者。",
+                "wrong_group": "导入计划不属于所选目标群。",
+                "plan_expired": "导入计划已过期，请重新上传并准备。",
+                "staging_not_found": "导入暂存数据不存在。",
+                "already_imported": "该旧词库导入计划已经执行。",
+            }
+            return self._web_json(
+                {"status": "error", "message": reasons.get(result.get("reason"), "导入未执行。")},
+                status_code=409,
+            )
+        public_result = dict(result)
+        public_result["backup_name"] = Path(str(result["backup_path"])).name
+        public_result.pop("backup_path", None)
+        return self._web_json({"status": "ok", "data": public_result})
+
+    async def web_migration_status(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "imports": self.app.migration.list_web_imports(
+                        actor_id=self._web_actor_id()
+                    )
+                },
+            }
+        )
+
+    def _prune_migration_uploads(self) -> None:
+        now = time.monotonic()
+        for ticket, authorization in list(self._migration_upload_tickets.items()):
+            if float(authorization.get("expires_at", 0)) <= now:
+                self._migration_upload_tickets.pop(ticket, None)
+        for upload_id, upload in list(self._migration_uploads.items()):
+            if float(upload.get("expires_at", 0)) <= now:
+                Path(upload.get("path", "")).unlink(missing_ok=True)
+                self._migration_uploads.pop(upload_id, None)
+        data_dir = getattr(self.app, "data_dir", None)
+        if data_dir is not None:
+            upload_dir = Path(data_dir) / "temp" / "legacy-uploads"
+            cutoff = time.time() - MIGRATION_UPLOAD_TTL_SECONDS
+            if upload_dir.is_dir():
+                for path in upload_dir.glob("*.cl"):
+                    try:
+                        if path.stat().st_mtime <= cutoff:
+                            path.unlink(missing_ok=True)
+                    except OSError:
+                        continue
+        self.app.migration.cleanup_expired()
+
+    @staticmethod
+    def _public_migration_scan(report: dict, *, file_name: str) -> dict:
+        structure = report.get("structure", {}) if isinstance(report.get("structure"), dict) else {}
+        return {
+            "file_name": Path(file_name).name,
+            "size_bytes": int(report.get("size_bytes", 0) or 0),
+            "status": str(report.get("status", "error")),
+            "reason": str(report.get("reason", "unknown")),
+            "question_count": int(structure.get("question_count", 0) or 0),
+            "answer_count": int(structure.get("answer_count", 0) or 0),
+            "malformed_questions": int(structure.get("malformed_questions", 0) or 0),
+            "component_types": dict(structure.get("component_types", {})),
+            "forbidden_opcodes": dict(report.get("forbidden_opcodes", {})),
+        }
+
+    @staticmethod
+    def _migration_scan_message(report: dict) -> str:
+        reasons = {
+            "forbidden_pickle_opcode": "词库含有被安全策略拒绝的序列化指令。",
+            "no_question_entries": "没有识别到可迁移的旧版问答记录。",
+            "scan_timeout": "词库安全扫描超时。",
+            "unsupported_extension": "只支持 .cl 词库文件。",
+        }
+        return reasons.get(str(report.get("reason", "")), "词库未通过兼容性与安全扫描。")
 
     async def web_library_add(self):
         payload, error = await self._authorized_web_payload()

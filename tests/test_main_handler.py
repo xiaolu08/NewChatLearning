@@ -45,6 +45,7 @@ def load_main(monkeypatch):
     event_module.MessageChain = object
     event_module.filter = Filter
     web_module = types.ModuleType("astrbot.api.web")
+    web_module.PluginUploadFile = type("PluginUploadFile", (), {})
     web_module.json_response = lambda value, **_kwargs: value
     web_module.file_response = lambda path, **kwargs: {"path": path, **kwargs}
     web_module.request = SimpleNamespace(
@@ -1153,6 +1154,136 @@ def test_web_library_export_ticket_is_bound_to_session(monkeypatch, tmp_path):
 
     assert response["status"] == "error"
     assert "ticket" in plugin._export_tickets
+
+
+def test_web_migration_upload_authorization_is_session_bound(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    async def body():
+        return b'{"file_name":"legacy.cl","size_bytes":2048,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.migration = SimpleNamespace(cleanup_expired=lambda: None)
+    plugin._migration_upload_tickets = {}
+    plugin._migration_uploads = {}
+
+    response = asyncio.run(plugin.web_migration_upload_authorize())
+
+    assert response["status"] == "ok"
+    ticket = response["data"]["ticket"]
+    assert plugin._migration_upload_tickets[ticket]["file_name"] == "legacy.cl"
+    assert plugin._migration_upload_tickets[ticket]["session"].startswith("webui:")
+
+
+def test_web_migration_prepare_binds_group_actor_and_hides_path(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    source = tmp_path / "random.cl"
+    source.write_bytes(b"legacy")
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Migration:
+        def cleanup_expired(self):
+            pass
+
+        async def prepare(self, path, **kwargs):
+            assert path == source
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["actor_id"].startswith("webui:")
+            assert kwargs["source_name"] == "shared.cl"
+            return {
+                "status": "prepared",
+                "import_id": "a" * 32,
+                "source_name": "shared.cl",
+                "source_size_bytes": 6,
+                "group_id": "10001",
+                "question_count": 2,
+                "answer_count": 3,
+                "skipped_questions": 0,
+                "skipped_answers": 0,
+                "unknown_components": 0,
+            }
+
+        def public_manifest(self, value):
+            return value
+
+    async def body():
+        return b'{"upload_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","group_id":"10001","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.migration = Migration()
+    plugin._migration_upload_tickets = {}
+    plugin._migration_uploads = {
+        "b" * 32: {
+            "session": plugin._web_actor_id(),
+            "path": source,
+            "file_name": "shared.cl",
+            "expires_at": main_module.time.monotonic() + 60,
+        }
+    }
+
+    response = asyncio.run(plugin.web_migration_prepare())
+
+    assert response["status"] == "ok"
+    assert response["data"]["source_name"] == "shared.cl"
+    assert "path" not in str(response)
+    assert not source.exists()
+
+
+def test_web_migration_apply_requires_confirmation_and_hides_backup_path(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Migration:
+        async def apply(self, **kwargs):
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "imported": True,
+                "question_count": 4,
+                "answer_count": 5,
+                "backup_path": "C:/private/before-import.sqlite3",
+            }
+
+    async def body():
+        return b'{"import_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","group_id":"10001","confirmed":true,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.migration = Migration()
+
+    response = asyncio.run(plugin.web_migration_apply())
+
+    assert response["status"] == "ok"
+    assert response["data"]["backup_name"] == "before-import.sqlite3"
+    assert "backup_path" not in response["data"]
 
 
 def test_web_library_delete_requires_confirmation_is_group_scoped_and_hides_path(monkeypatch):

@@ -2,6 +2,7 @@ import asyncio
 import json
 import pickle
 import sqlite3
+import time
 
 import pytest
 
@@ -122,3 +123,50 @@ def test_staging_checksum_mismatch_rolls_back(tmp_path):
     assert statistics["questions"] == 0
     assert statistics["answers"] == 0
     assert statistics["legacy_imports"] == 0
+
+
+def test_web_import_plan_is_bound_to_actor_group_and_expires(tmp_path):
+    source = tmp_path / "legacy.cl"
+    _legacy_file(source)
+
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "new_chat_learning.sqlite3")
+        await store.open()
+        service = MigrationService(data_dir, store)
+        try:
+            prepared = await service.prepare(
+                source,
+                actor_id="webui:owner",
+                group_id="10001",
+                source_name="shared-library.cl",
+            )
+            wrong_actor = await service.apply(
+                import_id=prepared["import_id"],
+                group_id="10001",
+                actor_id="webui:other",
+            )
+            wrong_group = await service.apply(
+                import_id=prepared["import_id"],
+                group_id="10002",
+                actor_id="webui:owner",
+            )
+            manifest = service.staging_dir / f"{prepared['import_id']}.json"
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["expires_at"] = int(time.time()) - 1
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            expired = await service.apply(
+                import_id=prepared["import_id"],
+                group_id="10001",
+                actor_id="webui:owner",
+            )
+            return prepared, wrong_actor, wrong_group, expired, manifest.exists()
+        finally:
+            await store.close()
+
+    prepared, wrong_actor, wrong_group, expired, manifest_exists = asyncio.run(scenario())
+    assert prepared["source_name"] == "shared-library.cl"
+    assert wrong_actor["reason"] == "wrong_actor"
+    assert wrong_group["reason"] == "wrong_group"
+    assert expired["reason"] == "plan_expired"
+    assert manifest_exists is False

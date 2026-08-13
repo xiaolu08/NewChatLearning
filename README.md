@@ -84,6 +84,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - WebUI 媒体页支持按群扫描、影响预览、两阶段清理、执行前确认和备份结果
 - WebUI 词库页支持按群搜索、问题详情、文本/正则问答添加、答案权重修改和带备份的安全删除
 - WebUI 可按群导出 ZIP 词库包，包含公式注入防护的 XLSX 预览和保留完整问答组件的 JSONL
+- WebUI 可上传旧 `.cl` 文件，完成隔离安全扫描、兼容性摘要、按群转换计划、二次确认导入和导入前备份
 - WebUI 群聊页支持停用、仅学习、仅回复、学习并回复、静默学习及定向用户设置，并持久化到 AstrBot 插件配置
 - 回复前内容过滤支持包含、完全匹配、正则和组件类型规则，全局规则可叠加群聊附加规则
 - 敏感词命中计数、全局/按群黑名单、人工封禁与解封，以及 WebUI 规则测试和命中统计
@@ -113,9 +114,9 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 转发、商城表情、XML 等长尾消息的完整重建
 - 无人值守的定时词库清理（当前只支持管理员主动预览并确认执行，不会后台自动删除）
 - 词库管理的媒体问答编辑与批量操作
-- WebUI 的任务、旧词库导入与诊断完整管理页面
+- WebUI 的任务与诊断完整管理页面
 - 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 云端 TTS，以及 DPAPI 密钥保护与调用额度
-- 旧 `.cl` 格式反向导出工具与迁移 WebUI
+- 旧 `.cl` 格式反向导出工具
 - Windows + AstrBot + NapCat 实机验收
 
 ## 技术文档
