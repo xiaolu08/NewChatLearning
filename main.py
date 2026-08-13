@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from sys import maxsize
 
@@ -61,6 +62,21 @@ class NewChatLearningPlugin(star.Star):
                 self.web_auth_change_password,
                 ["POST"],
                 "NewChatLearning 修改密码",
+            ),
+            ("media/groups", self.web_media_groups, ["GET"], "NewChatLearning 媒体群列表"),
+            ("media/preview", self.web_media_preview, ["GET"], "NewChatLearning 媒体影响预览"),
+            ("media/scan", self.web_media_scan, ["POST"], "NewChatLearning 媒体扫描"),
+            (
+                "media/cleanup/prepare",
+                self.web_media_cleanup_prepare,
+                ["POST"],
+                "NewChatLearning 媒体清理计划",
+            ),
+            (
+                "media/cleanup/apply",
+                self.web_media_cleanup_apply,
+                ["POST"],
+                "NewChatLearning 媒体清理执行",
             ),
         ):
             self.context.register_web_api(
@@ -699,6 +715,111 @@ class NewChatLearningPlugin(star.Star):
             )
         return self._web_session_response(session)
 
+    async def web_media_groups(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        if not await self.app.web_auth.authorize(self._web_session_token()):
+            return self._web_json({"status": "error", "message": "需要登录"}, status_code=401)
+        group_ids = await self.app.store.list_question_group_ids()
+        return self._web_json({"status": "ok", "data": {"group_ids": group_ids}})
+
+    async def web_media_preview(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        if not await self.app.web_auth.authorize(self._web_session_token()):
+            return self._web_json({"status": "error", "message": "需要登录"}, status_code=401)
+        group_id = self._web_group_id(request.query.get("group_id", ""))
+        if group_id is None:
+            return self._web_json({"status": "error", "message": "群号无效。"}, status_code=400)
+        preview = await self.app.media.health_preview(group_id)
+        return self._web_json({"status": "ok", "data": preview})
+
+    async def web_media_scan(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        if group_id is None:
+            return self._web_json({"status": "error", "message": "群号无效。"}, status_code=400)
+        result = await self.app.media.scan_group(group_id)
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_media_cleanup_prepare(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        mode = str(payload.get("mode", "prune"))
+        if group_id is None or mode not in {"prune", "drop-answer"}:
+            return self._web_json({"status": "error", "message": "清理参数无效。"}, status_code=400)
+        result = await self.app.media.prepare_cleanup(
+            group_id=group_id,
+            actor_id=self._web_actor_id(),
+            mode=mode,
+        )
+        if not result.get("prepared"):
+            return self._web_json(
+                {"status": "error", "message": "当前群没有已标记的失效媒体。"},
+                status_code=409,
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_media_cleanup_apply(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        reauthentication = await self.app.web_auth.reauthenticate(
+            session_token=self._web_session_token(),
+            csrf_token=str(payload.get("csrf_token", "")),
+            password=str(payload.get("password", "")),
+        )
+        if reauthentication != "ok":
+            return self._web_json(
+                {"status": "error", "message": "密码确认失败，清理未执行。"},
+                status_code=403,
+            )
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        plan_id = str(payload.get("plan_id", "")).lower()
+        if group_id is None:
+            return self._web_json({"status": "error", "message": "群号无效。"}, status_code=400)
+        result = await self.app.media.apply_cleanup(
+            plan_id=plan_id,
+            group_id=group_id,
+            actor_id=self._web_actor_id(),
+        )
+        if not result.get("applied"):
+            reasons = {
+                "plan_not_found": "找不到清理计划。",
+                "plan_not_ready": "清理计划已执行或不可用。",
+                "wrong_group": "清理计划不属于当前群。",
+                "wrong_actor": "清理计划不属于当前 WebUI 操作者。",
+                "plan_expired": "清理计划已过期，请重新准备。",
+                "plan_stale": "词库或扫描状态已变化，请重新扫描并准备。",
+                "invalid_plan": "清理计划格式无效。",
+            }
+            return self._web_json(
+                {"status": "error", "message": reasons.get(result.get("reason"), "清理未执行。")},
+                status_code=409,
+            )
+        public_result = dict(result)
+        public_result["backup_name"] = Path(str(result["backup_path"])).name
+        public_result.pop("backup_path", None)
+        return self._web_json({"status": "ok", "data": public_result})
+
+    async def _authorized_web_payload(self):
+        if self.app is None:
+            return {}, self._web_json(
+                {"status": "error", "message": "插件尚未初始化"}, status_code=503
+            )
+        payload = await self._web_payload()
+        if not await self.app.web_auth.authorize(
+            self._web_session_token(), str(payload.get("csrf_token", ""))
+        ):
+            return {}, self._web_json(
+                {"status": "error", "message": "请求未授权。"}, status_code=403
+            )
+        return payload, None
+
     async def _web_payload(self) -> dict:
         body = await request.body()
         if len(body) > 8192:
@@ -711,6 +832,10 @@ class NewChatLearningPlugin(star.Star):
 
     def _web_session_token(self) -> str:
         return str(request.cookies.get(COOKIE_NAME, "") or "")
+
+    def _web_actor_id(self) -> str:
+        digest = hashlib.sha256(self._web_session_token().encode("utf-8")).hexdigest()[:16]
+        return f"webui:{digest}"
 
     def _web_session_response(self, session):
         response = self._web_json(
@@ -725,6 +850,11 @@ class NewChatLearningPlugin(star.Star):
             path="/",
         )
         return response
+
+    @staticmethod
+    def _web_group_id(value) -> str | None:
+        group_id = str(value).strip()
+        return group_id if group_id.isdigit() and 5 <= len(group_id) <= 20 else None
 
     @staticmethod
     def _web_json(data, *, status_code: int = 200):

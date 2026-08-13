@@ -140,6 +140,38 @@ class WebAuthService:
                 return False
             return csrf_token is None or hmac.compare_digest(session.csrf_token, csrf_token)
 
+    async def reauthenticate(
+        self,
+        *,
+        session_token: str,
+        csrf_token: str,
+        password: str,
+    ) -> str:
+        async with self._lock:
+            session = self._valid_session(session_token)
+            if session is None:
+                return "unauthorized"
+            if not hmac.compare_digest(session.csrf_token, csrf_token):
+                return "csrf_invalid"
+            now = time.time()
+            failure_key = f"reauth:{hashlib.sha256(session_token.encode('utf-8')).hexdigest()}"
+            if self._is_locked(failure_key, now):
+                return "locked"
+            try:
+                credential = await asyncio.to_thread(self._load_credential)
+            except (OSError, ValueError, TypeError):
+                return "credential_error"
+            if not await asyncio.to_thread(_verify_password, password, credential):
+                self._record_failure(failure_key, now)
+                await self._audit(
+                    "webui_reauthentication", "session", {"result": "failure"}
+                )
+                return "invalid_credentials"
+            self._failures.pop(failure_key, None)
+            self._locked_until.pop(failure_key, None)
+            await self._audit("webui_reauthentication", "session", {"result": "success"})
+            return "ok"
+
     def _new_session(self, now: float | None = None) -> AuthSession:
         now = time.time() if now is None else now
         session = AuthSession(

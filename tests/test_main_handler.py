@@ -513,3 +513,91 @@ def test_web_login_sets_http_only_strict_cookie(monkeypatch):
     assert response.cookie[0:2] == ("ncl_admin_session", "session-token")
     assert response.cookie[2]["httponly"] is True
     assert response.cookie[2]["samesite"] == "strict"
+
+
+def test_web_media_scan_requires_csrf_and_targets_requested_group(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert token == "session"
+            assert csrf == "csrf"
+            return True
+
+    class Media:
+        async def scan_group(self, group_id):
+            assert group_id == "10001"
+            return {"scanned_answers": 2, "scanned_components": 1, "preview": {}}
+
+    async def body():
+        return b'{"group_id":"10001","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.media = Media()
+
+    response = asyncio.run(plugin.web_media_scan())
+
+    assert response["status"] == "ok"
+    assert response["data"]["scanned_answers"] == 2
+
+
+def test_web_media_cleanup_reauthenticates_and_hides_backup_path(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **kwargs):
+            assert kwargs == {
+                "session_token": "session",
+                "csrf_token": "csrf",
+                "password": "long-enough-password",
+            }
+            return "ok"
+
+    class Media:
+        async def apply_cleanup(self, **kwargs):
+            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            assert kwargs == {
+                "plan_id": "a" * 32,
+                "group_id": "10001",
+                "actor_id": expected_actor,
+            }
+            return {
+                "applied": True,
+                "removed_components": 1,
+                "updated_answers": 1,
+                "deleted_answers": 0,
+                "merged_answers": 0,
+                "orphan_questions": 0,
+                "backup_path": "C:/private/backups/before-cleanup.sqlite3",
+            }
+
+    async def body():
+        return (
+            b'{"group_id":"10001","plan_id":"'
+            + b"a" * 32
+            + b'","csrf_token":"csrf","password":"long-enough-password"}'
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.media = Media()
+
+    response = asyncio.run(plugin.web_media_cleanup_apply())
+
+    assert response["status"] == "ok"
+    assert response["data"]["backup_name"] == "before-cleanup.sqlite3"
+    assert "backup_path" not in response["data"]

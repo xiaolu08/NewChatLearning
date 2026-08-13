@@ -13,11 +13,12 @@
       h1 { margin: 0; font-size: 20px; font-weight: 650; }
       h2 { margin: 0 0 8px; font-size: 18px; }
       p { margin: 0; color: var(--muted); }
-      button, input { font: inherit; }
+      button, input, select { font: inherit; }
       button { border: 1px solid transparent; border-radius: 6px; background: var(--accent); color: #fff; min-height: 38px; padding: 8px 14px; cursor: pointer; }
       button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
       button:disabled { opacity: .55; cursor: wait; }
       input { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
+      select { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; }
       label { display: block; color: var(--muted); margin: 14px 0 5px; }
       main { max-width: 1120px; margin: 0 auto; padding: 24px; }
       .beta { color: var(--warn); font-weight: 650; }
@@ -38,7 +39,21 @@
       .error { color: var(--danger); }
       .hidden { display: none !important; }
       .actions { display: flex; gap: 8px; }
-      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } th { width: 125px; } .actions { flex-wrap: wrap; } }
+      .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+      .tabs button { background: transparent; color: var(--muted); border-radius: 0; padding: 10px 14px; }
+      .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+      .toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+      .toolbar label { margin: 0 0 5px; }
+      .field { min-width: 180px; flex: 1 1 220px; }
+      .compact-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+      .summary { border: 1px solid var(--line); background: var(--panel); padding: 14px; min-height: 78px; }
+      .summary span { display: block; color: var(--muted); margin-bottom: 4px; }
+      .summary strong { font-size: 19px; }
+      .result { min-height: 24px; margin-top: 12px; color: var(--muted); }
+      dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 22px; }
+      dialog::backdrop { background: rgb(0 0 0 / .45); }
+      dialog .actions { justify-content: flex-end; margin-top: 18px; }
+      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
     </style>
   </head>
   <body>
@@ -60,7 +75,11 @@
     </main>
     <main id="dashboard" class="hidden">
       <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
-      <div class="grid">
+      <nav class="tabs" aria-label="管理模块">
+        <button id="tab-overview" class="active" type="button">概览</button>
+        <button id="tab-media" type="button">媒体</button>
+      </nav>
+      <div id="overview-view"><div class="grid">
         <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
         <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
         <div class="metric"><span>答案数</span><strong id="answers">-</strong></div>
@@ -75,10 +94,44 @@
         <tr><th>词库范围</th><td id="library">-</td></tr>
         <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
         <tr><th>数据目录</th><td id="data-dir">-</td></tr>
-      </tbody></table></section>
+      </tbody></table></section></div>
+      <div id="media-view" class="hidden">
+        <div class="toolbar">
+          <div class="field"><label for="media-group">群聊</label><input id="media-group" list="media-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="media-groups"></datalist></div>
+          <button id="media-preview" class="secondary" type="button">读取预览</button>
+          <button id="media-scan" type="button">扫描媒体</button>
+        </div>
+        <div class="compact-grid">
+          <div class="summary"><span>失效组件</span><strong id="invalid-components">-</strong></div>
+          <div class="summary"><span>受影响答案</span><strong id="affected-answers">-</strong></div>
+          <div class="summary"><span>受影响问题</span><strong id="affected-questions">-</strong></div>
+          <div class="summary"><span>清理后可能为空</span><strong id="empty-answers">-</strong></div>
+          <div class="summary"><span>状态分布</span><strong id="media-states">-</strong></div>
+        </div>
+        <section>
+          <div class="toolbar">
+            <div class="field"><label for="cleanup-mode">清理模式</label><select id="cleanup-mode"><option value="prune">仅移除失效组件</option><option value="drop-answer">删除含失效媒体的整条答案</option></select></div>
+            <button id="cleanup-prepare" class="secondary" type="button">生成清理计划</button>
+            <button id="cleanup-apply" class="hidden" type="button">确认并执行</button>
+          </div>
+          <div id="cleanup-plan" class="result">尚未生成清理计划。</div>
+          <div id="media-message" class="result" role="status"></div>
+        </section>
+      </div>
     </main>
+    <dialog id="reauth-dialog">
+      <form id="reauth-form">
+        <h2>确认执行媒体清理</h2>
+        <p>执行前会自动备份数据库。请输入当前管理密码确认。</p>
+        <label for="reauth-password">管理密码</label>
+        <input id="reauth-password" type="password" autocomplete="current-password" required>
+        <div id="reauth-message" class="message" role="status"></div>
+        <div class="actions"><button id="reauth-cancel" class="secondary" type="button">取消</button><button type="submit">执行清理</button></div>
+      </form>
+    </dialog>
     <script>
       let authState = null;
+      let cleanupPlan = null;
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
       const setText = (id, value) => { el(id).textContent = String(value); };
@@ -118,6 +171,50 @@
         setText("revision", status.config_revision);
         setText("library", status.library.mode === "global" ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）` : "仅本群");
         setText("data-dir", status.data_dir);
+        await loadMediaGroups();
+      }
+
+      function showView(view) {
+        const media = view === "media";
+        el("overview-view").classList.toggle("hidden", media);
+        el("media-view").classList.toggle("hidden", !media);
+        el("tab-overview").classList.toggle("active", !media);
+        el("tab-media").classList.toggle("active", media);
+      }
+
+      async function loadMediaGroups() {
+        try {
+          const data = payloadData(await bridge.apiGet("api/media/groups"));
+          el("media-groups").replaceChildren(...(data.group_ids || []).map(groupId => {
+            const option = document.createElement("option"); option.value = groupId; return option;
+          }));
+          if (!el("media-group").value && data.group_ids?.length) el("media-group").value = data.group_ids[0];
+        } catch (_) {}
+      }
+
+      function selectedGroup() {
+        const groupId = el("media-group").value.trim();
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
+        return groupId;
+      }
+
+      function renderPreview(preview) {
+        setText("invalid-components", preview.media_components ?? 0);
+        setText("affected-answers", preview.affected_answers ?? 0);
+        setText("affected-questions", preview.affected_questions ?? 0);
+        setText("empty-answers", preview.answers_becoming_empty ?? 0);
+        const states = Object.entries(preview.states || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
+        setText("media-states", states || "无记录");
+      }
+
+      async function postSecure(path, body) {
+        return payloadData(await bridge.apiPost(path, { ...body, csrf_token: authState?.csrf_token || "" }));
+      }
+
+      async function loadMediaPreview() {
+        const groupId = selectedGroup();
+        const data = payloadData(await bridge.apiGet("api/media/preview", { group_id: groupId }));
+        renderPreview(data); return data;
       }
 
       el("auth-form").addEventListener("submit", async (event) => {
@@ -140,6 +237,43 @@
       el("logout").addEventListener("click", async () => {
         try { await bridge.apiPost("api/auth/logout", { csrf_token: authState?.csrf_token || "" }); }
         finally { authState = null; await refreshAuth(); }
+      });
+      el("tab-overview").addEventListener("click", () => showView("overview"));
+      el("tab-media").addEventListener("click", () => showView("media"));
+      el("media-preview").addEventListener("click", async () => {
+        try { setText("media-message", "读取中..."); await loadMediaPreview(); setText("media-message", "预览已更新。"); }
+        catch (error) { setText("media-message", error?.message || "读取失败。"); }
+      });
+      el("media-scan").addEventListener("click", async () => {
+        try {
+          setText("media-message", "正在扫描，不会删除内容...");
+          const data = await postSecure("api/media/scan", { group_id: selectedGroup() });
+          renderPreview(data.preview || {}); cleanupPlan = null; el("cleanup-apply").classList.add("hidden");
+          setText("cleanup-plan", "尚未生成清理计划。");
+          setText("media-message", `扫描完成：${data.scanned_answers} 个答案，${data.scanned_components} 个媒体组件。`);
+        } catch (error) { setText("media-message", error?.message || "扫描失败。"); }
+      });
+      el("cleanup-prepare").addEventListener("click", async () => {
+        try {
+          const data = await postSecure("api/media/cleanup/prepare", { group_id: selectedGroup(), mode: el("cleanup-mode").value });
+          cleanupPlan = data; el("cleanup-apply").classList.remove("hidden");
+          setText("cleanup-plan", `计划 ${data.plan_id}：失效组件 ${data.invalid_components}，更新答案 ${data.update_answers}，删除答案 ${data.delete_answers}。计划一小时内有效。`);
+          setText("media-message", "计划已生成，词库尚未改变。");
+        } catch (error) { setText("media-message", error?.message || "无法生成清理计划。"); }
+      });
+      el("cleanup-apply").addEventListener("click", () => { el("reauth-password").value = ""; setText("reauth-message", ""); el("reauth-dialog").showModal(); });
+      el("reauth-cancel").addEventListener("click", () => el("reauth-dialog").close());
+      el("reauth-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!cleanupPlan) return;
+        try {
+          const data = await postSecure("api/media/cleanup/apply", { group_id: selectedGroup(), plan_id: cleanupPlan.plan_id, password: el("reauth-password").value });
+          el("reauth-password").value = "";
+          el("reauth-dialog").close(); cleanupPlan = null; el("cleanup-apply").classList.add("hidden");
+          setText("cleanup-plan", `清理完成，执行前备份：${data.backup_name}`);
+          setText("media-message", `移除组件 ${data.removed_components}，更新答案 ${data.updated_answers}，删除答案 ${data.deleted_answers}。`);
+          await loadMediaPreview();
+        } catch (error) { el("reauth-password").value = ""; setText("reauth-message", error?.message || "清理未执行。"); }
       });
 
       (async () => {
