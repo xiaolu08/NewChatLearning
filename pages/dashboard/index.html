@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NewChatLearning Beta</title>
+    <style>
+      :root { color-scheme: light; --bg: #f4f6f8; --panel: #fff; --text: #17202a; --muted: #68737d; --line: #dce1e5; --accent: #087f5b; --warn: #b25c00; }
+      :root[data-theme="dark"] { color-scheme: dark; --bg: #15191d; --panel: #20262b; --text: #eef2f4; --muted: #aab3ba; --line: #384047; --accent: #52c89a; --warn: #ffb65c; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Microsoft YaHei", sans-serif; }
+      header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+      h1 { margin: 0; font-size: 20px; font-weight: 650; }
+      .beta { color: var(--warn); font-weight: 650; }
+      main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+      .notice { border-left: 4px solid var(--warn); background: var(--panel); padding: 12px 16px; margin-bottom: 18px; }
+      .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+      .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-height: 96px; }
+      .metric span { color: var(--muted); display: block; margin-bottom: 8px; }
+      .metric strong { font-size: 24px; font-weight: 650; }
+      section { margin-top: 20px; }
+      table { width: 100%; border-collapse: collapse; background: var(--panel); }
+      th, td { padding: 11px 14px; border: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
+      th { width: 210px; color: var(--muted); font-weight: 550; }
+      .ok { color: var(--accent); }
+      .error { color: #c92a2a; }
+      @media (max-width: 720px) { header { padding: 14px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } th { width: 130px; } }
+    </style>
+  </head>
+  <body>
+    <header><h1>NewChatLearning</h1><span class="beta">BETA</span></header>
+    <main>
+      <div class="notice">当前是工程骨架版本。自动学习、自动回复、词库迁移和 TTS 尚未启用。</div>
+      <div class="grid">
+        <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
+        <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
+        <div class="metric"><span>答案数</span><strong id="answers">-</strong></div>
+        <div class="metric"><span>媒体资源</span><strong id="media">-</strong></div>
+      </div>
+      <section>
+        <table>
+          <tbody>
+            <tr><th>插件版本</th><td id="version">-</td></tr>
+            <tr><th>数据库</th><td id="database">-</td></tr>
+            <tr><th>配置版本</th><td id="revision">-</td></tr>
+            <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
+            <tr><th>数据目录</th><td id="data-dir">-</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+    <script>
+      const setText = (id, value) => { document.getElementById(id).textContent = String(value); };
+      async function loadStatus() {
+        try {
+          await window.AstrBotPluginPage.ready();
+          const response = await window.AstrBotPluginPage.apiGet("api/status");
+          const payload = response.data || response;
+          const status = payload.data || payload;
+          setText("state", status.state === "running" ? "运行中" : status.state);
+          document.getElementById("state").className = "ok";
+          setText("questions", status.statistics.questions);
+          setText("answers", status.statistics.answers);
+          setText("media", status.statistics.media_assets);
+          setText("version", `${status.version} (${status.release_stage})`);
+          setText("database", `schema v${status.database.schema_version}, ${status.database.integrity}`);
+          setText("revision", status.config_revision);
+          setText("data-dir", status.data_dir);
+        } catch (error) {
+          setText("state", "读取失败");
+          document.getElementById("state").className = "error";
+          setText("database", error.message || error);
+        }
+      }
+      loadStatus();
+    </script>
+  </body>
+</html>

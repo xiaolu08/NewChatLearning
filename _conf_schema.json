@@ -1,0 +1,75 @@
+{
+  "general": {
+    "description": "基础设置",
+    "type": "object",
+    "hint": "当前版本仅建立可加载的 Beta 插件骨架，自动学习和自动回复尚未开放。",
+    "obvious_hint": true,
+    "items": {
+      "enabled": {
+        "description": "启用插件",
+        "type": "bool",
+        "default": true
+      },
+      "legacy_command_aliases": {
+        "description": "启用原版命令别名",
+        "type": "bool",
+        "default": true
+      }
+    }
+  },
+  "permissions": {
+    "description": "权限设置",
+    "type": "object",
+    "hint": "AstrBot 全局管理员始终拥有插件管理权限。普通成员触发插件命令时不会收到回复。",
+    "items": {
+      "plugin_admin_ids": {
+        "description": "插件管理员 QQ 号",
+        "type": "list",
+        "items": {"type": "string"},
+        "default": []
+      }
+    }
+  },
+  "storage": {
+    "description": "本地存储",
+    "type": "object",
+    "items": {
+      "media_quota_gb": {
+        "description": "媒体空间上限（GB）",
+        "type": "float",
+        "hint": "达到上限后停止保存新媒体，但继续文本学习，不自动删除有效旧媒体。",
+        "default": 10.0
+      }
+    }
+  },
+  "webui": {
+    "description": "管理页面",
+    "type": "object",
+    "hint": "管理页面使用 AstrBot Dashboard 的登录态和插件页面安全通道。独立登录服务将在完整 WebUI 阶段实现。",
+    "items": {
+      "enabled": {
+        "description": "启用管理页面",
+        "type": "bool",
+        "default": true
+      }
+    }
+  },
+  "tts": {
+    "description": "语音回复",
+    "type": "object",
+    "hint": "云端 TTS 可能产生费用，默认关闭；核心学习和回复算法不会调用 LLM。",
+    "items": {
+      "enabled": {
+        "description": "启用 TTS",
+        "type": "bool",
+        "default": false
+      },
+      "driver": {
+        "description": "TTS 驱动",
+        "type": "string",
+        "options": ["windows", "gpt_sovits", "local_http", "volcengine", "aliyun", "tencent", "azure", "openai", "openai_compatible", "custom_http"],
+        "default": "windows"
+      }
+    }
+  }
+}
