@@ -14,6 +14,13 @@ from astrbot.api.web import json_response, request
 from new_chat_learning.application.library import component_preview, parse_add_pair
 from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.fast_delete import FastDeleteRequest, parse_fast_delete
+from new_chat_learning.commands.group_settings import (
+    LEARNING_MODES,
+    GroupSettingsCommand,
+    parse_legacy_group_command,
+    parse_on_off,
+    transition_toggle,
+)
 from new_chat_learning.commands.permissions import is_group_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
 from new_chat_learning.migration.scanner import scan_directory, scan_file
@@ -201,6 +208,17 @@ class NewChatLearningPlugin(star.Star):
             await self.app.recall(recall)
             return
         group_id = event.get_group_id()
+        legacy_command = None
+        if self._legacy_command_aliases_enabled():
+            legacy_command = parse_legacy_group_command(event.get_message_str())
+        if legacy_command is not None:
+            await self._handle_group_settings_command(
+                event,
+                legacy_command,
+                source="legacy_command",
+            )
+            event.stop_event()
+            return
         fast_delete = parse_fast_delete(event)
         if fast_delete is not None:
             await self._handle_fast_delete(event, fast_delete)
@@ -325,6 +343,11 @@ class NewChatLearningPlugin(star.Star):
             MessageEventResult().message(
                 "NewChatLearning Beta\n"
                 "/ncl status - 查看运行状态\n"
+                "/ncl mode [模式] - 查看或设置本群运行模式\n"
+                "/ncl learning on|off - 开关本群学习\n"
+                "/ncl reply on|off - 开关本群词库回复\n"
+                "/ncl silent on|off - 开关本群静默学习\n"
+                "/ncl target list|add|remove|clear - 管理定向学习用户\n"
                 "/ncl search <关键词> - 搜索本群问题\n"
                 "/ncl show <问题ID> - 查看问题与答案\n"
                 "/ncl add <问题> => <答案> - 添加文本问答\n"
@@ -365,6 +388,41 @@ class NewChatLearningPlugin(star.Star):
                 f"词库范围：{'全局/标签' if status['library']['mode'] == 'global' else '仅本群'}"
             )
         event.set_result(MessageEventResult().message(text))
+
+    @ncl.command("mode")
+    async def ncl_mode(self, event: AstrMessageEvent) -> None:
+        arguments = tuple(self._command_tail(event, "mode").lower().split())
+        await self._handle_group_settings_command(
+            event, GroupSettingsCommand("mode", arguments), source="command"
+        )
+
+    @ncl.command("learning")
+    async def ncl_learning(self, event: AstrMessageEvent) -> None:
+        arguments = tuple(self._command_tail(event, "learning").lower().split())
+        await self._handle_group_settings_command(
+            event, GroupSettingsCommand("learning", arguments), source="command"
+        )
+
+    @ncl.command("reply")
+    async def ncl_reply(self, event: AstrMessageEvent) -> None:
+        arguments = tuple(self._command_tail(event, "reply").lower().split())
+        await self._handle_group_settings_command(
+            event, GroupSettingsCommand("reply", arguments), source="command"
+        )
+
+    @ncl.command("silent")
+    async def ncl_silent(self, event: AstrMessageEvent) -> None:
+        arguments = tuple(self._command_tail(event, "silent").lower().split())
+        await self._handle_group_settings_command(
+            event, GroupSettingsCommand("silent", arguments), source="command"
+        )
+
+    @ncl.command("target")
+    async def ncl_target(self, event: AstrMessageEvent) -> None:
+        arguments = tuple(self._command_tail(event, "target").split())
+        await self._handle_group_settings_command(
+            event, GroupSettingsCommand("target", arguments), source="command"
+        )
 
     @ncl.command("search")
     async def ncl_search(self, event: AstrMessageEvent) -> None:
@@ -795,10 +853,136 @@ class NewChatLearningPlugin(star.Star):
         )
 
     def _allow_group_library_command(self, event: AstrMessageEvent) -> bool:
-        if self.app is not None and event.get_group_id() and is_group_admin(event, self.config):
+        if (
+            self.app is not None
+            and event.get_group_id()
+            and is_group_admin(event, getattr(self, "config", {}))
+        ):
             return True
         event.stop_event()
         return False
+
+    def _legacy_command_aliases_enabled(self) -> bool:
+        snapshot = getattr(self.app.config, "snapshot", None) if self.app is not None else None
+        if callable(snapshot):
+            general = snapshot().get("general", {})
+        else:
+            general = getattr(self, "config", {}).get("general", {})
+        return bool(general.get("legacy_command_aliases", True))
+
+    async def _handle_group_settings_command(
+        self,
+        event: AstrMessageEvent,
+        command: GroupSettingsCommand,
+        *,
+        source: str,
+    ) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        group_id = event.get_group_id()
+        settings = self.app.config.group_settings(group_id)
+        if command.name == "mode" and not command.arguments:
+            event.set_result(MessageEventResult().message(self._format_group_settings(settings)))
+            return
+        mode = settings["mode"]
+        targets = list(settings["target_user_ids"])
+        usage = self._group_command_usage(command.name)
+        if command.name == "mode":
+            if len(command.arguments) != 1 or command.arguments[0] not in {
+                "disabled", "learning", "reply", "learning_reply", "silent"
+            }:
+                event.set_result(MessageEventResult().message(usage))
+                return
+            mode = command.arguments[0]
+        elif command.name in {"learning", "reply", "silent"}:
+            enabled = parse_on_off(command.arguments)
+            if source == "legacy_command" and not command.arguments:
+                capability_enabled = {
+                    "learning": mode in LEARNING_MODES,
+                    "reply": mode in {"reply", "learning_reply"},
+                    "silent": mode == "silent",
+                }
+                enabled = not capability_enabled[command.name]
+            if enabled is None:
+                event.set_result(MessageEventResult().message(usage))
+                return
+            mode = transition_toggle(mode, command.name, enabled)
+        elif command.name == "target":
+            if not command.arguments or command.arguments[0].lower() == "list":
+                event.set_result(MessageEventResult().message(self._format_group_settings(settings)))
+                return
+            action = command.arguments[0].lower()
+            if action == "clear" and len(command.arguments) == 1:
+                targets = []
+            elif action in {"add", "remove"} and len(command.arguments) >= 2:
+                requested = [self._qq_id(value) for value in command.arguments[1:]]
+                if any(value is None for value in requested):
+                    event.set_result(MessageEventResult().message(usage))
+                    return
+                if action == "add" and mode not in LEARNING_MODES:
+                    event.set_result(
+                        MessageEventResult().message("请先使用 /ncl learning on 开启本群学习。")
+                    )
+                    return
+                requested_ids = [value for value in requested if value is not None]
+                if action == "add":
+                    targets = list(dict.fromkeys([*targets, *requested_ids]))
+                else:
+                    requested_set = set(requested_ids)
+                    targets = [value for value in targets if value not in requested_set]
+            else:
+                event.set_result(MessageEventResult().message(usage))
+                return
+        else:
+            event.set_result(MessageEventResult().message(usage))
+            return
+        try:
+            result = await self.app.update_group_settings(
+                group_id=group_id,
+                mode=mode,
+                target_user_ids=targets,
+                expected_revision=settings["revision"],
+                actor_id=event.get_sender_id(),
+                source=source,
+            )
+        except ValueError as exc:
+            text = (
+                "配置已被其他入口修改，请重试。"
+                if str(exc) == "revision_conflict"
+                else "群聊设置无效，未保存。"
+            )
+            event.set_result(MessageEventResult().message(text))
+            return
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist group settings from command.")
+            event.set_result(MessageEventResult().message("群聊设置保存失败，原配置已保留。"))
+            return
+        event.set_result(MessageEventResult().message(self._format_group_settings(result, saved=True)))
+
+    @staticmethod
+    def _format_group_settings(settings: dict, *, saved: bool = False) -> str:
+        labels = {
+            "disabled": "停用",
+            "learning": "仅学习",
+            "reply": "仅回复",
+            "learning_reply": "学习并回复",
+            "silent": "静默学习",
+        }
+        targets = settings.get("target_user_ids", [])
+        target_text = "、".join(targets) if targets else "全部成员"
+        prefix = "本群设置已保存。\n" if saved else ""
+        return f"{prefix}运行模式：{labels.get(settings.get('mode'), '未知')}\n定向学习：{target_text}"
+
+    @staticmethod
+    def _group_command_usage(name: str) -> str:
+        usages = {
+            "mode": "用法：/ncl mode [disabled|learning|reply|learning_reply|silent]",
+            "learning": "用法：/ncl learning on|off",
+            "reply": "用法：/ncl reply on|off",
+            "silent": "用法：/ncl silent on|off",
+            "target": "用法：/ncl target list|add <QQ...>|remove <QQ...>|clear",
+        }
+        return usages.get(name, "群聊设置命令无效。")
 
     @staticmethod
     def _command_tail(event: AstrMessageEvent, command: str) -> str:

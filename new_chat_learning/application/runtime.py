@@ -92,6 +92,7 @@ class RuntimeApplication:
         target_user_ids: list[str],
         expected_revision: str,
         actor_id: str,
+        source: str = "webui",
     ) -> dict[str, Any]:
         before = self.config.group_settings(group_id)
         result = await self.config.update_group_settings(
@@ -105,7 +106,7 @@ class RuntimeApplication:
                 actor_id=actor_id,
                 action="update_group_settings",
                 target=f"group:{group_id}",
-                details={"before": before, "after": result, "source": "webui"},
+                details={"before": before, "after": result, "source": source},
             )
         except Exception:
             logger.exception("Group settings were saved but audit recording failed.")

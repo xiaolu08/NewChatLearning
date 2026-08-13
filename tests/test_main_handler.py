@@ -350,6 +350,274 @@ def test_authorized_search_formats_stable_question_ids(monkeypatch):
     assert "Q12 [文本] hello world" in event.result.text
 
 
+def test_authorized_group_mode_command_persists_current_group(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GroupConfig(Config):
+        revision = "revision-1"
+
+        def group_settings(self, group_id):
+            assert group_id == "10001"
+            return {
+                "group_id": group_id,
+                "mode": "reply",
+                "target_user_ids": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = GroupConfig()
+            self.calls = []
+
+        async def update_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"group_id": "10001", "mode": "learning_reply", "target_user_ids": []}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {
+        "permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}
+    }
+    event = Event()
+    event.message_str = "/ncl learning on"
+
+    asyncio.run(plugin.ncl_learning(event))
+
+    assert plugin.app.calls == [
+        {
+            "group_id": "10001",
+            "mode": "learning_reply",
+            "target_user_ids": [],
+            "expected_revision": "revision-1",
+            "actor_id": "7",
+            "source": "command",
+        }
+    ]
+    assert "本群设置已保存" in event.result.text
+    assert "学习并回复" in event.result.text
+
+
+def test_target_add_requires_learning_and_unauthorized_command_is_silent(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GroupConfig(Config):
+        revision = "revision-1"
+
+        def group_settings(self, group_id):
+            return {
+                "group_id": group_id,
+                "mode": "reply",
+                "target_user_ids": [],
+                "revision": "revision-1",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.config = GroupConfig()
+    event = Event()
+    event.message_str = "/ncl target add 12345"
+
+    asyncio.run(plugin.ncl_target(event))
+    assert event.stopped is True
+    assert event.result is None
+
+    plugin.config = {
+        "permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}
+    }
+    event = Event()
+    event.message_str = "/ncl target add 12345"
+    asyncio.run(plugin.ncl_target(event))
+    assert "请先使用 /ncl learning on" in event.result.text
+
+
+def test_enabled_legacy_alias_stops_learning_and_uses_legacy_audit_source(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GroupConfig(Config):
+        revision = "revision-1"
+
+        def snapshot(self):
+            return {"general": {"legacy_command_aliases": True}}
+
+        def group_settings(self, group_id):
+            return {
+                "group_id": group_id,
+                "mode": "learning",
+                "target_user_ids": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = GroupConfig()
+            self.reply = Reply(ReplyDecision(None, "no_match"))
+            self.observed = []
+            self.calls = []
+
+        async def update_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"group_id": "10001", "mode": "learning_reply", "target_user_ids": []}
+
+        async def observe(self, message):
+            self.observed.append(message)
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {
+        "permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}
+    }
+    event = Event()
+    event.message_str = "!reply on"
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert event.stopped is True
+    assert plugin.app.observed == []
+    assert plugin.app.calls[0]["source"] == "legacy_command"
+    assert plugin.app.calls[0]["mode"] == "learning_reply"
+
+
+def test_parameterless_legacy_alias_toggles_current_group(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GroupConfig(Config):
+        revision = "revision-1"
+
+        def group_settings(self, group_id):
+            return {
+                "group_id": group_id,
+                "mode": "learning_reply",
+                "target_user_ids": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = GroupConfig()
+            self.calls = []
+
+        async def update_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"group_id": "10001", "mode": "reply", "target_user_ids": []}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {
+        "permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}
+    }
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_group_settings_command(
+            event,
+            main_module.GroupSettingsCommand("learning"),
+            source="legacy_command",
+        )
+    )
+
+    assert plugin.app.calls[0]["mode"] == "reply"
+
+
+def test_group_command_reports_revision_conflict(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GroupConfig(Config):
+        def group_settings(self, group_id):
+            return {
+                "group_id": group_id,
+                "mode": "learning",
+                "target_user_ids": [],
+                "revision": "stale-revision",
+            }
+
+    class App:
+        config = GroupConfig()
+
+        async def update_group_settings(self, **kwargs):
+            assert kwargs["expected_revision"] == "stale-revision"
+            raise ValueError("revision_conflict")
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {
+        "permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}
+    }
+    event = Event()
+    event.message_str = "/ncl reply on"
+
+    asyncio.run(plugin.ncl_reply(event))
+
+    assert event.result.text == "配置已被其他入口修改，请重试。"
+
+
+def test_group_command_reports_persistence_failure(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GroupConfig(Config):
+        def group_settings(self, group_id):
+            return {
+                "group_id": group_id,
+                "mode": "learning",
+                "target_user_ids": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        config = GroupConfig()
+
+        async def update_group_settings(self, **_kwargs):
+            raise OSError("disk full")
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {
+        "permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}
+    }
+    event = Event()
+    event.message_str = "/ncl reply on"
+
+    asyncio.run(plugin.ncl_reply(event))
+
+    assert event.result.text == "群聊设置保存失败，原配置已保留。"
+
+
+def test_disabled_legacy_alias_continues_normal_learning(monkeypatch):
+    main_module = load_main(monkeypatch)
+    message = SimpleNamespace(components=(), plain_text="!learning off")
+
+    class GroupConfig(Config):
+        def snapshot(self):
+            return {"general": {"legacy_command_aliases": False}}
+
+        def learning_enabled_for(self, _group_id):
+            return True
+
+        def reply_enabled_for(self, _group_id):
+            return False
+
+    class App:
+        def __init__(self):
+            self.config = GroupConfig()
+            self.observed = []
+
+        async def observe(self, value):
+            self.observed.append(value)
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    event = Event()
+    event.message_str = "!learning off"
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+    monkeypatch.setattr(main_module, "parse_fast_delete", lambda _event: None)
+    monkeypatch.setattr(main_module, "normalize_group_message", lambda _event: message)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert plugin.app.observed == [message]
+    assert event.stopped is False
+
+
 def test_migrate_scan_returns_report_without_importing(monkeypatch, tmp_path):
     main_module = load_main(monkeypatch)
     plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))

@@ -1,6 +1,6 @@
 ---
 title: NewChatLearning 系统设计
-version: 0.6
+version: 0.7
 date: 2026-08-13
 status: 当前有效
 ---
@@ -69,6 +69,8 @@ NewChatLearning/
 ### 命令设计
 
 - 主入口：`/ncl help`、`/ncl status`、`/ncl learning`、`/ncl reply`、`/ncl silent`、`/ncl target`、`/ncl library`、`/ncl media`、`/ncl tts`、`/ncl task`、`/ncl admin`。
+- Beta 25 已实现当前群 `/ncl mode [disabled|learning|reply|learning_reply|silent]`、`/ncl learning on|off`、`/ncl reply on|off`、`/ncl silent on|off` 和 `/ncl target list|add|remove|clear`。开关命令只改变对应能力并保留另一项；定向用户只有在学习模式下才能新增。
+- 原版兼容入口 `!learning`、`!reply`、`!grouplist`、`!add/!remove learning|learnings|reply` 在消息学习前解析。无参数 `!learning` 与 `!reply` 切换当前群能力；所有别名只显示和修改当前群，普通成员被静默截断，且命令消息不进入学习链。
 - 当前词库管理命令：`/ncl search <关键词>`、`/ncl show <问题ID>`、`/ncl add <问题> => <答案>`、`/ncl add-regex <表达式> => <答案>`、`/ncl weight <答案ID> <权重>`、`/ncl delete-answer <答案ID>`、`/ncl delete-question <问题ID>`。
 - 词库管理命令始终限定当前群作用域。全局管理员和插件管理员仍按当前群操作；群子管理员不能借助问题或答案 ID 访问其他群。
 - WebUI 词库页复用同一应用服务；读取要求独立登录会话，新增与权重修改要求 CSRF，答案和问题删除还要求二次确认与删除前数据库备份。
@@ -121,6 +123,7 @@ Beta 24 已实现第一阶段本地驱动：Windows 使用 `System.Speech` 生�
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
+| 2026-08-13 | 2.6 | 实现当前群运行模式、定向学习管理命令和可关闭的原版兼容别名，共用配置 revision、持久化与审计。 |
 | 2026-08-13 | 0.1 | 建立首版系统设计。 |
 | 2026-08-13 | 0.2 | 确认并实现保留来源的实时全局与标签词库作用域。 |
 | 2026-08-13 | 0.3 | 实现短命令式词库搜索、详情、自定义文本/正则问答、权重和删除管理。 |
