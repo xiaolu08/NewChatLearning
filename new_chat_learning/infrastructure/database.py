@@ -92,11 +92,26 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS reply_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    sent_message_id TEXT NOT NULL,
+    answer_id INTEGER REFERENCES answers(id) ON DELETE SET NULL,
+    question_id INTEGER REFERENCES questions(id) ON DELETE SET NULL,
+    state TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    UNIQUE(platform, group_id, sent_message_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_group ON questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(group_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_media_state ON media_assets(state);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_reply_records_recent
+ON reply_records(platform, group_id, state, id DESC);
 """
 
 
@@ -154,6 +169,7 @@ class SQLiteStore:
                 "pending_messages",
                 "media_assets",
                 "audit_log",
+                "reply_records",
             )
             result: dict[str, int] = {}
             for table in tables:
@@ -164,6 +180,123 @@ class SQLiteStore:
             ).fetchone()
             result["media_bytes"] = int(media_bytes[0])
             return result
+
+    async def register_reply(
+        self,
+        *,
+        platform: str,
+        group_id: str,
+        sent_message_id: str,
+        answer_id: int,
+        question_id: int,
+    ) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            connection.execute(
+                "INSERT INTO reply_records(platform, group_id, sent_message_id, answer_id, "
+                "question_id) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(platform, group_id, sent_message_id) DO UPDATE SET "
+                "answer_id=excluded.answer_id, question_id=excluded.question_id, "
+                "state='active', deleted_at=NULL",
+                (platform, group_id, sent_message_id, answer_id, question_id),
+            )
+            connection.commit()
+
+    async def recent_reply_message_id(
+        self,
+        *,
+        platform: str,
+        group_id: str,
+        position: int,
+    ) -> str | None:
+        async with self._lock:
+            connection = self._require_connection()
+            row = connection.execute(
+                "SELECT sent_message_id FROM reply_records "
+                "WHERE platform = ? AND group_id = ? AND state = 'active' "
+                "ORDER BY id DESC LIMIT 1 OFFSET ?",
+                (platform, group_id, max(0, position - 1)),
+            ).fetchone()
+            return str(row["sent_message_id"]) if row is not None else None
+
+    async def fast_delete_reply(
+        self,
+        *,
+        platform: str,
+        group_id: str,
+        sent_message_id: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                record = connection.execute(
+                    "SELECT id, answer_id, question_id FROM reply_records "
+                    "WHERE platform = ? AND group_id = ? AND sent_message_id = ? "
+                    "AND state = 'active'",
+                    (platform, group_id, sent_message_id),
+                ).fetchone()
+                if record is None or record["answer_id"] is None:
+                    connection.rollback()
+                    return {"deleted": False, "reason": "not_found"}
+                answer_id = int(record["answer_id"])
+                question_id = int(record["question_id"])
+                connection.execute(
+                    "UPDATE reply_records SET state = 'deleted', deleted_at=CURRENT_TIMESTAMP "
+                    "WHERE answer_id = ? AND state = 'active'",
+                    (answer_id,),
+                )
+                deleted = connection.execute(
+                    "DELETE FROM answers WHERE id = ? AND question_id = ?",
+                    (answer_id, question_id),
+                ).rowcount
+                if not deleted:
+                    connection.execute(
+                        "UPDATE reply_records SET state = 'missing', deleted_at=CURRENT_TIMESTAMP "
+                        "WHERE id = ?",
+                        (int(record["id"]),),
+                    )
+                    connection.commit()
+                    return {"deleted": False, "reason": "answer_missing"}
+                orphan_removed = bool(
+                    connection.execute(
+                        "DELETE FROM questions WHERE id = ? "
+                        "AND NOT EXISTS(SELECT 1 FROM answers WHERE question_id = ?)",
+                        (question_id, question_id),
+                    ).rowcount
+                )
+                import json
+
+                connection.execute(
+                    "INSERT INTO audit_log(actor_id, action, target, details_json) "
+                    "VALUES(?, 'fast_delete_answer', ?, ?)",
+                    (
+                        actor_id,
+                        f"answer:{answer_id}",
+                        json.dumps(
+                            {
+                                "platform": platform,
+                                "group_id": group_id,
+                                "sent_message_id": sent_message_id,
+                                "question_id": question_id,
+                                "orphan_question_removed": orphan_removed,
+                            },
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                    ),
+                )
+                connection.commit()
+                return {
+                    "deleted": True,
+                    "answer_id": answer_id,
+                    "question_id": question_id,
+                    "orphan_question_removed": orphan_removed,
+                }
+            except Exception:
+                connection.rollback()
+                raise
 
     async def media_usage_bytes(self) -> int:
         async with self._lock:

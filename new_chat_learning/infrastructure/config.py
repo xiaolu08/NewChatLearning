@@ -34,7 +34,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "excluded_group_ids": [],
         "group_tags": [],
     },
-    "permissions": {"plugin_admin_ids": []},
+    "permissions": {"plugin_admin_ids": [], "group_sub_admins": []},
     "storage": {
         "media_persistence_enabled": True,
         "media_quota_gb": 10.0,

@@ -3,7 +3,7 @@ display_name: NewChatLearning Beta
 desc: 面向 AstrBot、NapCat 与 QQ 群聊的零 LLM Token 聊天学习插件（Beta）
 short_desc: 零 Token 群聊学习插件（Beta）
 author: xiaolu08
-version: 0.1.0-beta.6
+version: 0.1.0-beta.7
 repo: https://github.com/xiaolu08/NewChatLearning
 astrbot_version: ">=4.27.3"
 support_platforms:

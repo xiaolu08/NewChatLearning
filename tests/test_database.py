@@ -18,7 +18,7 @@ def test_database_initializes_schema_and_statistics(tmp_path):
     health, statistics = asyncio.run(scenario())
 
     assert health["connected"] is True
-    assert health["schema_version"] == 4
+    assert health["schema_version"] == 5
     assert health["integrity"] == "ok"
     assert statistics["questions"] == 0
     assert statistics["answers"] == 0
@@ -111,7 +111,7 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
         answer_columns = {row[1] for row in connection.execute("PRAGMA table_info(answers)")}
     finally:
         connection.close()
-    assert health["schema_version"] == 4
+    assert health["schema_version"] == 5
     assert statistics["pending_messages"] == 0
     assert "frequency" in question_columns
     assert "plain_text" in question_columns
@@ -141,3 +141,82 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
         connection.close()
     assert plain_text == "旧问题"
     assert is_regex == 0
+
+
+def test_fast_delete_removes_exact_answer_or_orphan_question_and_audits(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "delete.sqlite3")
+        await store.open()
+        try:
+            connection = store._require_connection()
+            connection.execute(
+                "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+                "VALUES(1, '10001', 'q', '{}')"
+            )
+            connection.execute(
+                "INSERT INTO answers(id, question_id, components_json, normalized_key) "
+                "VALUES(10, 1, '{}', 'a1'), (11, 1, '{}', 'a2')"
+            )
+            connection.commit()
+            await store.register_reply(
+                platform="aiocqhttp",
+                group_id="10001",
+                sent_message_id="501",
+                answer_id=10,
+                question_id=1,
+            )
+            await store.register_reply(
+                platform="aiocqhttp",
+                group_id="10001",
+                sent_message_id="502",
+                answer_id=11,
+                question_id=1,
+            )
+            recent = await store.recent_reply_message_id(
+                platform="aiocqhttp", group_id="10001", position=2
+            )
+            first = await store.fast_delete_reply(
+                platform="aiocqhttp",
+                group_id="10001",
+                sent_message_id="501",
+                actor_id="7",
+            )
+            answer_count = connection.execute("SELECT COUNT(*) FROM answers").fetchone()[0]
+            question_count = connection.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
+            second = await store.fast_delete_reply(
+                platform="aiocqhttp",
+                group_id="10001",
+                sent_message_id="502",
+                actor_id="7",
+            )
+            final_question_count = connection.execute(
+                "SELECT COUNT(*) FROM questions"
+            ).fetchone()[0]
+            audit_count = connection.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+            duplicate = await store.fast_delete_reply(
+                platform="aiocqhttp",
+                group_id="10001",
+                sent_message_id="502",
+                actor_id="7",
+            )
+            return (
+                recent,
+                first,
+                answer_count,
+                question_count,
+                second,
+                final_question_count,
+                audit_count,
+                duplicate,
+            )
+        finally:
+            await store.close()
+
+    result = asyncio.run(scenario())
+    assert result[0] == "501"
+    assert result[1]["deleted"] is True
+    assert result[1]["orphan_question_removed"] is False
+    assert result[2:4] == (1, 1)
+    assert result[4]["orphan_question_removed"] is True
+    assert result[5:7] == (0, 2)
+    assert result[7] == {"deleted": False, "reason": "not_found"}

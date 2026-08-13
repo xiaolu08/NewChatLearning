@@ -8,9 +8,14 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.web import json_response
 
 from new_chat_learning.application.runtime import RuntimeApplication
-from new_chat_learning.commands.permissions import is_plugin_admin
+from new_chat_learning.commands.fast_delete import FastDeleteRequest, parse_fast_delete
+from new_chat_learning.commands.permissions import is_group_admin, is_plugin_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
 from new_chat_learning.platform.astrbot.renderer import render_message_chain
+from new_chat_learning.platform.napcat.actions import (
+    recall_message,
+    send_group_message_with_id,
+)
 from new_chat_learning.platform.napcat.normalizer import (
     normalize_group_message,
     parse_recall_notice,
@@ -54,6 +59,11 @@ class NewChatLearningPlugin(star.Star):
             await self.app.recall(recall)
             return
         group_id = event.get_group_id()
+        fast_delete = parse_fast_delete(event)
+        if fast_delete is not None:
+            await self._handle_fast_delete(event, fast_delete)
+            event.stop_event()
+            return
         learning_enabled = self.app.config.learning_enabled_for(group_id)
         reply_enabled = self.app.config.reply_enabled_for(group_id)
         if not learning_enabled and not reply_enabled:
@@ -89,8 +99,16 @@ class NewChatLearningPlugin(star.Star):
             return
         if decision.wait_seconds > 0:
             await asyncio.sleep(decision.wait_seconds)
-        await event.send(chain)
+        sent_message_id = await send_group_message_with_id(event, chain)
         self.app.reply.mark_sent(group_id)
+        if sent_message_id is not None:
+            await self.app.store.register_reply(
+                platform=event.get_platform_name(),
+                group_id=group_id,
+                sent_message_id=sent_message_id,
+                answer_id=decision.candidate.answer_id,
+                question_id=decision.candidate.question_id,
+            )
         try:
             await self.context.message_history_manager.insert_message_chain(
                 platform_id=event.get_platform_id(),
@@ -103,6 +121,42 @@ class NewChatLearningPlugin(star.Star):
         except Exception:
             self.logger.exception("Failed to persist NewChatLearning local reply.")
         event.stop_event()
+
+    async def _handle_fast_delete(
+        self,
+        event: AstrMessageEvent,
+        request: FastDeleteRequest,
+    ) -> None:
+        if self.app is None or not is_group_admin(event, self.config):
+            return
+        platform = event.get_platform_name()
+        group_id = event.get_group_id()
+        target_id = request.quoted_message_id
+        if target_id is None and request.recent_position is not None:
+            target_id = await self.app.store.recent_reply_message_id(
+                platform=platform,
+                group_id=group_id,
+                position=request.recent_position,
+            )
+        if target_id is None:
+            event.set_result(event.plain_result("未找到可删除的 NewChatLearning 回复。"))
+            return
+        result = await self.app.store.fast_delete_reply(
+            platform=platform,
+            group_id=group_id,
+            sent_message_id=target_id,
+            actor_id=event.get_sender_id(),
+        )
+        if not result["deleted"]:
+            event.set_result(event.plain_result("未找到可删除的 NewChatLearning 回复。"))
+            return
+        command_id = str(getattr(event.message_obj, "message_id", "") or "")
+        if command_id:
+            try:
+                await recall_message(event, command_id)
+            except Exception:
+                self.logger.exception("Failed to recall fast-delete command.")
+        event.set_result(event.plain_result("已删除对应答案。"))
 
     @filter.command_group("ncl")
     def ncl(self) -> None:

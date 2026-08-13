@@ -34,6 +34,7 @@ def load_main(monkeypatch):
     event_module = types.ModuleType("astrbot.api.event")
     event_module.AstrMessageEvent = object
     event_module.MessageEventResult = object
+    event_module.MessageChain = object
     event_module.filter = Filter
     web_module = types.ModuleType("astrbot.api.web")
     web_module.json_response = lambda value, **_kwargs: value
@@ -98,6 +99,9 @@ class Event:
     def __init__(self):
         self.sent = []
         self.stopped = False
+        self.sender_id = "7"
+        self.message_obj = SimpleNamespace(message_id="600")
+        self.result = None
 
     def get_group_id(self):
         return "10001"
@@ -105,7 +109,13 @@ class Event:
     def get_self_id(self):
         return "9"
 
+    def get_sender_id(self):
+        return self.sender_id
+
     def get_platform_id(self):
+        return "aiocqhttp"
+
+    def get_platform_name(self):
         return "aiocqhttp"
 
     async def send(self, chain):
@@ -113,6 +123,15 @@ class Event:
 
     def stop_event(self):
         self.stopped = True
+
+    def is_admin(self):
+        return False
+
+    def set_result(self, result):
+        self.result = result
+
+    def plain_result(self, text):
+        return text
 
 
 def plugin_with(main_module, decision):
@@ -142,6 +161,7 @@ def test_successful_local_reply_stops_llm_and_persists_history(monkeypatch):
     monkeypatch.setattr(main_module, "normalize_group_message", lambda _event: candidate)
     monkeypatch.setattr(main_module, "reply_matching_key", lambda *_args: "key")
     monkeypatch.setattr(main_module, "render_message_chain", lambda *_args, **_kwargs: chain)
+    monkeypatch.setattr(main_module, "send_group_message_with_id", _send_without_id)
 
     asyncio.run(plugin.capture_group_message(event))
 
@@ -172,3 +192,23 @@ def test_render_failure_leaves_llm_flow_untouched(monkeypatch):
     assert reply.marked == []
     assert history.calls == []
     assert event.stopped is False
+
+
+async def _send_without_id(event, chain):
+    await event.send(chain)
+
+
+def test_unauthorized_fast_delete_is_silent_and_stops_event(monkeypatch):
+    main_module = load_main(monkeypatch)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.config = {}
+    event = Event()
+    request = SimpleNamespace(quoted_message_id="501", recent_position=None)
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+    monkeypatch.setattr(main_module, "parse_fast_delete", lambda _event: request)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert event.stopped is True
+    assert event.sent == []
+    assert event.result is None

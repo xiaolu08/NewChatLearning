@@ -27,6 +27,32 @@
         "type": "list",
         "items": {"type": "string"},
         "default": []
+      },
+      "group_sub_admins": {
+        "description": "群聊子管理员",
+        "type": "template_list",
+        "hint": "子管理员只在指定群拥有 NewChatLearning 管理权限。",
+        "templates": {
+          "group_sub_admins": {
+            "name": "群聊子管理员",
+            "display_item": "group_id",
+            "hide_hint_in_list": true,
+            "items": {
+              "group_id": {
+                "description": "群号",
+                "type": "string",
+                "default": ""
+              },
+              "admin_ids": {
+                "description": "管理员 QQ 号",
+                "type": "list",
+                "items": {"type": "string"},
+                "default": []
+              }
+            }
+          }
+        },
+        "default": []
       }
     }
   },

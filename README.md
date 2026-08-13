@@ -76,12 +76,15 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - SQLite schema v4 媒体来源元数据与健康状态迁移
 - 分群词库默认隔离，以及实时全局联合查询
 - 全局词库排除群与多群共享标签，多标签候选保持原版权重叠加语义
+- AstrBot 全局管理员、插件管理员与按群子管理员权限
+- 管理员引用词库回复执行 `!d` / `!delete`，或用 `!d <序号>` 删除最近回复
+- SQLite schema v5 回复消息追踪、精确答案删除、空问题清理与审计
 
 尚未完成：
 
 - 转发、商城表情、XML 等长尾消息的完整重建
 - 媒体健康扫描、失效标记预览与 WebUI 清理工具
-- 词库范围的聊天管理命令与完整 WebUI 编辑页
+- 词库范围的搜索、自定义问答等聊天管理命令与完整 WebUI 编辑页
 - 完整管理 WebUI 与独立登录安全机制
 - TTS 驱动与旧词库迁移工具
 - Windows + AstrBot + NapCat 实机验收
