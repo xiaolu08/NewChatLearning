@@ -51,6 +51,12 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'apiGet("api/tts/settings")' in dashboard
     assert 'api/tts/settings/update' in dashboard
     assert 'api/tts/test' in dashboard
+    assert 'id="library-export"' in dashboard
+    assert 'postSecure("api/library/export/prepare"' in dashboard
+    assert 'bridge.download("api/library/export", { ticket: prepared.ticket }' in dashboard
+    assert "csrf_token: authState" not in dashboard.split(
+        'bridge.download("api/library/export"', 1
+    )[1].split(";", 1)[0]
     assert 'confirmed: true' in dashboard
     assert 'id="audit-view"' in dashboard
     assert 'apiGet("api/audit"' in dashboard

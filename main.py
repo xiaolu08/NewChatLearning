@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import secrets
 import sqlite3
+import time
 import urllib.error
 from pathlib import Path
 from sys import maxsize
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
-from astrbot.api.web import json_response, request
+from astrbot.api.web import file_response, json_response, request
 
 from new_chat_learning.application.library import component_preview, parse_add_pair
 from new_chat_learning.application.runtime import RuntimeApplication
@@ -43,6 +45,7 @@ WEB_HEADERS = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
 }
+EXPORT_TICKET_TTL_SECONDS = 300
 
 
 class NewChatLearningPlugin(star.Star):
@@ -50,6 +53,7 @@ class NewChatLearningPlugin(star.Star):
         super().__init__(context, config)
         self.config = config if config is not None else {}
         self.app: RuntimeApplication | None = None
+        self._export_tickets: dict[str, dict] = {}
 
     async def initialize(self) -> None:
         data_dir = star.StarTools.get_data_dir(PLUGIN_NAME)
@@ -131,6 +135,13 @@ class NewChatLearningPlugin(star.Star):
             ("library/search", self.web_library_search, ["GET"], "NewChatLearning 词库搜索"),
             ("library/question", self.web_library_question, ["GET"], "NewChatLearning 问题详情"),
             ("library/add", self.web_library_add, ["POST"], "NewChatLearning 添加问答"),
+            (
+                "library/export/prepare",
+                self.web_library_export_prepare,
+                ["POST"],
+                "NewChatLearning 准备词库导出",
+            ),
+            ("library/export", self.web_library_export, ["GET"], "NewChatLearning 下载词库导出"),
             ("library/weight", self.web_library_weight, ["POST"], "NewChatLearning 修改权重"),
             (
                 "library/delete-answer",
@@ -1555,6 +1566,87 @@ class NewChatLearningPlugin(star.Star):
         for answer in public_detail["answers"]:
             answer.pop("components_json", None)
         return self._web_json({"status": "ok", "data": public_detail})
+
+    async def web_library_export_prepare(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        if payload.get("confirmed") is not True:
+            return self._web_json(
+                {"status": "error", "message": "请先确认导出当前群词库。"},
+                status_code=400,
+            )
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        if group_id is None:
+            return self._web_json(
+                {"status": "error", "message": "群号无效。"}, status_code=400
+            )
+        try:
+            result = await self.app.export.export_group(
+                group_id=group_id,
+                actor_id=self._web_actor_id(),
+                source="webui",
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to export group library from WebUI.")
+            return self._web_json(
+                {"status": "error", "message": "词库导出失败，未生成文件。"},
+                status_code=500,
+            )
+        self._prune_export_tickets()
+        ticket = secrets.token_urlsafe(24)
+        self._export_tickets[ticket] = {
+            "session": self._web_actor_id(),
+            "path": result["path"],
+            "filename": result["filename"],
+            "expires_at": time.monotonic() + EXPORT_TICKET_TTL_SECONDS,
+        }
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "ticket": ticket,
+                    "filename": result["filename"],
+                    "question_count": result["question_count"],
+                    "answer_count": result["answer_count"],
+                    "expires_in_seconds": EXPORT_TICKET_TTL_SECONDS,
+                },
+            }
+        )
+
+    async def web_library_export(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        self._prune_export_tickets()
+        ticket = str(request.query.get("ticket", ""))
+        export = self._export_tickets.get(ticket)
+        if (
+            export is None
+            or export.get("session") != self._web_actor_id()
+            or not Path(export["path"]).is_file()
+        ):
+            return self._web_json(
+                {"status": "error", "message": "导出下载票据无效或已过期。"},
+                status_code=404,
+            )
+        self._export_tickets.pop(ticket, None)
+        return file_response(
+            export["path"],
+            filename=export["filename"],
+            content_type="application/zip",
+            headers=WEB_HEADERS,
+        )
+
+    def _prune_export_tickets(self) -> None:
+        now = time.monotonic()
+        tickets = getattr(self, "_export_tickets", None)
+        if tickets is None:
+            self._export_tickets = {}
+            return
+        for ticket, export in list(tickets.items()):
+            if float(export.get("expires_at", 0)) <= now:
+                tickets.pop(ticket, None)
 
     async def web_library_add(self):
         payload, error = await self._authorized_web_payload()

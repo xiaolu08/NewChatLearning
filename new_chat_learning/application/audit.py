@@ -16,6 +16,7 @@ ACTION_NAMES = {
     "delete_answer": "删除答案",
     "delete_member_contributions": "删除成员贡献",
     "delete_question": "删除问题",
+    "export_library": "导出词库",
     "fast_delete_answer": "快速删除答案",
     "import_legacy_library": "导入旧词库",
     "restore_database_backup": "恢复数据库备份",

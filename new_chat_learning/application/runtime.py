@@ -9,6 +9,7 @@ from new_chat_learning.application.audit import AuditService
 from new_chat_learning.application.backup import BackupService
 from new_chat_learning.application.content_filter import ContentFilterService
 from new_chat_learning.application.contribution_cleanup import ContributionCleanupService
+from new_chat_learning.application.export import LibraryExportService
 from new_chat_learning.application.filter_cleanup import FilterCleanupService
 from new_chat_learning.application.learning import LearningResult, LearningService
 from new_chat_learning.application.library import LibraryService
@@ -44,6 +45,7 @@ class RuntimeApplication:
             self.config,
             self.content_filter,
         )
+        self.export = LibraryExportService(self.data_dir, self.store)
         self.reply = ReplyService(self.store, self.config, self.content_filter)
         self.tts = TTSService(self.data_dir, self.config)
         self.web_auth = WebAuthService(self.data_dir, self.store)
@@ -51,7 +53,7 @@ class RuntimeApplication:
 
     async def start(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        for directory in ("media", "backups", "temp", "logs"):
+        for directory in ("media", "backups", "exports", "temp", "logs"):
             (self.data_dir / directory).mkdir(exist_ok=True)
         await self.store.open()
         self.started_at = datetime.now(timezone.utc)

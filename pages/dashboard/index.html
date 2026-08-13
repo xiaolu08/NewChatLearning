@@ -160,6 +160,7 @@
           <div class="field"><label for="library-group">群聊</label><input id="library-group" list="library-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="library-groups"></datalist></div>
           <div class="field"><label for="library-query">搜索问题</label><input id="library-query" maxlength="200" placeholder="留空可查看最近问题"></div>
           <button id="library-search" type="button">搜索</button>
+          <button id="library-export" class="secondary" type="button">导出词库</button>
         </div>
         <div class="split">
           <div><div id="library-results" class="list"><p style="padding:14px">选择群聊后搜索词库。</p></div><div id="library-message" class="result" role="status"></div></div>
@@ -316,6 +317,14 @@
         <p id="library-delete-copy">执行前会自动备份数据库。</p>
         <div id="library-delete-message" class="message" role="status"></div>
         <div class="actions"><button id="library-delete-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">确认删除</button></div>
+      </form>
+    </dialog>
+    <dialog id="library-export-dialog">
+      <form id="library-export-form">
+        <h2>导出当前群词库</h2>
+        <p>导出包包含便于查看的 XLSX 和保留完整问答组件的 JSONL。文件可能含群聊原文与个人信息，请妥善保管。</p>
+        <div id="library-export-message" class="message" role="status"></div>
+        <div class="actions"><button id="library-export-cancel" class="secondary" type="button">取消</button><button type="submit">确认导出</button></div>
       </form>
     </dialog>
     <dialog id="filter-cleanup-dialog">
@@ -895,6 +904,23 @@
           const data = await postSecure("api/library/add", { group_id: selectedLibraryGroup(), question: el("add-question").value.trim(), answer: el("add-answer").value.trim(), is_regex: el("add-regex").checked });
           el("add-question").value = ""; el("add-answer").value = ""; setText("library-message", `${data.created ? "已添加" : "已增加权重"}：Q${data.question_id} / A${data.answer_id}。`); await searchLibrary(); await loadQuestion(data.question_id);
         } catch (error) { setText("library-message", error?.message || "添加失败。"); }
+      });
+      el("library-export").addEventListener("click", () => {
+        try {
+          selectedLibraryGroup(); setText("library-export-message", "");
+          el("library-export-dialog").showModal();
+        } catch (error) { setText("library-message", error?.message || "无法导出词库。"); }
+      });
+      el("library-export-cancel").addEventListener("click", () => el("library-export-dialog").close());
+      el("library-export-form").addEventListener("submit", async event => {
+        event.preventDefault();
+        try {
+          const groupId = selectedLibraryGroup();
+          const prepared = await postSecure("api/library/export/prepare", { group_id: groupId, confirmed: true });
+          const result = await bridge.download("api/library/export", { ticket: prepared.ticket }, prepared.filename);
+          el("library-export-dialog").close();
+          setText("library-message", `群 ${groupId} 的词库已导出：${result?.filename || "下载已开始"}`);
+        } catch (error) { setText("library-export-message", error?.message || "词库导出失败。"); }
       });
       el("contribution-prepare").addEventListener("click", async () => {
         try {

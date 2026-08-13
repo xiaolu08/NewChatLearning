@@ -46,6 +46,7 @@ def load_main(monkeypatch):
     event_module.filter = Filter
     web_module = types.ModuleType("astrbot.api.web")
     web_module.json_response = lambda value, **_kwargs: value
+    web_module.file_response = lambda path, **kwargs: {"path": path, **kwargs}
     web_module.request = SimpleNamespace(
         client_host="127.0.0.1",
         cookies={},
@@ -1034,6 +1035,124 @@ def test_web_library_add_requires_csrf_and_reports_invalid_regex(monkeypatch):
 
     assert response["status"] == "error"
     assert response["message"] == "正则表达式无法编译。"
+
+
+def test_web_library_export_uses_confirmed_one_time_session_ticket(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    export_path = tmp_path / "group.zip"
+    export_path.write_bytes(b"PK")
+
+    class Auth:
+        async def authorize(self, token, csrf=None):
+            assert token == "session"
+            if csrf is not None:
+                assert csrf == "csrf"
+            return True
+
+    class Export:
+        async def export_group(self, **kwargs):
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["source"] == "webui"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "path": export_path,
+                "filename": "group.zip",
+                "question_count": 2,
+                "answer_count": 3,
+            }
+
+    async def body():
+        return b'{"group_id":"10001","confirmed":true,"csrf_token":"csrf"}'
+
+    request = SimpleNamespace(
+        cookies={"ncl_admin_session": "session"}, body=body, query={}
+    )
+    monkeypatch.setattr(main_module, "request", request)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.export = Export()
+
+    prepared = asyncio.run(plugin.web_library_export_prepare())
+
+    assert prepared["status"] == "ok"
+    assert prepared["data"]["question_count"] == 2
+    ticket = prepared["data"]["ticket"]
+    request.query = {"ticket": ticket}
+    downloaded = asyncio.run(plugin.web_library_export())
+    repeated = asyncio.run(plugin.web_library_export())
+
+    assert downloaded["path"] == export_path
+    assert downloaded["filename"] == "group.zip"
+    assert downloaded["content_type"] == "application/zip"
+    assert repeated["status"] == "error"
+    assert "无效或已过期" in repeated["message"]
+
+
+def test_web_library_export_prepare_requires_confirmation(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Export:
+        called = False
+
+        async def export_group(self, **_kwargs):
+            self.called = True
+
+    async def body():
+        return b'{"group_id":"10001","confirmed":false,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(
+            cookies={"ncl_admin_session": "session"}, body=body, query={}
+        ),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    exporter = Export()
+    plugin.app.export = exporter
+
+    response = asyncio.run(plugin.web_library_export_prepare())
+
+    assert response["status"] == "error"
+    assert exporter.called is False
+
+
+def test_web_library_export_ticket_is_bound_to_session(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    export_path = tmp_path / "group.zip"
+    export_path.write_bytes(b"PK")
+
+    class Auth:
+        async def authorize(self, _token, _csrf=None):
+            return True
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin._export_tickets = {
+        "ticket": {
+            "session": "webui:another-session",
+            "path": export_path,
+            "filename": "group.zip",
+            "expires_at": main_module.time.monotonic() + 60,
+        }
+    }
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(
+            cookies={"ncl_admin_session": "session"}, query={"ticket": "ticket"}
+        ),
+    )
+
+    response = asyncio.run(plugin.web_library_export())
+
+    assert response["status"] == "error"
+    assert "ticket" in plugin._export_tickets
 
 
 def test_web_library_delete_requires_confirmation_is_group_scoped_and_hides_path(monkeypatch):
