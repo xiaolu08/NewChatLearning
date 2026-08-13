@@ -1046,3 +1046,131 @@ def test_web_filter_cleanup_apply_reports_stale_plan(monkeypatch):
     response = asyncio.run(plugin.web_filter_cleanup_apply())
     assert response["status"] == "error"
     assert "已变化" in response["message"]
+
+
+def test_web_backups_requires_login_and_returns_safe_metadata(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, _csrf=None):
+            assert token == "session"
+            return True
+
+    class Backup:
+        async def list_backups(self):
+            return [
+                {
+                    "name": "before-test.sqlite3",
+                    "size_bytes": 1024,
+                    "modified_at": "2026-08-13T00:00:00+00:00",
+                    "kind": "other",
+                }
+            ]
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.backup = Backup()
+
+    response = asyncio.run(plugin.web_backups())
+    assert response["data"]["backups"][0]["name"] == "before-test.sqlite3"
+    assert "path" not in response["data"]["backups"][0]
+
+
+def test_web_backup_inspect_rejects_invalid_name(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf=None):
+            return True
+
+    class Backup:
+        async def inspect(self, _name):
+            raise ValueError("invalid_backup_name")
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(
+            cookies={"ncl_admin_session": "session"},
+            query={"name": "../outside.sqlite3"},
+        ),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.backup = Backup()
+
+    response = asyncio.run(plugin.web_backup_inspect())
+    assert response["status"] == "error"
+    assert response["message"] == "备份文件不存在或名称无效。"
+
+
+def test_web_backup_restore_reauthenticates_invalidates_sessions_and_cookie(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        invalidated = False
+
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **kwargs):
+            assert kwargs == {
+                "session_token": "session",
+                "csrf_token": "csrf",
+                "password": "long-enough-password",
+            }
+            return "ok"
+
+        async def invalidate_all_sessions(self):
+            self.invalidated = True
+
+    class Backup:
+        async def restore(self, **kwargs):
+            assert kwargs["name"] == "before-test.sqlite3"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "restored": True,
+                "backup_name": "before-test.sqlite3",
+                "safety_backup_name": "before-restore-now.sqlite3",
+                "schema_version": 8,
+            }
+
+    class Response:
+        def __init__(self, data, status_code, headers):
+            self.data = data
+            self.status_code = status_code
+            self.headers = headers
+            self.deleted_cookie = None
+
+        def delete_cookie(self, key, **kwargs):
+            self.deleted_cookie = (key, kwargs)
+
+    async def body():
+        return b'{"name":"before-test.sqlite3","password":"long-enough-password","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "json_response",
+        lambda data, *, status_code=200, headers=None: Response(
+            data, status_code, headers or {}
+        ),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    auth = Auth()
+    plugin.app.web_auth = auth
+    plugin.app.backup = Backup()
+
+    response = asyncio.run(plugin.web_backup_restore())
+    assert response.data["status"] == "ok"
+    assert auth.invalidated is True
+    assert response.deleted_cookie == ("ncl_admin_session", {"path": "/"})

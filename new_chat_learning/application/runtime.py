@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from new_chat_learning.application.backup import BackupService
 from new_chat_learning.application.content_filter import ContentFilterService
 from new_chat_learning.application.filter_cleanup import FilterCleanupService
 from new_chat_learning.application.learning import LearningResult, LearningService
@@ -28,6 +29,7 @@ class RuntimeApplication:
         self.store = SQLiteStore(self.data_dir / "new_chat_learning.sqlite3")
         self.learning = LearningService(self.store, self.config.learning_interval_seconds)
         self.library = LibraryService(self.store, self.data_dir)
+        self.backup = BackupService(self.data_dir, self.store)
         self.media = MediaService(self.data_dir, self.store, self.config)
         self.migration = MigrationService(self.data_dir, self.store)
         self.content_filter = ContentFilterService(self.config)

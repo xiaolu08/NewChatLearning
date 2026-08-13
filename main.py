@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import sqlite3
 from pathlib import Path
 from sys import maxsize
 
@@ -133,6 +134,19 @@ class NewChatLearningPlugin(star.Star):
                 self.web_media_cleanup_apply,
                 ["POST"],
                 "NewChatLearning 媒体清理执行",
+            ),
+            ("backups", self.web_backups, ["GET"], "NewChatLearning 备份列表"),
+            (
+                "backups/inspect",
+                self.web_backup_inspect,
+                ["GET"],
+                "NewChatLearning 校验备份",
+            ),
+            (
+                "backups/restore",
+                self.web_backup_restore,
+                ["POST"],
+                "NewChatLearning 恢复备份",
             ),
         ):
             self.context.register_web_api(
@@ -1246,6 +1260,65 @@ class NewChatLearningPlugin(star.Star):
         public_result["backup_name"] = Path(str(result["backup_path"])).name
         public_result.pop("backup_path", None)
         return self._web_json({"status": "ok", "data": public_result})
+
+    async def web_backups(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {"status": "ok", "data": {"backups": await self.app.backup.list_backups()}}
+        )
+
+    async def web_backup_inspect(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        name = str(request.query.get("name", "")).strip()
+        try:
+            result = await self.app.backup.inspect(name)
+        except ValueError:
+            return self._web_json(
+                {"status": "error", "message": "备份文件不存在或名称无效。"},
+                status_code=404,
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_backup_restore(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        reauthentication = await self.app.web_auth.reauthenticate(
+            session_token=self._web_session_token(),
+            csrf_token=str(payload.get("csrf_token", "")),
+            password=str(payload.get("password", "")),
+        )
+        if reauthentication != "ok":
+            return self._web_json(
+                {"status": "error", "message": "密码确认失败，恢复未执行。"},
+                status_code=403,
+            )
+        try:
+            result = await self.app.backup.restore(
+                name=str(payload.get("name", "")),
+                actor_id=self._web_actor_id(),
+            )
+        except ValueError as exc:
+            message = (
+                "备份完整性或 schema 不符合恢复要求。"
+                if str(exc) == "backup_not_restorable"
+                else "备份文件不存在或名称无效。"
+            )
+            return self._web_json({"status": "error", "message": message}, status_code=409)
+        except (OSError, RuntimeError, sqlite3.DatabaseError):
+            self.logger.exception("Failed to restore NewChatLearning database backup.")
+            return self._web_json(
+                {"status": "error", "message": "备份恢复失败，运行数据库已自动回滚。"},
+                status_code=500,
+            )
+        await self.app.web_auth.invalidate_all_sessions()
+        response = self._web_json({"status": "ok", "data": result})
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return response
 
     async def _authorized_web_payload(self):
         if self.app is None:

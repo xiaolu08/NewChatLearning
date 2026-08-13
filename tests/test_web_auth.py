@@ -90,6 +90,17 @@ def test_password_change_requires_csrf_and_invalidates_old_sessions(tmp_path):
     assert new_password[0] == "ok"
 
 
+def test_explicit_session_invalidation_clears_all_logins(tmp_path):
+    async def scenario():
+        service = WebAuthService(tmp_path)
+        _result, first = await service.setup("long-enough-password", "127.0.0.1")
+        _result, second = await service.login("long-enough-password", "127.0.0.1")
+        await service.invalidate_all_sessions()
+        return await service.authorize(first.token), await service.authorize(second.token)
+
+    assert asyncio.run(scenario()) == (False, False)
+
+
 def test_auth_events_are_audited_without_password_material(tmp_path):
     async def scenario():
         store = SQLiteStore(tmp_path / "runtime.sqlite3")

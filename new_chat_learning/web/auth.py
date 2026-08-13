@@ -140,6 +140,10 @@ class WebAuthService:
                 return False
             return csrf_token is None or hmac.compare_digest(session.csrf_token, csrf_token)
 
+    async def invalidate_all_sessions(self) -> None:
+        async with self._lock:
+            self._sessions.clear()
+
     async def reauthenticate(
         self,
         *,

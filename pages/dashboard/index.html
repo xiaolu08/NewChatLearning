@@ -105,6 +105,7 @@
         <button id="tab-library" type="button">词库</button>
         <button id="tab-filters" type="button">过滤</button>
         <button id="tab-media" type="button">媒体</button>
+        <button id="tab-backups" type="button">备份</button>
       </nav>
       <div id="overview-view"><div class="grid">
         <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
@@ -219,6 +220,13 @@
         <section class="settings-band"><h2>词库清理</h2><p>扫描当前群词库中命中过滤规则的答案。准备阶段只生成一小时有效的预览计划，不会删除内容。</p><div class="toolbar" style="margin-top:14px"><button id="filter-cleanup-prepare" class="secondary" type="button">生成清理计划</button><button id="filter-cleanup-apply" class="danger hidden" type="button">确认删除命中答案</button></div><div id="filter-cleanup-plan" class="result">尚未生成过滤清理计划。</div></section>
         <section class="settings-band"><h2>黑名单</h2><div class="toolbar"><div class="field"><label for="blacklist-user">用户 QQ 号</label><input id="blacklist-user" inputmode="numeric"></div><div class="field"><label for="blacklist-group">群号（按群时必填）</label><input id="blacklist-group" inputmode="numeric"></div><div class="field"><label for="manual-scope">范围</label><select id="manual-scope"><option value="global">全局</option><option value="group">按群</option></select></div><button id="blacklist-block" type="button">人工封禁</button><button id="blacklist-refresh" class="secondary" type="button">刷新</button></div><div class="table-scroll"><table><thead><tr><th>范围</th><th>群号</th><th>用户</th><th>命中</th><th>状态</th><th>操作</th></tr></thead><tbody id="blacklist-body"></tbody></table></div></section>
       </div>
+      <div id="backups-view" class="hidden">
+        <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
+        <div class="split">
+          <div><div id="backups-list" class="list"><p style="padding:14px">正在读取备份。</p></div><div id="backups-message" class="result" role="status"></div></div>
+          <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新登录。</p></section></div>
+        </div>
+      </div>
     </main>
     <dialog id="reauth-dialog">
       <form id="reauth-form">
@@ -250,6 +258,16 @@
         <div class="actions"><button id="filter-cleanup-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行清理</button></div>
       </form>
     </dialog>
+    <dialog id="backup-restore-dialog">
+      <form id="backup-restore-form">
+        <h2>确认恢复数据库备份</h2>
+        <p id="backup-restore-copy">恢复会替换当前词库数据库，并先创建当前状态的保险备份。请输入管理密码确认。</p>
+        <label for="backup-restore-password">管理密码</label>
+        <input id="backup-restore-password" type="password" autocomplete="current-password" required>
+        <div id="backup-restore-message" class="message" role="status"></div>
+        <div class="actions"><button id="backup-restore-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行恢复</button></div>
+      </form>
+    </dialog>
     <script>
       let authState = null;
       let cleanupPlan = null;
@@ -259,6 +277,7 @@
       let filterRevision = null;
       let filterGroupRules = [];
       let filterCleanupPlan = null;
+      let selectedBackup = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
@@ -307,17 +326,21 @@
         const library = view === "library";
         const groups = view === "groups";
         const filters = view === "filters";
-        el("overview-view").classList.toggle("hidden", media || library || groups || filters);
+        const backups = view === "backups";
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters || backups);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
         el("filters-view").classList.toggle("hidden", !filters);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters);
+        el("backups-view").classList.toggle("hidden", !backups);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !backups);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
         el("tab-filters").classList.toggle("active", filters);
+        el("tab-backups").classList.toggle("active", backups);
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
+        if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
       }
 
       async function loadGroups() {
@@ -476,6 +499,31 @@
         el("blacklist-body").replaceChildren(...rows);
       }
 
+      async function loadBackups() {
+        const data = payloadData(await bridge.apiGet("api/backups"));
+        selectedBackup = null; el("backup-restore").disabled = true;
+        setText("backup-name", "未选择"); setText("backup-integrity", "-"); setText("backup-schema", "-"); setText("backup-counts", "-");
+        const kindNames = { restore_safety: "恢复保险", media_cleanup: "媒体清理", filter_cleanup: "过滤清理", library_delete: "词库删除", legacy_import: "旧词库导入", other: "其他" };
+        const buttons = (data.backups || []).map(entry => {
+          const button = document.createElement("button"); button.type = "button";
+          button.textContent = entry.name;
+          const meta = document.createElement("small"); meta.textContent = `${kindNames[entry.kind] || entry.kind} · ${formatBytes(entry.size_bytes)} · ${new Date(entry.modified_at).toLocaleString()}`;
+          button.append(meta); button.addEventListener("click", () => inspectBackup(entry.name, button)); return button;
+        });
+        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "暂无数据库备份。"; buttons.push(p); }
+        el("backups-list").replaceChildren(...buttons); setText("backups-message", `共 ${(data.backups || []).length} 个备份。`);
+      }
+
+      async function inspectBackup(name, button) {
+        const data = payloadData(await bridge.apiGet("api/backups/inspect", { name }));
+        selectedBackup = data.restorable ? data : null;
+        document.querySelectorAll("#backups-list button").forEach(item => item.classList.toggle("active", item === button));
+        setText("backup-name", data.name); setText("backup-integrity", data.integrity); setText("backup-schema", `v${data.schema_version}`);
+        setText("backup-counts", `${data.counts?.questions ?? 0} / ${data.counts?.answers ?? 0}`);
+        el("backup-restore").disabled = !data.restorable;
+        setText("backups-message", data.restorable ? "备份完整性检查通过，可以恢复。" : "此备份不可恢复。");
+      }
+
       async function updateBlacklist(scope, groupId, userId, blocked) {
         await postSecure("api/filters/blacklist/update", { scope, group_id: groupId || "", user_id: userId, blocked });
         await loadBlacklist(); setText("filters-message", blocked ? `已封禁用户 ${userId}。` : `已解除用户 ${userId} 的封禁并清零命中次数。`);
@@ -513,6 +561,18 @@
       el("tab-library").addEventListener("click", () => showView("library"));
       el("tab-filters").addEventListener("click", () => showView("filters"));
       el("tab-media").addEventListener("click", () => showView("media"));
+      el("tab-backups").addEventListener("click", () => showView("backups"));
+      el("backups-refresh").addEventListener("click", () => loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。")));
+      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; el("backup-restore-password").value = ""; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新登录。`); el("backup-restore-dialog").showModal(); });
+      el("backup-restore-cancel").addEventListener("click", () => el("backup-restore-dialog").close());
+      el("backup-restore-form").addEventListener("submit", async event => {
+        event.preventDefault(); if (!selectedBackup) return;
+        try {
+          const data = await postSecure("api/backups/restore", { name: selectedBackup.name, password: el("backup-restore-password").value });
+          el("backup-restore-dialog").close(); authState = null; selectedBackup = null;
+          await refreshAuth(); setText("auth-message", `恢复完成，保险备份：${data.safety_backup_name}。请重新登录。`);
+        } catch (error) { el("backup-restore-password").value = ""; setText("backup-restore-message", error?.message || "恢复未执行。"); }
+      });
       el("filter-group-load").addEventListener("click", () => { try { renderGroupFilterRule(selectedFilterGroup()); setText("filters-message", "已读取群聊附加规则。"); } catch (error) { setText("filters-message", error.message); } });
       el("filter-group-clear").addEventListener("click", () => { for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`group-filter-${key}`, []); renderComponentChecks("group-filter-components", []); });
       el("filters-save").addEventListener("click", async () => {

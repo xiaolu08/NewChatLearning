@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -178,18 +180,7 @@ class SQLiteStore:
             if self._connection is not None:
                 return
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            connection = sqlite3.connect(self.path, check_same_thread=False)
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.executescript(SCHEMA_SQL)
-            self._migrate_schema(connection)
-            connection.execute(
-                "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (str(SCHEMA_VERSION),),
-            )
-            connection.commit()
-            self._connection = connection
+            self._connection = self._create_connection()
 
     async def close(self) -> None:
         async with self._lock:
@@ -414,6 +405,111 @@ class SQLiteStore:
             finally:
                 backup.close()
             return destination
+
+    async def restore_from_backup(
+        self,
+        *,
+        source: Path,
+        safety_backup: Path,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            source = Path(source)
+            safety_backup = Path(safety_backup)
+            temporary = self.path.with_suffix(".restore.tmp")
+            safety_backup.parent.mkdir(parents=True, exist_ok=True)
+            backup = sqlite3.connect(safety_backup)
+            try:
+                connection.backup(backup)
+                if backup.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                    raise RuntimeError("safety_backup_integrity")
+            finally:
+                backup.close()
+            replaced = False
+            try:
+                await asyncio.to_thread(shutil.copy2, source, temporary)
+                candidate = sqlite3.connect(temporary)
+                try:
+                    if candidate.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                        raise ValueError("backup_integrity_failed")
+                    schema_row = candidate.execute(
+                        "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+                    ).fetchone()
+                    if schema_row is None:
+                        raise ValueError("backup_schema_missing")
+                    if not 1 <= int(schema_row[0]) <= SCHEMA_VERSION:
+                        raise ValueError("backup_schema_unsupported")
+                finally:
+                    candidate.close()
+                connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                connection.close()
+                self._connection = None
+                self._remove_sidecars()
+                os.replace(temporary, self.path)
+                replaced = True
+                restored = self._create_connection()
+                self._connection = restored
+                self._insert_audit(
+                    restored,
+                    actor_id=str(actor_id),
+                    action="restore_database_backup",
+                    target="database",
+                    details={
+                        "backup_name": source.name,
+                        "safety_backup_name": safety_backup.name,
+                    },
+                )
+                restored.commit()
+                return {
+                    "restored": True,
+                    "backup_name": source.name,
+                    "safety_backup_name": safety_backup.name,
+                    "schema_version": int(
+                        restored.execute(
+                            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+                        ).fetchone()[0]
+                    ),
+                }
+            except Exception:
+                if temporary.exists():
+                    temporary.unlink()
+                if replaced:
+                    if self._connection is not None:
+                        self._connection.close()
+                        self._connection = None
+                    rollback = self.path.with_suffix(".rollback.tmp")
+                    await asyncio.to_thread(shutil.copy2, safety_backup, rollback)
+                    self._remove_sidecars()
+                    os.replace(rollback, self.path)
+                    self._connection = self._create_connection()
+                elif self._connection is None:
+                    self._connection = self._create_connection()
+                raise
+
+    def _create_connection(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path, check_same_thread=False)
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.executescript(SCHEMA_SQL)
+            self._migrate_schema(connection)
+            connection.execute(
+                "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (str(SCHEMA_VERSION),),
+            )
+            connection.commit()
+            return connection
+        except Exception:
+            connection.close()
+            raise
+
+    def _remove_sidecars(self) -> None:
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(f"{self.path}{suffix}")
+            if sidecar.exists():
+                sidecar.unlink()
 
     def _import_legacy_jsonl_sync(
         self,
