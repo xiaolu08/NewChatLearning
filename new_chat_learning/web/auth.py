@@ -16,7 +16,7 @@ from new_chat_learning.infrastructure.database import SQLiteStore
 
 COOKIE_NAME = "ncl_admin_session"
 SESSION_TTL_SECONDS = 60 * 60
-PASSWORD_MIN_LENGTH = 12
+PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 256
 LOGIN_WINDOW_SECONDS = 10 * 60
 LOGIN_LOCK_SECONDS = 15 * 60

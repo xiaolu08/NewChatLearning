@@ -18,6 +18,8 @@
       button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
       button.danger { background: var(--danger); }
       button:disabled { opacity: .55; cursor: wait; }
+      #migration-prepare:disabled { cursor: not-allowed; }
+      #migration-prepare.busy:disabled { cursor: progress; }
       input { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
       textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
       select { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; }
@@ -93,9 +95,9 @@
         <h2 id="auth-title">管理页面登录</h2>
         <p id="auth-copy">请输入独立管理密码。</p>
         <label for="password">管理密码</label>
-        <input id="password" name="password" type="password" minlength="12" maxlength="256" autocomplete="current-password" required>
+        <input id="password" name="password" type="password" minlength="8" maxlength="256" autocomplete="current-password" required>
         <label id="confirm-label" class="hidden" for="confirm-password">确认密码</label>
-        <input id="confirm-password" class="hidden" name="confirm-password" type="password" minlength="12" maxlength="256" autocomplete="new-password">
+        <input id="confirm-password" class="hidden" name="confirm-password" type="password" minlength="8" maxlength="256" autocomplete="new-password">
         <button id="submit" type="submit">登录</button>
         <div id="auth-message" class="message" role="status"></div>
       </form>
@@ -427,7 +429,7 @@
         el("logout").classList.add("hidden");
         const setup = Boolean(authState.setup_required);
         setText("auth-title", setup ? "首次设置管理密码" : "管理页面登录");
-        setText("auth-copy", setup ? "首次设置只能从运行 AstrBot 的本机完成，密码至少 12 个字符。" : "请输入 NewChatLearning 的独立管理密码。");
+        setText("auth-copy", setup ? "首次设置只能从运行 AstrBot 的本机完成，密码至少 8 个字符。" : "请输入 NewChatLearning 的独立管理密码。");
         setText("submit", setup ? "设置密码" : "登录");
         el("confirm-label").classList.toggle("hidden", !setup);
         el("confirm-password").classList.toggle("hidden", !setup);
@@ -885,14 +887,14 @@
       });
       el("migration-prepare").addEventListener("click", async () => {
         if (!migrationUpload) return;
-        const button = el("migration-prepare"); button.disabled = true; setText("migration-message", "正在隔离转换旧词库...");
+        const button = el("migration-prepare"); button.disabled = true; button.classList.add("busy"); setText("migration-message", "正在隔离转换旧词库...");
         try {
           const data = await postSecure("api/migration/prepare", { upload_id: migrationUpload.upload_id, group_id: selectedMigrationGroup() });
           migrationPlan = data; migrationUpload = null; el("migration-file").value = ""; el("migration-apply").classList.remove("hidden");
           setText("migration-plan", `计划 ${data.import_id}：目标群 ${data.group_id}，可导入问题 ${data.question_count}，答案 ${data.answer_count}；跳过问题 ${data.skipped_questions}，答案 ${data.skipped_answers}，未知组件 ${data.unknown_components}。计划一小时内有效。`);
           setText("migration-message", "导入计划已生成，当前词库尚未改变。"); await loadMigrationStatus();
         } catch (error) { setText("migration-message", error?.message || "旧词库转换失败。"); }
-        finally { button.disabled = migrationUpload === null; }
+        finally { button.classList.remove("busy"); button.disabled = migrationUpload === null; }
       });
       el("migration-apply").addEventListener("click", () => { if (!migrationPlan) return; setText("migration-confirm-message", ""); setText("migration-copy", `将把 ${migrationPlan.source_name} 合并到群 ${migrationPlan.group_id}。导入前会自动备份数据库，且不会自动开启学习或回复。`); el("migration-dialog").showModal(); });
       el("migration-cancel").addEventListener("click", () => el("migration-dialog").close());

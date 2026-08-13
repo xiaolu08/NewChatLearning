@@ -1078,7 +1078,7 @@ class NewChatLearningPlugin(star.Star):
             messages = {
                 "already_configured": "管理密码已经设置。",
                 "loopback_required": "首次设置密码只能从本机访问。",
-                "password_too_short": "密码至少需要 12 个字符。",
+                "password_too_short": "密码至少需要 8 个字符。",
                 "password_too_long": "密码不能超过 256 个字符。",
             }
             return self._web_json(
@@ -1127,7 +1127,7 @@ class NewChatLearningPlugin(star.Star):
         )
         if result != "ok" or session is None:
             messages = {
-                "password_too_short": "新密码至少需要 12 个字符。",
+                "password_too_short": "新密码至少需要 8 个字符。",
                 "password_too_long": "新密码不能超过 256 个字符。",
                 "invalid_credentials": "当前密码不正确。",
                 "csrf_invalid": "安全令牌已失效，请刷新页面。",

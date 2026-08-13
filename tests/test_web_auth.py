@@ -3,7 +3,7 @@ import json
 import time
 
 from new_chat_learning.infrastructure.database import SQLiteStore
-from new_chat_learning.web.auth import SESSION_TTL_SECONDS, WebAuthService
+from new_chat_learning.web.auth import PASSWORD_MIN_LENGTH, SESSION_TTL_SECONDS, WebAuthService
 
 
 def test_first_setup_requires_loopback_and_strong_password(tmp_path):
@@ -23,6 +23,19 @@ def test_first_setup_requires_loopback_and_strong_password(tmp_path):
     credential = json.loads((tmp_path / "webui-password.json").read_text(encoding="utf-8"))
     assert credential["algorithm"] == "scrypt"
     assert "long-enough-password" not in str(credential)
+
+
+def test_password_minimum_length_is_eight_characters(tmp_path):
+    async def scenario():
+        too_short = await WebAuthService(tmp_path / "short").setup("1234567", "127.0.0.1")
+        accepted = await WebAuthService(tmp_path / "accepted").setup("12345678", "127.0.0.1")
+        return too_short, accepted
+
+    too_short, accepted = asyncio.run(scenario())
+
+    assert PASSWORD_MIN_LENGTH == 8
+    assert too_short == ("password_too_short", None)
+    assert accepted[0] == "ok"
 
 
 def test_login_session_csrf_logout_and_restart_invalidation(tmp_path):
