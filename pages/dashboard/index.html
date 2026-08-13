@@ -159,6 +159,13 @@
               <label class="inline-check"><input id="add-regex" type="checkbox"> 将问题作为正则表达式</label>
               <button id="library-add" type="button">添加问答</button>
             </section>
+            <section><h2>成员贡献清理</h2>
+              <p>只处理当前群中可追踪到该成员的已固化答案贡献和待固化消息。旧词库导入及管理员自定义问答没有成员归属，不会被删除。</p>
+              <label for="contribution-user">成员 QQ 号</label>
+              <input id="contribution-user" inputmode="numeric" placeholder="输入成员 QQ 号">
+              <div class="toolbar" style="margin-top:16px"><button id="contribution-prepare" class="secondary" type="button">生成删除预览</button><button id="contribution-apply" class="danger hidden" type="button">确认删除贡献</button></div>
+              <div id="contribution-plan" class="result">尚未生成成员贡献删除计划。</div>
+            </section>
             <section id="question-detail" class="detail hidden">
               <div class="actions" style="justify-content:space-between;align-items:center"><h2 id="question-title">问题详情</h2><button id="delete-question" class="danger" type="button">删除问题</button></div>
               <p id="question-copy"></p><div id="answer-list"></div>
@@ -268,6 +275,16 @@
         <div class="actions"><button id="backup-restore-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行恢复</button></div>
       </form>
     </dialog>
+    <dialog id="contribution-dialog">
+      <form id="contribution-form">
+        <h2>确认删除成员学习贡献</h2>
+        <p id="contribution-copy">执行前会自动备份数据库，并重新检查成员贡献。请输入当前管理密码确认。</p>
+        <label for="contribution-password">管理密码</label>
+        <input id="contribution-password" type="password" autocomplete="current-password" required>
+        <div id="contribution-message" class="message" role="status"></div>
+        <div class="actions"><button id="contribution-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行删除</button></div>
+      </form>
+    </dialog>
     <script>
       let authState = null;
       let cleanupPlan = null;
@@ -278,6 +295,7 @@
       let filterGroupRules = [];
       let filterCleanupPlan = null;
       let selectedBackup = null;
+      let contributionPlan = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
@@ -503,7 +521,7 @@
         const data = payloadData(await bridge.apiGet("api/backups"));
         selectedBackup = null; el("backup-restore").disabled = true;
         setText("backup-name", "未选择"); setText("backup-integrity", "-"); setText("backup-schema", "-"); setText("backup-counts", "-");
-        const kindNames = { restore_safety: "恢复保险", media_cleanup: "媒体清理", filter_cleanup: "过滤清理", library_delete: "词库删除", legacy_import: "旧词库导入", other: "其他" };
+        const kindNames = { restore_safety: "恢复保险", media_cleanup: "媒体清理", filter_cleanup: "过滤清理", library_delete: "词库删除", contribution_delete: "成员贡献删除", legacy_import: "旧词库导入", other: "其他" };
         const buttons = (data.backups || []).map(entry => {
           const button = document.createElement("button"); button.type = "button";
           button.textContent = entry.name;
@@ -632,6 +650,31 @@
           const data = await postSecure("api/library/add", { group_id: selectedLibraryGroup(), question: el("add-question").value.trim(), answer: el("add-answer").value.trim(), is_regex: el("add-regex").checked });
           el("add-question").value = ""; el("add-answer").value = ""; setText("library-message", `${data.created ? "已添加" : "已增加权重"}：Q${data.question_id} / A${data.answer_id}。`); await searchLibrary(); await loadQuestion(data.question_id);
         } catch (error) { setText("library-message", error?.message || "添加失败。"); }
+      });
+      el("contribution-prepare").addEventListener("click", async () => {
+        try {
+          const userId = el("contribution-user").value.trim();
+          if (!/^\d{5,20}$/.test(userId)) throw new Error("请输入有效的成员 QQ 号。");
+          const data = await postSecure("api/library/contributions/prepare", { group_id: selectedLibraryGroup(), user_id: userId });
+          contributionPlan = data; el("contribution-apply").classList.remove("hidden");
+          setText("contribution-plan", `计划 ${data.plan_id}：贡献 ${data.contributions}，受影响答案 ${data.affected_answers}，将删除答案 ${data.answers_becoming_empty}，将删除空问题 ${data.questions_becoming_empty}，待固化消息 ${data.pending_messages}。计划一小时内有效。`);
+        } catch (error) { contributionPlan = null; el("contribution-apply").classList.add("hidden"); setText("contribution-plan", error?.message || "无法生成成员贡献删除计划。"); }
+      });
+      el("contribution-apply").addEventListener("click", () => {
+        if (!contributionPlan) return;
+        el("contribution-password").value = ""; setText("contribution-message", "");
+        setText("contribution-copy", `将删除群 ${contributionPlan.group_id} 中成员 ${contributionPlan.user_id} 的可追踪贡献。执行前会自动备份数据库。`);
+        el("contribution-dialog").showModal();
+      });
+      el("contribution-cancel").addEventListener("click", () => el("contribution-dialog").close());
+      el("contribution-form").addEventListener("submit", async event => {
+        event.preventDefault(); if (!contributionPlan) return;
+        try {
+          const data = await postSecure("api/library/contributions/apply", { group_id: contributionPlan.group_id, user_id: contributionPlan.user_id, plan_id: contributionPlan.plan_id, password: el("contribution-password").value });
+          el("contribution-dialog").close(); el("contribution-password").value = ""; contributionPlan = null; el("contribution-apply").classList.add("hidden");
+          setText("contribution-plan", `删除完成：移除贡献 ${data.removed_contributions}，降低权重答案 ${data.reduced_answers}，删除答案 ${data.deleted_answers}，删除空问题 ${data.orphan_questions}，移除待固化消息 ${data.removed_pending_messages}。执行前备份：${data.backup_name}`);
+          await searchLibrary();
+        } catch (error) { el("contribution-password").value = ""; setText("contribution-message", error?.message || "删除未执行。"); }
       });
       el("delete-question").addEventListener("click", () => { if (currentQuestion) openLibraryDelete("question", currentQuestion.question_id); });
       el("library-delete-cancel").addEventListener("click", () => el("library-delete-dialog").close());

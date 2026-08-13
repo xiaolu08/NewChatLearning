@@ -121,6 +121,18 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 删除问题",
             ),
+            (
+                "library/contributions/prepare",
+                self.web_contribution_cleanup_prepare,
+                ["POST"],
+                "NewChatLearning 准备成员贡献清理",
+            ),
+            (
+                "library/contributions/apply",
+                self.web_contribution_cleanup_apply,
+                ["POST"],
+                "NewChatLearning 执行成员贡献清理",
+            ),
             ("media/preview", self.web_media_preview, ["GET"], "NewChatLearning 媒体影响预览"),
             ("media/scan", self.web_media_scan, ["POST"], "NewChatLearning 媒体扫描"),
             (
@@ -291,6 +303,8 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl weight <答案ID> <权重> - 修改答案权重\n"
                 "/ncl delete-answer <答案ID> - 删除答案\n"
                 "/ncl delete-question <问题ID> - 删除问题及全部答案\n"
+                "/ncl contributions-prepare <用户QQ> - 预览成员贡献删除\n"
+                "/ncl contributions-apply <计划ID> <用户QQ> confirm - 备份并删除贡献\n"
                 "/ncl migrate-scan <文件或目录> - 安全扫描旧 .cl 词库\n"
                 "/ncl migrate-prepare <文件> - 准备旧词库导入\n"
                 "/ncl migrate-apply <导入ID> confirm - 备份并导入当前群\n"
@@ -437,6 +451,82 @@ class NewChatLearningPlugin(star.Star):
         )
         text = f"已删除问题 Q{question_id} 及其全部答案。" if deleted else "本群不存在该问题。"
         event.set_result(MessageEventResult().message(text))
+
+    @ncl.command("contributions-prepare")
+    async def ncl_contributions_prepare(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        user_id = self._qq_id(self._command_tail(event, "contributions-prepare"))
+        if user_id is None:
+            event.set_result(
+                MessageEventResult().message("用法：/ncl contributions-prepare <用户QQ>")
+            )
+            return
+        result = await self.app.contribution_cleanup.prepare(
+            group_id=event.get_group_id(),
+            user_id=user_id,
+            actor_id=event.get_sender_id(),
+        )
+        if not result.get("prepared"):
+            event.set_result(MessageEventResult().message("本群没有该成员可追踪的学习贡献。"))
+            return
+        event.set_result(
+            MessageEventResult().message(
+                f"成员 {user_id} 的贡献删除计划已准备，词库尚未改变。\n"
+                f"贡献记录：{result['contributions']}，受影响答案：{result['affected_answers']}，"
+                f"将删除答案：{result['answers_becoming_empty']}，"
+                f"将删除空问题：{result['questions_becoming_empty']}，"
+                f"待固化消息：{result['pending_messages']}\n"
+                "计划一小时后过期。确认执行：\n"
+                f"/ncl contributions-apply {result['plan_id']} {user_id} confirm"
+            )
+        )
+
+    @ncl.command("contributions-apply")
+    async def ncl_contributions_apply(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        parts = self._command_tail(event, "contributions-apply").split()
+        user_id = self._qq_id(parts[1]) if len(parts) == 3 else None
+        if len(parts) != 3 or user_id is None or parts[2].lower() != "confirm":
+            event.set_result(
+                MessageEventResult().message(
+                    "用法：/ncl contributions-apply <计划ID> <用户QQ> confirm\n"
+                    "该操作会先备份数据库，再删除预览中的成员贡献。"
+                )
+            )
+            return
+        result = await self.app.contribution_cleanup.apply(
+            plan_id=parts[0].lower(),
+            group_id=event.get_group_id(),
+            user_id=user_id,
+            actor_id=event.get_sender_id(),
+        )
+        if not result.get("applied"):
+            reasons = {
+                "plan_not_found": "找不到贡献删除计划。",
+                "plan_not_ready": "贡献删除计划已执行或不可用。",
+                "wrong_group": "计划不属于当前群。",
+                "wrong_user": "计划不属于该成员。",
+                "wrong_actor": "计划只能由创建它的管理员确认。",
+                "plan_expired": "计划已过期，请重新准备。",
+                "plan_stale": "成员贡献或词库已变化，请重新准备。",
+                "invalid_plan": "计划格式无效。",
+            }
+            event.set_result(
+                MessageEventResult().message(reasons.get(result.get("reason"), "删除未执行。"))
+            )
+            return
+        event.set_result(
+            MessageEventResult().message(
+                f"成员 {user_id} 的可追踪学习贡献已删除。\n"
+                f"移除贡献：{result['removed_contributions']}，降低权重答案："
+                f"{result['reduced_answers']}，删除答案：{result['deleted_answers']}，"
+                f"删除空问题：{result['orphan_questions']}，"
+                f"移除待固化消息：{result['removed_pending_messages']}\n"
+                f"执行前备份：{Path(result['backup_path']).name}"
+            )
+        )
 
     @ncl.command("migrate-scan")
     async def ncl_migrate_scan(self, event: AstrMessageEvent) -> None:
@@ -1144,6 +1234,79 @@ class NewChatLearningPlugin(star.Star):
     async def web_library_delete_question(self):
         return await self._web_library_delete("question")
 
+    async def web_contribution_cleanup_prepare(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        user_id = self._qq_id(payload.get("user_id", ""))
+        if group_id is None or user_id is None:
+            return self._web_json(
+                {"status": "error", "message": "群号或用户 QQ 号无效。"},
+                status_code=400,
+            )
+        result = await self.app.contribution_cleanup.prepare(
+            group_id=group_id,
+            user_id=user_id,
+            actor_id=self._web_actor_id(),
+        )
+        if not result.get("prepared"):
+            return self._web_json(
+                {"status": "error", "message": "本群没有该成员可追踪的学习贡献。"},
+                status_code=409,
+            )
+        public_result = dict(result)
+        public_result.pop("operations", None)
+        return self._web_json({"status": "ok", "data": public_result})
+
+    async def web_contribution_cleanup_apply(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        reauthentication = await self.app.web_auth.reauthenticate(
+            session_token=self._web_session_token(),
+            csrf_token=str(payload.get("csrf_token", "")),
+            password=str(payload.get("password", "")),
+        )
+        if reauthentication != "ok":
+            return self._web_json(
+                {"status": "error", "message": "密码确认失败，删除未执行。"},
+                status_code=403,
+            )
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        user_id = self._qq_id(payload.get("user_id", ""))
+        plan_id = str(payload.get("plan_id", "")).lower()
+        if group_id is None or user_id is None:
+            return self._web_json(
+                {"status": "error", "message": "群号或用户 QQ 号无效。"},
+                status_code=400,
+            )
+        result = await self.app.contribution_cleanup.apply(
+            plan_id=plan_id,
+            group_id=group_id,
+            user_id=user_id,
+            actor_id=self._web_actor_id(),
+        )
+        if not result.get("applied"):
+            reasons = {
+                "plan_not_found": "找不到贡献删除计划。",
+                "plan_not_ready": "贡献删除计划已执行或不可用。",
+                "wrong_group": "计划不属于当前群。",
+                "wrong_user": "计划不属于该成员。",
+                "wrong_actor": "计划不属于当前 WebUI 操作者。",
+                "plan_expired": "计划已过期，请重新准备。",
+                "plan_stale": "成员贡献或词库已变化，请重新准备。",
+                "invalid_plan": "计划格式无效。",
+            }
+            return self._web_json(
+                {"status": "error", "message": reasons.get(result.get("reason"), "删除未执行。")},
+                status_code=409,
+            )
+        public_result = dict(result)
+        public_result["backup_name"] = Path(str(result["backup_path"])).name
+        public_result.pop("backup_path", None)
+        return self._web_json({"status": "ok", "data": public_result})
+
     async def _web_library_delete(self, target: str):
         payload, error = await self._authorized_web_payload()
         if error is not None:
@@ -1378,6 +1541,11 @@ class NewChatLearningPlugin(star.Star):
     def _web_group_id(value) -> str | None:
         group_id = str(value).strip()
         return group_id if group_id.isdigit() and 5 <= len(group_id) <= 20 else None
+
+    @staticmethod
+    def _qq_id(value) -> str | None:
+        user_id = str(value).strip()
+        return user_id if user_id.isdigit() and 5 <= len(user_id) <= 20 else None
 
     @staticmethod
     def _web_positive_int(value, *, maximum: int | None = None) -> int | None:

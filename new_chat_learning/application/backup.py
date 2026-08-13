@@ -105,6 +105,7 @@ def _backup_kind(name: str) -> str:
         ("before-media-cleanup-", "media_cleanup"),
         ("before-filter-cleanup-", "filter_cleanup"),
         ("before-library-delete-", "library_delete"),
+        ("before-contribution-delete-", "contribution_delete"),
         ("before-import-", "legacy_import"),
     ):
         if name.startswith(prefix):

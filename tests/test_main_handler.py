@@ -297,6 +297,69 @@ def test_migrate_scan_returns_report_without_importing(monkeypatch, tmp_path):
     assert "sample.cl：compatible，问题 2，答案 3" in event.result.text
 
 
+def test_contribution_cleanup_prepare_is_group_scoped_and_confirmable(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Cleanup:
+        async def prepare(self, **kwargs):
+            assert kwargs == {
+                "group_id": "10001",
+                "user_id": "12345",
+                "actor_id": "7",
+            }
+            return {
+                "prepared": True,
+                "plan_id": "a" * 32,
+                "contributions": 3,
+                "affected_answers": 2,
+                "answers_becoming_empty": 1,
+                "questions_becoming_empty": 1,
+                "pending_messages": 1,
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.contribution_cleanup = Cleanup()
+    plugin.config = {
+        "permissions": {
+            "group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]
+        }
+    }
+    event = Event()
+    event.message_str = "/ncl contributions-prepare 12345"
+
+    asyncio.run(plugin.ncl_contributions_prepare(event))
+
+    assert "贡献记录：3" in event.result.text
+    assert f"/ncl contributions-apply {'a' * 32} 12345 confirm" in event.result.text
+
+
+def test_contribution_cleanup_apply_requires_literal_confirmation(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Cleanup:
+        called = False
+
+        async def apply(self, **_kwargs):
+            self.called = True
+            return {"applied": True}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    cleanup = Cleanup()
+    plugin.app.contribution_cleanup = cleanup
+    plugin.config = {
+        "permissions": {
+            "group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]
+        }
+    }
+    event = Event()
+    event.message_str = f"/ncl contributions-apply {'a' * 32} 12345"
+
+    asyncio.run(plugin.ncl_contributions_apply(event))
+
+    assert cleanup.called is False
+    assert "confirm" in event.result.text
+
+
 def test_migrate_prepare_returns_confirmable_import_id(monkeypatch, tmp_path):
     main_module = load_main(monkeypatch)
 
@@ -1046,6 +1109,101 @@ def test_web_filter_cleanup_apply_reports_stale_plan(monkeypatch):
     response = asyncio.run(plugin.web_filter_cleanup_apply())
     assert response["status"] == "error"
     assert "已变化" in response["message"]
+
+
+def test_web_contribution_cleanup_prepare_hides_operations(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class Cleanup:
+        async def prepare(self, **kwargs):
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["user_id"] == "12345"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "prepared": True,
+                "plan_id": "a" * 32,
+                "group_id": "10001",
+                "user_id": "12345",
+                "contributions": 3,
+                "affected_answers": 2,
+                "affected_questions": 2,
+                "answers_becoming_empty": 1,
+                "questions_becoming_empty": 1,
+                "pending_messages": 1,
+                "operations": [{"answer_id": 10}],
+            }
+
+    async def body():
+        return b'{"group_id":"10001","user_id":"12345","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.contribution_cleanup = Cleanup()
+
+    response = asyncio.run(plugin.web_contribution_cleanup_prepare())
+    assert response["status"] == "ok"
+    assert response["data"]["contributions"] == 3
+    assert "operations" not in response["data"]
+
+
+def test_web_contribution_cleanup_apply_reauthenticates_and_hides_path(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **kwargs):
+            assert kwargs == {
+                "session_token": "session",
+                "csrf_token": "csrf",
+                "password": "long-enough-password",
+            }
+            return "ok"
+
+    class Cleanup:
+        async def apply(self, **kwargs):
+            assert kwargs["plan_id"] == "a" * 32
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["user_id"] == "12345"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "applied": True,
+                "removed_contributions": 3,
+                "deleted_answers": 1,
+                "backup_path": "C:/private/backups/before-contribution-delete.sqlite3",
+            }
+
+    async def body():
+        return (
+            b'{"group_id":"10001","user_id":"12345","plan_id":"'
+            + b"a" * 32
+            + b'","password":"long-enough-password","csrf_token":"csrf"}'
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.contribution_cleanup = Cleanup()
+
+    response = asyncio.run(plugin.web_contribution_cleanup_apply())
+    assert response["status"] == "ok"
+    assert response["data"]["backup_name"] == "before-contribution-delete.sqlite3"
+    assert "backup_path" not in response["data"]
 
 
 def test_web_backups_requires_login_and_returns_safe_metadata(monkeypatch):

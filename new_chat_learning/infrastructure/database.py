@@ -1326,6 +1326,188 @@ class SQLiteStore:
                 connection.rollback()
                 raise
 
+    async def member_contribution_preview(
+        self, *, group_id: str, user_id: str
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT c.answer_id, a.question_id, COUNT(c.id) AS contribution_count, "
+                "(SELECT COUNT(*) FROM contributions AS all_c "
+                "WHERE all_c.answer_id = c.answer_id) AS total_contribution_count, "
+                "a.weight AS current_weight FROM contributions AS c "
+                "JOIN answers AS a ON a.id = c.answer_id "
+                "JOIN questions AS q ON q.id = a.question_id "
+                "WHERE c.group_id = ? AND c.user_id = ? AND q.group_id = ? "
+                "GROUP BY c.answer_id, a.question_id, a.weight ORDER BY c.answer_id",
+                (str(group_id), str(user_id), str(group_id)),
+            ).fetchall()
+            operations = [
+                {
+                    "answer_id": int(row["answer_id"]),
+                    "question_id": int(row["question_id"]),
+                    "contribution_count": int(row["contribution_count"]),
+                    "total_contribution_count": int(row["total_contribution_count"]),
+                    "current_weight": int(row["current_weight"]),
+                }
+                for row in rows
+            ]
+            pending_messages = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM pending_messages "
+                    "WHERE group_id = ? AND sender_id = ?",
+                    (str(group_id), str(user_id)),
+                ).fetchone()[0]
+            )
+            affected_questions = {item["question_id"] for item in operations}
+            deleted_answer_ids = {
+                item["answer_id"]
+                for item in operations
+                if item["contribution_count"] >= item["current_weight"]
+                and item["contribution_count"] == item["total_contribution_count"]
+            }
+            questions_becoming_empty = 0
+            for question_id in affected_questions:
+                answer_ids = {
+                    int(row[0])
+                    for row in connection.execute(
+                        "SELECT id FROM answers WHERE question_id = ?", (question_id,)
+                    )
+                }
+                questions_becoming_empty += int(
+                    bool(answer_ids) and answer_ids.issubset(deleted_answer_ids)
+                )
+            return {
+                "group_id": str(group_id),
+                "user_id": str(user_id),
+                "contributions": sum(item["contribution_count"] for item in operations),
+                "affected_answers": len(operations),
+                "affected_questions": len(affected_questions),
+                "answers_becoming_empty": len(deleted_answer_ids),
+                "questions_becoming_empty": questions_becoming_empty,
+                "pending_messages": pending_messages,
+                "operations": operations,
+            }
+
+    async def apply_member_contribution_cleanup(
+        self,
+        *,
+        plan_id: str,
+        group_id: str,
+        user_id: str,
+        actor_id: str,
+        operations: list[dict[str, Any]],
+        pending_messages: int,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                current = self._member_contribution_operations(
+                    connection, str(group_id), str(user_id)
+                )
+                current_pending = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM pending_messages "
+                        "WHERE group_id = ? AND sender_id = ?",
+                        (str(group_id), str(user_id)),
+                    ).fetchone()[0]
+                )
+                if current != operations or current_pending != int(pending_messages):
+                    raise ValueError("contribution_plan_stale")
+                deleted_answers = 0
+                reduced_answers = 0
+                removed_contributions = 0
+                question_ids: set[int] = set()
+                for operation in operations:
+                    answer_id = int(operation["answer_id"])
+                    question_id = int(operation["question_id"])
+                    count = int(operation["contribution_count"])
+                    weight = int(operation["current_weight"])
+                    question_ids.add(question_id)
+                    removed_contributions += count
+                    total_count = int(operation["total_contribution_count"])
+                    if count >= weight and count == total_count:
+                        connection.execute(
+                            "UPDATE reply_records SET state = 'deleted', "
+                            "deleted_at = CURRENT_TIMESTAMP "
+                            "WHERE answer_id = ? AND state = 'active'",
+                            (answer_id,),
+                        )
+                        connection.execute("DELETE FROM answers WHERE id = ?", (answer_id,))
+                        deleted_answers += 1
+                    else:
+                        connection.execute(
+                            "DELETE FROM contributions WHERE answer_id = ? "
+                            "AND group_id = ? AND user_id = ?",
+                            (answer_id, str(group_id), str(user_id)),
+                        )
+                        connection.execute(
+                            "UPDATE answers SET weight = weight - ?, "
+                            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                            (min(count, max(0, weight - 1)), answer_id),
+                        )
+                        reduced_answers += 1
+                removed_pending = connection.execute(
+                    "DELETE FROM pending_messages WHERE group_id = ? AND sender_id = ?",
+                    (str(group_id), str(user_id)),
+                ).rowcount
+                orphan_questions = 0
+                for question_id in question_ids:
+                    orphan_questions += connection.execute(
+                        "DELETE FROM questions WHERE id = ? "
+                        "AND NOT EXISTS(SELECT 1 FROM answers WHERE question_id = ?)",
+                        (question_id, question_id),
+                    ).rowcount
+                details = {
+                    "plan_id": str(plan_id),
+                    "group_id": str(group_id),
+                    "user_id": str(user_id),
+                    "removed_contributions": removed_contributions,
+                    "reduced_answers": reduced_answers,
+                    "deleted_answers": deleted_answers,
+                    "orphan_questions": orphan_questions,
+                    "removed_pending_messages": int(removed_pending),
+                }
+                self._insert_audit(
+                    connection,
+                    actor_id=str(actor_id),
+                    action="delete_member_contributions",
+                    target=f"group:{group_id}:user:{user_id}",
+                    details=details,
+                )
+                connection.commit()
+                return {"applied": True, **details}
+            except Exception:
+                connection.rollback()
+                raise
+
+    @staticmethod
+    def _member_contribution_operations(
+        connection: sqlite3.Connection, group_id: str, user_id: str
+    ) -> list[dict[str, int]]:
+        rows = connection.execute(
+            "SELECT c.answer_id, a.question_id, COUNT(c.id) AS contribution_count, "
+            "(SELECT COUNT(*) FROM contributions AS all_c "
+            "WHERE all_c.answer_id = c.answer_id) AS total_contribution_count, "
+            "a.weight AS current_weight FROM contributions AS c "
+            "JOIN answers AS a ON a.id = c.answer_id "
+            "JOIN questions AS q ON q.id = a.question_id "
+            "WHERE c.group_id = ? AND c.user_id = ? AND q.group_id = ? "
+            "GROUP BY c.answer_id, a.question_id, a.weight ORDER BY c.answer_id",
+            (group_id, user_id, group_id),
+        ).fetchall()
+        return [
+            {
+                "answer_id": int(row["answer_id"]),
+                "question_id": int(row["question_id"]),
+                "contribution_count": int(row["contribution_count"]),
+                "total_contribution_count": int(row["total_contribution_count"]),
+                "current_weight": int(row["current_weight"]),
+            }
+            for row in rows
+        ]
+
     async def register_media_asset(
         self,
         *,
