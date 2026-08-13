@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from sys import maxsize
+
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.web import json_response
@@ -7,9 +10,11 @@ from astrbot.api.web import json_response
 from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.permissions import is_plugin_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
+from new_chat_learning.platform.astrbot.renderer import render_message_chain
 from new_chat_learning.platform.napcat.normalizer import (
     normalize_group_message,
     parse_recall_notice,
+    reply_matching_key,
 )
 
 
@@ -37,7 +42,10 @@ class NewChatLearningPlugin(star.Star):
             self.app = None
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=-100)
+    @filter.event_message_type(
+        filter.EventMessageType.GROUP_MESSAGE,
+        priority=maxsize - 100,
+    )
     async def capture_group_message(self, event: AstrMessageEvent) -> None:
         if self.app is None:
             return
@@ -46,11 +54,53 @@ class NewChatLearningPlugin(star.Star):
             await self.app.recall(recall)
             return
         group_id = event.get_group_id()
-        if not self.app.config.learning_enabled_for(group_id):
+        learning_enabled = self.app.config.learning_enabled_for(group_id)
+        reply_enabled = self.app.config.reply_enabled_for(group_id)
+        if not learning_enabled and not reply_enabled:
             return
         message = normalize_group_message(event)
-        if message is not None:
+        if message is None:
+            return
+        if learning_enabled:
             await self.app.observe(message)
+        if not reply_enabled:
+            return
+
+        mentioned_bot = any(
+            str(component.get("type", "")).lower() == "at"
+            and str(component.get("data", {}).get("qq", "")) == str(event.get_self_id())
+            for component in message.components
+        )
+        decision = await self.app.reply.decide(
+            group_id,
+            reply_matching_key(message, event.get_self_id()),
+            mentioned_bot=mentioned_bot,
+        )
+        if not decision.should_reply or decision.candidate is None:
+            return
+        settings = self.app.config.reply_settings()
+        chain = render_message_chain(
+            decision.candidate.components,
+            max_plain_length=int(settings["max_plain_length"]),
+        )
+        if chain is None:
+            return
+        if decision.wait_seconds > 0:
+            await asyncio.sleep(decision.wait_seconds)
+        await event.send(chain)
+        self.app.reply.mark_sent(group_id)
+        try:
+            await self.context.message_history_manager.insert_message_chain(
+                platform_id=event.get_platform_id(),
+                user_id=event.unified_msg_origin,
+                message_chain=chain,
+                role="bot",
+                sender_id=event.get_self_id() or "bot",
+                sender_name="NewChatLearning",
+            )
+        except Exception:
+            self.logger.exception("Failed to persist NewChatLearning local reply.")
+        event.stop_event()
 
     @filter.command_group("ncl")
     def ncl(self) -> None:
@@ -87,7 +137,7 @@ class NewChatLearningPlugin(star.Star):
                 f"答案：{status['statistics']['answers']}\n"
                 f"待固化消息：{status['statistics']['pending_messages']}\n"
                 f"群聊学习：{'已启用' if status['automatic_learning'] else '未启用'}\n"
-                "自动回复：尚未启用"
+                f"精确匹配回复：{'已启用' if status['automatic_reply'] else '未启用'}"
             )
         event.set_result(MessageEventResult().message(text))
 

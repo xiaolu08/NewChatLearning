@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from new_chat_learning.platform.napcat.normalizer import (
     normalize_group_message,
     parse_recall_notice,
+    reply_matching_key,
 )
 
 
@@ -107,3 +108,35 @@ def test_parses_group_recall_notice():
     assert result is not None
     assert result.group_id == "10001"
     assert result.message_id == "88"
+
+
+def test_reply_key_ignores_bot_mention_and_quote():
+    event = Event(
+        {"post_type": "message"},
+        [
+            Plain(" 你好 "),
+            type(
+                "At",
+                (),
+                {
+                    "type": "At",
+                    "dict": lambda self: {"type": "At", "qq": "9", "name": "bot"},
+                },
+            )(),
+            type(
+                "Reply",
+                (),
+                {
+                    "type": "Reply",
+                    "dict": lambda self: {"type": "Reply", "id": "1"},
+                },
+            )(),
+        ],
+    )
+    plain_event = Event({"post_type": "message"}, [Plain("你好")])
+
+    message = normalize_group_message(event)
+    plain = normalize_group_message(plain_event)
+
+    assert message is not None and plain is not None
+    assert reply_matching_key(message, "9") == plain.normalized_key

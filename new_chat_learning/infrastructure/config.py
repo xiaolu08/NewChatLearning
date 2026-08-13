@@ -12,6 +12,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "group_ids": [],
         "interval_seconds": 900,
     },
+    "reply": {
+        "enabled": False,
+        "group_ids": [],
+        "silent_group_ids": [],
+        "probability_percent": 50.0,
+        "cooldown_seconds": 3.0,
+        "wait_seconds": 0.0,
+        "wait_jitter_seconds": 0.0,
+        "max_plain_length": 100,
+        "at_force_reply": True,
+    },
     "permissions": {"plugin_admin_ids": []},
     "storage": {"media_quota_gb": 10.0},
     "webui": {"enabled": True},
@@ -58,3 +69,45 @@ class ConfigService:
             return max(1, int(raw))
         except (TypeError, ValueError):
             return 900
+
+    def reply_enabled_for(self, group_id: str) -> bool:
+        snapshot = self.snapshot()
+        if not bool(snapshot["general"].get("enabled", True)):
+            return False
+        reply = snapshot["reply"]
+        group_id = str(group_id)
+        silent_groups = {str(item).strip() for item in reply.get("silent_group_ids", [])}
+        if group_id in silent_groups or not bool(reply.get("enabled", False)):
+            return False
+        return group_id in {str(item).strip() for item in reply.get("group_ids", [])}
+
+    def reply_settings(self) -> dict[str, Any]:
+        reply = self.snapshot()["reply"]
+        return {
+            "probability_percent": self._bounded_float(
+                reply.get("probability_percent"), 50.0, 0.0, 100.0
+            ),
+            "cooldown_seconds": self._bounded_float(
+                reply.get("cooldown_seconds"), 3.0, 0.0, 86400.0
+            ),
+            "wait_seconds": self._bounded_float(reply.get("wait_seconds"), 0.0, 0.0, 3600.0),
+            "wait_jitter_seconds": self._bounded_float(
+                reply.get("wait_jitter_seconds"), 0.0, 0.0, 3600.0
+            ),
+            "max_plain_length": self._bounded_int(reply.get("max_plain_length"), 100, 1, 100000),
+            "at_force_reply": bool(reply.get("at_force_reply", True)),
+        }
+
+    @staticmethod
+    def _bounded_float(value: Any, default: float, minimum: float, maximum: float) -> float:
+        try:
+            return min(maximum, max(minimum, float(value)))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+        try:
+            return min(maximum, max(minimum, int(value)))
+        except (TypeError, ValueError):
+            return default

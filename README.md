@@ -64,11 +64,14 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - NapCat/OneBot 群消息规范化与版本化组件 JSON
 - 可配置群白名单的相邻消息学习、重复答案增权和超时断链
 - 尚未固化消息的持久化暂存与群消息撤回清理
+- SQLite 分群精确匹配与原版语义的答案权重随机
+- 回复群白名单、静默学习群、概率、等待、冷却和文本长度限制
+- 本地回复成功后停止当次 LLM，并写入 AstrBot 群消息历史
 
 尚未完成：
 
-- SQLite 词库查询、匹配和回复算法实现
-- NapCat 消息适配
+- 正则匹配、jieba 余弦相似度和候选类型阈值
+- NapCat 长尾消息组件、媒体持久化与回复降级
 - 完整管理 WebUI 与独立登录安全机制
 - TTS 驱动与旧词库迁移工具
 - Windows + AstrBot + NapCat 实机验收

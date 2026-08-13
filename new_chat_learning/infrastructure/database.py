@@ -7,6 +7,7 @@ from typing import Any
 
 from new_chat_learning.constants import SCHEMA_VERSION
 from new_chat_learning.domain.message import NormalizedMessage
+from new_chat_learning.domain.reply import ReplyCandidate
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -246,6 +247,26 @@ class SQLiteStore:
             )
             connection.commit()
             return cursor.rowcount > 0
+
+    async def find_exact_answers(self, group_id: str, normalized_key: str) -> list[ReplyCandidate]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT a.id AS answer_id, a.question_id, a.weight, a.components_json "
+                "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
+                "WHERE q.group_id = ? AND q.normalized_key = ? AND a.weight > 0 "
+                "ORDER BY a.id",
+                (str(group_id), normalized_key),
+            ).fetchall()
+            return [
+                ReplyCandidate(
+                    answer_id=int(row["answer_id"]),
+                    question_id=int(row["question_id"]),
+                    weight=int(row["weight"]),
+                    components_json=str(row["components_json"]),
+                )
+                for row in rows
+            ]
 
     @staticmethod
     def _upsert_question(

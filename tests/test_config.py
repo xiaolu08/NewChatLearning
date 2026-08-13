@@ -26,3 +26,23 @@ def test_learning_requires_global_switch_and_explicit_group():
         }
     )
     assert disabled.learning_enabled_for("10001") is False
+
+
+def test_reply_requires_explicit_group_and_silent_group_wins():
+    service = ConfigService(
+        {
+            "reply": {
+                "enabled": True,
+                "group_ids": ["10001", "10002"],
+                "silent_group_ids": ["10002"],
+                "probability_percent": 120,
+                "cooldown_seconds": -1,
+            }
+        }
+    )
+
+    assert service.reply_enabled_for("10001") is True
+    assert service.reply_enabled_for("10002") is False
+    assert service.reply_enabled_for("10003") is False
+    assert service.reply_settings()["probability_percent"] == 100.0
+    assert service.reply_settings()["cooldown_seconds"] == 0.0

@@ -12,6 +12,11 @@ def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def normalized_components_key(components: list[dict[str, Any]]) -> str:
+    payload = canonical_json({"schema_version": MESSAGE_SCHEMA_VERSION, "components": components})
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class NormalizedMessage:
     platform: str
@@ -33,13 +38,7 @@ class NormalizedMessage:
 
     @property
     def normalized_key(self) -> str:
-        payload = canonical_json(
-            {
-                "schema_version": MESSAGE_SCHEMA_VERSION,
-                "components": list(self.matching_components),
-            }
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return normalized_components_key(list(self.matching_components))
 
     @property
     def is_empty(self) -> bool:

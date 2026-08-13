@@ -4,7 +4,11 @@ from collections.abc import Mapping
 from enum import Enum
 from typing import Any
 
-from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
+from new_chat_learning.domain.message import (
+    NormalizedMessage,
+    RecallNotice,
+    normalized_components_key,
+)
 
 TRANSIENT_FIELDS = {"url", "path", "message_id", "time", "seq"}
 COMMAND_PREFIXES = ("/", "ncl ")
@@ -121,3 +125,24 @@ def normalize_group_message(event: Any) -> NormalizedMessage | None:
         matching_components=matching,
     )
     return None if message.is_empty else message
+
+
+def reply_matching_key(message: NormalizedMessage, self_id: str) -> str:
+    components: list[dict[str, Any]] = []
+    for component in message.matching_components:
+        component_type = str(component.get("type", "")).lower()
+        data = dict(component.get("data", {}))
+        if component_type in {"reply", "quote"}:
+            continue
+        if component_type in {"at", "atall"} and str(data.get("qq", "")) in {
+            str(self_id),
+            "all",
+        }:
+            continue
+        if component_type == "plain" and isinstance(data.get("text"), str):
+            text = data["text"].strip()
+            if not text:
+                continue
+            data["text"] = text
+        components.append({"type": component.get("type", ""), "data": data})
+    return normalized_components_key(components)

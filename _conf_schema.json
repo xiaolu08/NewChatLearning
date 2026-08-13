@@ -2,7 +2,7 @@
   "general": {
     "description": "基础设置",
     "type": "object",
-    "hint": "当前 Beta 已具备受控群聊采集与相邻问答固化能力；自动回复尚未开放。",
+    "hint": "当前 Beta 已具备受控群聊采集、相邻问答固化与精确匹配回复能力。",
     "obvious_hint": true,
     "items": {
       "enabled": {
@@ -53,6 +53,63 @@
         "type": "int",
         "hint": "相邻两条合格消息超过此间隔时切断问答关系，默认保持原版 900 秒。",
         "default": 900
+      }
+    }
+  },
+  "reply": {
+    "description": "回复设置",
+    "type": "object",
+    "hint": "本地词库回复默认关闭。当前 Beta 仅启用精确匹配；正则和相似度匹配将在后续版本接入。",
+    "obvious_hint": true,
+    "items": {
+      "enabled": {
+        "description": "启用本地词库回复",
+        "type": "bool",
+        "default": false
+      },
+      "group_ids": {
+        "description": "回复群号",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "只有明确列出的群可以自动回复。",
+        "default": []
+      },
+      "silent_group_ids": {
+        "description": "静默学习群号",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "这些群可以继续学习，但永远不会自动触发词库回复。",
+        "default": []
+      },
+      "probability_percent": {
+        "description": "回复概率（%）",
+        "type": "float",
+        "default": 50.0
+      },
+      "cooldown_seconds": {
+        "description": "单群回复冷却（秒）",
+        "type": "float",
+        "default": 3.0
+      },
+      "wait_seconds": {
+        "description": "回复等待基准（秒）",
+        "type": "float",
+        "default": 0.0
+      },
+      "wait_jitter_seconds": {
+        "description": "回复等待浮动（秒）",
+        "type": "float",
+        "default": 0.0
+      },
+      "max_plain_length": {
+        "description": "单条文本最大长度",
+        "type": "int",
+        "default": 100
+      },
+      "at_force_reply": {
+        "description": "被 @ 时跳过概率判定",
+        "type": "bool",
+        "default": true
       }
     }
   },
