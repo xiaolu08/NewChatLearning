@@ -4,10 +4,15 @@ import asyncio
 import hashlib
 import secrets
 import sqlite3
+import sys
 import time
 import urllib.error
 from pathlib import Path
 from sys import maxsize
+
+PLUGIN_ROOT = Path(__file__).resolve().parent
+if str(PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_ROOT))
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter

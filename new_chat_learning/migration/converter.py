@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from new_chat_learning.domain.message import canonical_json, normalized_components_key
-from new_chat_learning.migration.scanner import RestrictedUnpickler, _scan_bytes
+from new_chat_learning.migration.scanner import (
+    RestrictedUnpickler,
+    _scan_bytes,
+    _worker_environment,
+)
 
 TRANSIENT_FIELDS = {"url", "path", "base64", "message_id", "time", "seq"}
 
@@ -40,6 +44,7 @@ def prepare_import(
                 import_id,
             ],
             capture_output=True,
+            env=_worker_environment(),
             text=True,
             timeout=max(1.0, float(timeout_seconds)),
             check=False,

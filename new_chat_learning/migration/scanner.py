@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import pickle
 import pickletools
 import subprocess
@@ -38,6 +39,7 @@ def scan_file(path: Path, *, timeout_seconds: float = 30.0) -> dict[str, Any]:
         completed = subprocess.run(
             [sys.executable, "-m", "new_chat_learning.migration.scanner", str(target)],
             capture_output=True,
+            env=_worker_environment(),
             text=True,
             timeout=max(1.0, float(timeout_seconds)),
             check=False,
@@ -177,6 +179,16 @@ def _error_report(path: Path, reason: str) -> dict[str, Any]:
         "size_bytes": path.stat().st_size if path.is_file() else 0,
         "reason": reason,
     }
+
+
+def _worker_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    plugin_root = str(Path(__file__).resolve().parents[2])
+    current = environment.get("PYTHONPATH", "")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (plugin_root, current) if part
+    )
+    return environment
 
 
 if __name__ == "__main__":

@@ -41,3 +41,25 @@ def test_scanner_reports_unknown_structure(tmp_path):
 
     assert report["status"] == "unsupported"
     assert report["reason"] == "no_question_entries"
+
+
+def test_scanner_worker_imports_from_outside_plugin_directory(tmp_path, monkeypatch):
+    path = tmp_path / "safe.cl"
+    path.write_bytes(
+        pickle.dumps(
+            {
+                "question": {
+                    "answer": [{"answertext": "[{'type': 'Plain', 'text': 'answer'}]"}]
+                }
+            },
+            protocol=4,
+        )
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+
+    report = scan_file(path)
+
+    assert report["status"] == "compatible"
+    assert report["structure"]["question_count"] == 1

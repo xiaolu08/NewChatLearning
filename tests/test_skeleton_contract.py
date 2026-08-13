@@ -13,8 +13,16 @@ def test_metadata_and_runtime_versions_match():
 
     assert metadata["name"] == PLUGIN_NAME
     assert metadata["version"] == PLUGIN_VERSION
-    assert metadata["astrbot_version"] == ">=4.27.3"
+    assert metadata["astrbot_version"] == ">=4.27.2"
     assert "aiocqhttp" in metadata["support_platforms"]
+
+
+def test_astrbot_plugin_root_is_importable_before_application_imports():
+    main_source = (ROOT / "main.py").read_text(encoding="utf-8")
+
+    root_setup = main_source.index("PLUGIN_ROOT = Path(__file__).resolve().parent")
+    application_import = main_source.index("from new_chat_learning.application.library")
+    assert root_setup < application_import
 
 
 def test_config_schema_and_dashboard_entry_are_valid():

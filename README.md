@@ -6,6 +6,8 @@
 
 NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面向 AstrBot 生态的移植与现代化项目。首个版本以 Windows、AstrBot、NapCat（OneBot v11）和 QQ 群聊为目标运行环境。
 
+当前安装包兼容 AstrBot 4.27.2 及以上版本。
+
 项目保留 ChatLearning 的无 Token 学习模式：根据群聊中的相邻消息建立问答关系，并通过本地算法完成匹配与回复选择，不依赖 LLM 生成内容。
 
 ## 设计原则
