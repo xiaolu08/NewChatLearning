@@ -316,6 +316,268 @@ class SQLiteStore:
             ).fetchone()
             return dict(row) if row is not None else None
 
+    async def search_questions(
+        self,
+        group_id: str,
+        query: str,
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        async with self._lock:
+            connection = self._require_connection()
+            escaped = str(query).replace("\\", "\\\\").replace("%", "\\%").replace(
+                "_", "\\_"
+            )
+            rows = connection.execute(
+                "SELECT q.id AS question_id, q.plain_text, q.is_regex, q.frequency, "
+                "COUNT(a.id) AS answer_count, COALESCE(SUM(a.weight), 0) AS total_weight "
+                "FROM questions AS q LEFT JOIN answers AS a ON a.question_id = q.id "
+                "WHERE q.group_id = ? AND q.plain_text LIKE ? ESCAPE '\\' "
+                "GROUP BY q.id ORDER BY q.updated_at DESC, q.id DESC LIMIT ?",
+                (str(group_id), f"%{escaped}%", max(1, min(50, int(limit)))),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    async def question_detail(self, group_id: str, question_id: int) -> dict[str, Any] | None:
+        async with self._lock:
+            connection = self._require_connection()
+            question = connection.execute(
+                "SELECT id AS question_id, plain_text, components_json, is_regex, frequency "
+                "FROM questions WHERE id = ? AND group_id = ?",
+                (int(question_id), str(group_id)),
+            ).fetchone()
+            if question is None:
+                return None
+            answers = connection.execute(
+                "SELECT id AS answer_id, components_json, weight, created_at, updated_at "
+                "FROM answers WHERE question_id = ? ORDER BY weight DESC, id",
+                (int(question_id),),
+            ).fetchall()
+            result = dict(question)
+            result["answers"] = [dict(row) for row in answers]
+            return result
+
+    async def add_custom_pair(
+        self,
+        *,
+        group_id: str,
+        actor_id: str,
+        question_key: str,
+        question_components_json: str,
+        question_text: str,
+        answer_key: str,
+        answer_components_json: str,
+        is_regex: bool,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "INSERT INTO groups(group_id) VALUES(?) ON CONFLICT(group_id) DO NOTHING",
+                    (str(group_id),),
+                )
+                connection.execute(
+                    "INSERT INTO questions(group_id, normalized_key, components_json, "
+                    "plain_text, is_regex) VALUES(?, ?, ?, ?, ?) "
+                    "ON CONFLICT(group_id, normalized_key) DO UPDATE SET "
+                    "components_json=excluded.components_json, plain_text=excluded.plain_text, "
+                    "is_regex=excluded.is_regex, updated_at=CURRENT_TIMESTAMP",
+                    (
+                        str(group_id),
+                        question_key,
+                        question_components_json,
+                        question_text,
+                        int(is_regex),
+                    ),
+                )
+                question_id = int(
+                    connection.execute(
+                        "SELECT id FROM questions WHERE group_id = ? AND normalized_key = ?",
+                        (str(group_id), question_key),
+                    ).fetchone()[0]
+                )
+                existing = connection.execute(
+                    "SELECT id, weight FROM answers WHERE question_id = ? AND normalized_key = ?",
+                    (question_id, answer_key),
+                ).fetchone()
+                if existing is None:
+                    cursor = connection.execute(
+                        "INSERT INTO answers(question_id, components_json, normalized_key) "
+                        "VALUES(?, ?, ?)",
+                        (question_id, answer_components_json, answer_key),
+                    )
+                    answer_id = int(cursor.lastrowid)
+                    weight = 1
+                    created = True
+                else:
+                    answer_id = int(existing["id"])
+                    weight = int(existing["weight"]) + 1
+                    connection.execute(
+                        "UPDATE answers SET weight = ?, components_json = ?, "
+                        "updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                        (weight, answer_components_json, answer_id),
+                    )
+                    created = False
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="add_custom_pair",
+                    target=f"answer:{answer_id}",
+                    details={
+                        "group_id": str(group_id),
+                        "question_id": question_id,
+                        "is_regex": bool(is_regex),
+                        "created": created,
+                        "weight": weight,
+                    },
+                )
+                connection.commit()
+                return {
+                    "question_id": question_id,
+                    "answer_id": answer_id,
+                    "weight": weight,
+                    "created": created,
+                }
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def set_answer_weight(
+        self,
+        *,
+        group_id: str,
+        actor_id: str,
+        answer_id: int,
+        weight: int,
+    ) -> bool:
+        if int(weight) < 1:
+            return False
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT a.weight FROM answers AS a JOIN questions AS q "
+                    "ON q.id = a.question_id WHERE a.id = ? AND q.group_id = ?",
+                    (int(answer_id), str(group_id)),
+                ).fetchone()
+                if row is None:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    "UPDATE answers SET weight = ?, updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                    (int(weight), int(answer_id)),
+                )
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="set_answer_weight",
+                    target=f"answer:{int(answer_id)}",
+                    details={
+                        "group_id": str(group_id),
+                        "old_weight": int(row["weight"]),
+                        "new_weight": int(weight),
+                    },
+                )
+                connection.commit()
+                return True
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def delete_answer(
+        self,
+        *,
+        group_id: str,
+        actor_id: str,
+        answer_id: int,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT a.question_id FROM answers AS a JOIN questions AS q "
+                    "ON q.id = a.question_id WHERE a.id = ? AND q.group_id = ?",
+                    (int(answer_id), str(group_id)),
+                ).fetchone()
+                if row is None:
+                    connection.rollback()
+                    return {"deleted": False, "orphan_question_removed": False}
+                question_id = int(row["question_id"])
+                connection.execute(
+                    "UPDATE reply_records SET state = 'deleted', deleted_at=CURRENT_TIMESTAMP "
+                    "WHERE answer_id = ? AND state = 'active'",
+                    (int(answer_id),),
+                )
+                connection.execute("DELETE FROM answers WHERE id = ?", (int(answer_id),))
+                orphan_removed = bool(
+                    connection.execute(
+                        "DELETE FROM questions WHERE id = ? "
+                        "AND NOT EXISTS(SELECT 1 FROM answers WHERE question_id = ?)",
+                        (question_id, question_id),
+                    ).rowcount
+                )
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="delete_answer",
+                    target=f"answer:{int(answer_id)}",
+                    details={
+                        "group_id": str(group_id),
+                        "question_id": question_id,
+                        "orphan_question_removed": orphan_removed,
+                    },
+                )
+                connection.commit()
+                return {"deleted": True, "orphan_question_removed": orphan_removed}
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def delete_question(
+        self,
+        *,
+        group_id: str,
+        actor_id: str,
+        question_id: int,
+    ) -> bool:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT COUNT(a.id) AS answer_count FROM questions AS q "
+                    "LEFT JOIN answers AS a ON a.question_id = q.id "
+                    "WHERE q.id = ? AND q.group_id = ? GROUP BY q.id",
+                    (int(question_id), str(group_id)),
+                ).fetchone()
+                if row is None:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    "UPDATE reply_records SET state = 'deleted', deleted_at=CURRENT_TIMESTAMP "
+                    "WHERE question_id = ? AND state = 'active'",
+                    (int(question_id),),
+                )
+                connection.execute("DELETE FROM questions WHERE id = ?", (int(question_id),))
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="delete_question",
+                    target=f"question:{int(question_id)}",
+                    details={
+                        "group_id": str(group_id),
+                        "answer_count": int(row["answer_count"]),
+                    },
+                )
+                connection.commit()
+                return True
+            except Exception:
+                connection.rollback()
+                raise
+
     async def register_media_asset(
         self,
         *,
@@ -638,6 +900,27 @@ class SQLiteStore:
         if self._connection is None:
             raise RuntimeError("SQLite store is not open")
         return self._connection
+
+    @staticmethod
+    def _insert_audit(
+        connection: sqlite3.Connection,
+        *,
+        actor_id: str,
+        action: str,
+        target: str,
+        details: dict[str, Any],
+    ) -> None:
+        import json
+
+        connection.execute(
+            "INSERT INTO audit_log(actor_id, action, target, details_json) VALUES(?, ?, ?, ?)",
+            (
+                str(actor_id),
+                action,
+                target,
+                json.dumps(details, ensure_ascii=False, separators=(",", ":")),
+            ),
+        )
 
 
 def _plain_text_from_components(components_json: str) -> str:

@@ -7,9 +7,10 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.web import json_response
 
+from new_chat_learning.application.library import component_preview, parse_add_pair
 from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.fast_delete import FastDeleteRequest, parse_fast_delete
-from new_chat_learning.commands.permissions import is_group_admin, is_plugin_admin
+from new_chat_learning.commands.permissions import is_group_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
 from new_chat_learning.platform.astrbot.renderer import render_message_chain
 from new_chat_learning.platform.napcat.actions import (
@@ -164,21 +165,26 @@ class NewChatLearningPlugin(star.Star):
 
     @ncl.command("help")
     async def ncl_help(self, event: AstrMessageEvent) -> None:
-        if not is_plugin_admin(event, self.config):
+        if not is_group_admin(event, self.config):
             event.stop_event()
             return
         event.set_result(
             MessageEventResult().message(
                 "NewChatLearning Beta\n"
-                "/ncl status - 查看插件骨架状态\n"
-                "/ncl help - 查看当前可用命令\n"
-                "学习、回复、迁移、TTS 与完整管理命令仍在开发中。"
+                "/ncl status - 查看运行状态\n"
+                "/ncl search <关键词> - 搜索本群问题\n"
+                "/ncl show <问题ID> - 查看问题与答案\n"
+                "/ncl add <问题> => <答案> - 添加文本问答\n"
+                "/ncl add-regex <表达式> => <答案> - 添加正则问答\n"
+                "/ncl weight <答案ID> <权重> - 修改答案权重\n"
+                "/ncl delete-answer <答案ID> - 删除答案\n"
+                "/ncl delete-question <问题ID> - 删除问题及全部答案"
             )
         )
 
     @ncl.command("status")
     async def ncl_status(self, event: AstrMessageEvent) -> None:
-        if not is_plugin_admin(event, self.config):
+        if not is_group_admin(event, self.config):
             event.stop_event()
             return
         if self.app is None:
@@ -197,6 +203,175 @@ class NewChatLearningPlugin(star.Star):
                 f"词库范围：{'全局/标签' if status['library']['mode'] == 'global' else '仅本群'}"
             )
         event.set_result(MessageEventResult().message(text))
+
+    @ncl.command("search")
+    async def ncl_search(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        query = self._command_tail(event, "search")
+        if not query:
+            event.set_result(MessageEventResult().message("用法：/ncl search <关键词>"))
+            return
+        rows = await self.app.library.search(event.get_group_id(), query)
+        if not rows:
+            event.set_result(MessageEventResult().message("本群词库未找到匹配问题。"))
+            return
+        lines = [f"本群词库搜索：{query}"]
+        for row in rows:
+            kind = "正则" if row["is_regex"] else "文本"
+            question_preview = str(row["plain_text"])
+            if len(question_preview) > 80:
+                question_preview = f"{question_preview[:79]}…"
+            lines.append(
+                f"Q{row['question_id']} [{kind}] {question_preview} "
+                f"| 答案 {row['answer_count']} | 权重 {row['total_weight']}"
+            )
+        event.set_result(MessageEventResult().message("\n".join(lines)))
+
+    @ncl.command("show")
+    async def ncl_show(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        question_id = self._positive_int(self._command_tail(event, "show"))
+        if question_id is None:
+            event.set_result(MessageEventResult().message("用法：/ncl show <问题ID>"))
+            return
+        detail = await self.app.library.show(event.get_group_id(), question_id)
+        if detail is None:
+            event.set_result(MessageEventResult().message("本群词库中不存在该问题。"))
+            return
+        kind = "正则" if detail["is_regex"] else "文本"
+        lines = [
+            f"问题 Q{detail['question_id']} [{kind}]",
+            component_preview(detail["components_json"], 160),
+            f"记录频次：{detail['frequency']} | 答案数：{len(detail['answers'])}",
+        ]
+        for answer in detail["answers"][:20]:
+            lines.append(
+                f"A{answer['answer_id']} 权重 {answer['weight']}："
+                f"{component_preview(answer['components_json'])}"
+            )
+        if len(detail["answers"]) > 20:
+            lines.append(f"其余 {len(detail['answers']) - 20} 个答案请在 WebUI 查看。")
+        event.set_result(MessageEventResult().message("\n".join(lines)))
+
+    @ncl.command("add")
+    async def ncl_add(self, event: AstrMessageEvent) -> None:
+        await self._add_library_pair(event, command="add", is_regex=False)
+
+    @ncl.command("add-regex")
+    async def ncl_add_regex(self, event: AstrMessageEvent) -> None:
+        await self._add_library_pair(event, command="add-regex", is_regex=True)
+
+    @ncl.command("weight")
+    async def ncl_weight(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        parts = self._command_tail(event, "weight").split()
+        answer_id = self._positive_int(parts[0]) if len(parts) == 2 else None
+        weight = self._positive_int(parts[1]) if len(parts) == 2 else None
+        if answer_id is None or weight is None:
+            event.set_result(MessageEventResult().message("用法：/ncl weight <答案ID> <正整数权重>"))
+            return
+        changed = await self.app.library.set_weight(
+            group_id=event.get_group_id(),
+            actor_id=event.get_sender_id(),
+            answer_id=answer_id,
+            weight=weight,
+        )
+        text = f"答案 A{answer_id} 的权重已设为 {weight}。" if changed else "本群不存在该答案。"
+        event.set_result(MessageEventResult().message(text))
+
+    @ncl.command("delete-answer")
+    async def ncl_delete_answer(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        answer_id = self._positive_int(self._command_tail(event, "delete-answer"))
+        if answer_id is None:
+            event.set_result(MessageEventResult().message("用法：/ncl delete-answer <答案ID>"))
+            return
+        result = await self.app.library.delete_answer(
+            group_id=event.get_group_id(),
+            actor_id=event.get_sender_id(),
+            answer_id=answer_id,
+        )
+        if not result["deleted"]:
+            text = "本群不存在该答案。"
+        elif result["orphan_question_removed"]:
+            text = f"已删除答案 A{answer_id}；问题因无剩余答案一并删除。"
+        else:
+            text = f"已删除答案 A{answer_id}。"
+        event.set_result(MessageEventResult().message(text))
+
+    @ncl.command("delete-question")
+    async def ncl_delete_question(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        question_id = self._positive_int(self._command_tail(event, "delete-question"))
+        if question_id is None:
+            event.set_result(MessageEventResult().message("用法：/ncl delete-question <问题ID>"))
+            return
+        deleted = await self.app.library.delete_question(
+            group_id=event.get_group_id(),
+            actor_id=event.get_sender_id(),
+            question_id=question_id,
+        )
+        text = f"已删除问题 Q{question_id} 及其全部答案。" if deleted else "本群不存在该问题。"
+        event.set_result(MessageEventResult().message(text))
+
+    async def _add_library_pair(
+        self,
+        event: AstrMessageEvent,
+        *,
+        command: str,
+        is_regex: bool,
+    ) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        pair = parse_add_pair(self._command_tail(event, command))
+        if pair is None:
+            event.set_result(
+                MessageEventResult().message(f"用法：/ncl {command} <问题> => <答案>")
+            )
+            return
+        try:
+            result = await self.app.library.add_text_pair(
+                group_id=event.get_group_id(),
+                actor_id=event.get_sender_id(),
+                question=pair.question,
+                answer=pair.answer,
+                is_regex=is_regex,
+            )
+        except ValueError:
+            event.set_result(MessageEventResult().message("问题或答案无效、过长，未写入词库。"))
+            return
+        action = "已添加" if result["created"] else "已增加重复答案权重"
+        event.set_result(
+            MessageEventResult().message(
+                f"{action}：Q{result['question_id']} / A{result['answer_id']}，"
+                f"当前权重 {result['weight']}。"
+            )
+        )
+
+    def _allow_group_library_command(self, event: AstrMessageEvent) -> bool:
+        if self.app is not None and event.get_group_id() and is_group_admin(event, self.config):
+            return True
+        event.stop_event()
+        return False
+
+    @staticmethod
+    def _command_tail(event: AstrMessageEvent, command: str) -> str:
+        text = event.get_message_str().strip().lstrip("/")
+        prefix = f"ncl {command}"
+        return text[len(prefix) :].strip() if text.lower().startswith(prefix.lower()) else ""
+
+    @staticmethod
+    def _positive_int(value: str) -> int | None:
+        try:
+            parsed = int(value.strip())
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
 
     async def web_status(self):
         if self.app is None:

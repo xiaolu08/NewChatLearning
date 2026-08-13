@@ -27,13 +27,21 @@ def load_main(monkeypatch):
         event_message_type = staticmethod(lambda _kind, **_kwargs: lambda function: function)
         command_group = staticmethod(lambda _name: CommandGroup())
 
+    class MessageEventResult:
+        def __init__(self):
+            self.text = None
+
+        def message(self, text):
+            self.text = text
+            return self
+
     star_module = types.ModuleType("astrbot.api.star")
     star_module.Star = Star
     star_module.Context = object
     star_module.StarTools = SimpleNamespace(get_data_dir=lambda _name: None)
     event_module = types.ModuleType("astrbot.api.event")
     event_module.AstrMessageEvent = object
-    event_module.MessageEventResult = object
+    event_module.MessageEventResult = MessageEventResult
     event_module.MessageChain = object
     event_module.filter = Filter
     web_module = types.ModuleType("astrbot.api.web")
@@ -102,6 +110,7 @@ class Event:
         self.sender_id = "7"
         self.message_obj = SimpleNamespace(message_id="600")
         self.result = None
+        self.message_str = ""
 
     def get_group_id(self):
         return "10001"
@@ -117,6 +126,9 @@ class Event:
 
     def get_platform_name(self):
         return "aiocqhttp"
+
+    def get_message_str(self):
+        return self.message_str
 
     async def send(self, chain):
         self.sent.append(chain)
@@ -212,3 +224,45 @@ def test_unauthorized_fast_delete_is_silent_and_stops_event(monkeypatch):
     assert event.stopped is True
     assert event.sent == []
     assert event.result is None
+
+
+def test_unauthorized_library_command_is_silent(monkeypatch):
+    main_module = load_main(monkeypatch)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.config = {}
+    event = Event()
+    event.message_str = "/ncl search hello"
+
+    asyncio.run(plugin.ncl_search(event))
+
+    assert event.stopped is True
+    assert event.result is None
+
+
+def test_authorized_search_formats_stable_question_ids(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Library:
+        async def search(self, group_id, query):
+            assert group_id == "10001"
+            assert query == "hello"
+            return [
+                {
+                    "question_id": 12,
+                    "plain_text": "hello world",
+                    "is_regex": 0,
+                    "answer_count": 2,
+                    "total_weight": 5,
+                }
+            ]
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.library = Library()
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = "/ncl search hello"
+
+    asyncio.run(plugin.ncl_search(event))
+
+    assert event.stopped is False
+    assert "Q12 [文本] hello world" in event.result.text
