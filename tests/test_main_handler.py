@@ -403,3 +403,26 @@ def test_media_scan_reports_read_only_impact(monkeypatch):
     assert "只标记，不删除" in event.result.text
     assert "失效组件：3" in event.result.text
     assert "清理后可能为空：1" in event.result.text
+
+
+def test_media_cleanup_apply_requires_literal_confirmation(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Media:
+        called = False
+
+        async def apply_cleanup(self, **_kwargs):
+            self.called = True
+            return {"applied": True}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    media = Media()
+    plugin.app.media = media
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = f"/ncl media-cleanup-apply {'a' * 32}"
+
+    asyncio.run(plugin.ncl_media_cleanup_apply(event))
+
+    assert media.called is False
+    assert "confirm" in event.result.text

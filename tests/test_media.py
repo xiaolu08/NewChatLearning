@@ -2,11 +2,12 @@ import asyncio
 import base64
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
 from new_chat_learning.application.media import MediaService, _validate_public_url
-from new_chat_learning.domain.message import NormalizedMessage
+from new_chat_learning.domain.message import NormalizedMessage, normalized_components_key
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
@@ -352,3 +353,273 @@ def test_health_scan_preserves_mixed_answer_and_accepts_safe_legacy_url(monkeypa
 
     assert tuple(row) == ("healthy", "remote_url_safe_not_downloaded", 1)
     assert result["preview"]["media_components"] == 0
+
+
+def _insert_cleanup_answer(connection, answer_id, components, normalized_key=None, weight=1):
+    payload = json.dumps({"schema_version": 1, "components": components})
+    connection.execute(
+        "INSERT INTO answers(id, question_id, components_json, normalized_key, weight) "
+        "VALUES(?, 1, ?, ?, ?)",
+        (answer_id, payload, normalized_key or f"answer:{answer_id}", weight),
+    )
+
+
+def test_media_cleanup_prunes_invalid_component_after_backup(tmp_path):
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        _insert_cleanup_answer(
+            connection,
+            10,
+            [
+                {"type": "Plain", "data": {"text": "keep me"}},
+                {"type": "Image", "data": {"media_path": "media/missing.png"}},
+            ],
+            weight=3,
+        )
+        connection.commit()
+        prepared = await service.prepare_cleanup(
+            group_id="10001", actor_id="7", mode="prune"
+        )
+        applied = await service.apply_cleanup(
+            plan_id=prepared["plan_id"], group_id="10001", actor_id="7"
+        )
+        row = connection.execute(
+            "SELECT components_json, weight FROM answers WHERE id = 10"
+        ).fetchone()
+        audit = connection.execute(
+            "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1"
+        ).fetchone()[0]
+        backup_path = Path(applied["backup_path"])
+        backup_integrity = sqlite3.connect(backup_path).execute("PRAGMA quick_check").fetchone()[0]
+        await store.close()
+        return prepared, applied, json.loads(row[0]), row[1], audit, backup_integrity
+
+    prepared, applied, payload, weight, audit, backup_integrity = asyncio.run(scenario())
+
+    assert prepared["update_answers"] == 1
+    assert prepared["delete_answers"] == 0
+    assert applied["removed_components"] == 1
+    assert applied["updated_answers"] == 1
+    assert payload["components"] == [{"type": "Plain", "data": {"text": "keep me"}}]
+    assert weight == 3
+    assert audit == "cleanup_invalid_media"
+    assert backup_integrity == "ok"
+
+
+def test_media_cleanup_deletes_empty_answer_and_orphan_question(tmp_path):
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        _insert_cleanup_answer(
+            connection,
+            10,
+            [{"type": "Image", "data": {"media_path": "media/missing.png"}}],
+        )
+        connection.commit()
+        prepared = await service.prepare_cleanup(group_id="10001", actor_id="7")
+        applied = await service.apply_cleanup(
+            plan_id=prepared["plan_id"], group_id="10001", actor_id="7"
+        )
+        counts = tuple(
+            connection.execute(
+                "SELECT (SELECT COUNT(*) FROM answers), (SELECT COUNT(*) FROM questions)"
+            ).fetchone()
+        )
+        await store.close()
+        return prepared, applied, counts
+
+    prepared, applied, counts = asyncio.run(scenario())
+
+    assert prepared["delete_answers"] == 1
+    assert applied["deleted_answers"] == 1
+    assert applied["orphan_questions"] == 1
+    assert counts == (0, 0)
+
+
+def test_media_cleanup_drop_answer_mode_deletes_mixed_answer(tmp_path):
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        _insert_cleanup_answer(
+            connection,
+            10,
+            [
+                {"type": "Plain", "data": {"text": "also delete"}},
+                {"type": "File", "data": {}},
+            ],
+        )
+        connection.commit()
+        prepared = await service.prepare_cleanup(
+            group_id="10001", actor_id="7", mode="drop-answer"
+        )
+        applied = await service.apply_cleanup(
+            plan_id=prepared["plan_id"], group_id="10001", actor_id="7"
+        )
+        count = connection.execute("SELECT COUNT(*) FROM answers").fetchone()[0]
+        await store.close()
+        return prepared, applied, count
+
+    prepared, applied, count = asyncio.run(scenario())
+
+    assert prepared["delete_answers"] == 1
+    assert applied["deleted_answers"] == 1
+    assert count == 0
+
+
+def test_media_cleanup_rejects_stale_plan_without_mutation(tmp_path):
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        _insert_cleanup_answer(
+            connection,
+            10,
+            [
+                {"type": "Plain", "data": {"text": "original"}},
+                {"type": "Image", "data": {"media_path": "media/missing.png"}},
+            ],
+        )
+        connection.commit()
+        prepared = await service.prepare_cleanup(group_id="10001", actor_id="7")
+        connection.execute(
+            "UPDATE answers SET components_json = ? WHERE id = 10",
+            (json.dumps({"schema_version": 1, "components": [{"type": "Plain", "data": {"text": "changed"}}]}),),
+        )
+        connection.commit()
+        result = await service.apply_cleanup(
+            plan_id=prepared["plan_id"], group_id="10001", actor_id="7"
+        )
+        remaining = connection.execute("SELECT COUNT(*) FROM answers").fetchone()[0]
+        audits = connection.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'cleanup_invalid_media'"
+        ).fetchone()[0]
+        await store.close()
+        return result, remaining, audits
+
+    result, remaining, audits = asyncio.run(scenario())
+
+    assert result["applied"] is False
+    assert result["reason"] == "plan_stale"
+    assert remaining == 1
+    assert audits == 0
+
+
+def test_media_cleanup_merges_duplicate_answer_weight_and_contributions(tmp_path):
+    plain = {"type": "Plain", "data": {"text": "same answer"}}
+
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        survivor_key = normalized_components_key([plain])
+        _insert_cleanup_answer(connection, 10, [plain], survivor_key, weight=2)
+        _insert_cleanup_answer(
+            connection,
+            11,
+            [plain, {"type": "Image", "data": {"media_path": "media/missing.png"}}],
+            weight=3,
+        )
+        connection.execute(
+            "INSERT INTO contributions(answer_id, group_id, user_id, observed_at) "
+            "VALUES(11, '10001', '42', CURRENT_TIMESTAMP)"
+        )
+        connection.commit()
+        prepared = await service.prepare_cleanup(group_id="10001", actor_id="7")
+        applied = await service.apply_cleanup(
+            plan_id=prepared["plan_id"], group_id="10001", actor_id="7"
+        )
+        answers = connection.execute(
+            "SELECT id, weight FROM answers ORDER BY id"
+        ).fetchall()
+        contribution_answer = connection.execute(
+            "SELECT answer_id FROM contributions"
+        ).fetchone()[0]
+        await store.close()
+        return applied, answers, contribution_answer
+
+    applied, answers, contribution_answer = asyncio.run(scenario())
+
+    assert [tuple(row) for row in answers] == [(10, 5)]
+    assert contribution_answer == 10
+    assert applied["merged_answers"] == 1
+
+
+def test_media_cleanup_plan_is_bound_to_preparing_actor(tmp_path):
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        _insert_cleanup_answer(
+            connection,
+            10,
+            [{"type": "File", "data": {}}],
+        )
+        connection.commit()
+        prepared = await service.prepare_cleanup(group_id="10001", actor_id="7")
+        result = await service.apply_cleanup(
+            plan_id=prepared["plan_id"], group_id="10001", actor_id="8"
+        )
+        count = connection.execute("SELECT COUNT(*) FROM answers").fetchone()[0]
+        await store.close()
+        return result, count
+
+    result, count = asyncio.run(scenario())
+
+    assert result == {"applied": False, "reason": "wrong_actor"}
+    assert count == 1
+
+
+def test_media_cleanup_does_not_prepare_empty_plan(tmp_path):
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "runtime.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        try:
+            return await service.prepare_cleanup(group_id="10001", actor_id="7")
+        finally:
+            await store.close()
+
+    result = asyncio.run(scenario())
+
+    assert result == {"prepared": False, "reason": "no_invalid_media"}

@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from new_chat_learning.constants import SCHEMA_VERSION
-from new_chat_learning.domain.message import NormalizedMessage
+from new_chat_learning.domain.message import (
+    NormalizedMessage,
+    canonical_json,
+    normalized_components_key,
+)
 from new_chat_learning.domain.reply import QuestionCandidate, ReplyCandidate
 
 SCHEMA_SQL = """
@@ -556,6 +560,168 @@ class SQLiteStore:
             result = dict(summary)
             result["states"] = {str(row["state"]): int(row["count"]) for row in states}
             return result
+
+    async def media_cleanup_candidates(self, group_id: str) -> list[dict[str, Any]]:
+        async with self._lock:
+            connection = self._require_connection()
+            answers = connection.execute(
+                "SELECT DISTINCT a.id AS answer_id, a.question_id, a.components_json, a.weight "
+                "FROM answer_media AS am JOIN answers AS a ON a.id = am.answer_id "
+                "JOIN questions AS q ON q.id = a.question_id "
+                "WHERE q.group_id = ? AND am.state != 'healthy' ORDER BY a.id",
+                (str(group_id),),
+            ).fetchall()
+            result = []
+            for answer in answers:
+                references = connection.execute(
+                    "SELECT component_index, state, reason FROM answer_media "
+                    "WHERE answer_id = ? AND state != 'healthy' ORDER BY component_index",
+                    (int(answer["answer_id"]),),
+                ).fetchall()
+                item = dict(answer)
+                item["invalid_references"] = [dict(row) for row in references]
+                result.append(item)
+            return result
+
+    async def apply_media_cleanup(
+        self,
+        *,
+        plan_id: str,
+        group_id: str,
+        actor_id: str,
+        mode: str,
+        operations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        import hashlib
+        import json
+
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                removed_components = 0
+                deleted_answers = 0
+                updated_answers = 0
+                merged_answers = 0
+                affected_question_ids: set[int] = set()
+                for operation in operations:
+                    answer_id = int(operation["answer_id"])
+                    row = connection.execute(
+                        "SELECT a.question_id, a.components_json, a.weight FROM answers AS a "
+                        "JOIN questions AS q ON q.id = a.question_id "
+                        "WHERE a.id = ? AND q.group_id = ?",
+                        (answer_id, str(group_id)),
+                    ).fetchone()
+                    if row is None:
+                        raise ValueError("cleanup_plan_stale")
+                    components_json = str(row["components_json"])
+                    digest = hashlib.sha256(components_json.encode("utf-8")).hexdigest()
+                    if digest != str(operation["components_sha256"]):
+                        raise ValueError("cleanup_plan_stale")
+                    current_references = connection.execute(
+                        "SELECT component_index, state FROM answer_media "
+                        "WHERE answer_id = ? AND state != 'healthy' ORDER BY component_index",
+                        (answer_id,),
+                    ).fetchall()
+                    current_signature = [
+                        [int(reference["component_index"]), str(reference["state"])]
+                        for reference in current_references
+                    ]
+                    if current_signature != operation["invalid_signature"]:
+                        raise ValueError("cleanup_plan_stale")
+                    question_id = int(row["question_id"])
+                    affected_question_ids.add(question_id)
+                    if mode == "drop-answer" or operation["action"] == "delete":
+                        self._delete_answer_for_cleanup(connection, answer_id)
+                        deleted_answers += 1
+                        removed_components += len(current_signature)
+                        continue
+                    payload = json.loads(components_json)
+                    components = payload.get("components", [])
+                    invalid_indices = {item[0] for item in current_signature}
+                    remaining = [
+                        component
+                        for index, component in enumerate(components)
+                        if index not in invalid_indices
+                    ]
+                    if not remaining:
+                        self._delete_answer_for_cleanup(connection, answer_id)
+                        deleted_answers += 1
+                        removed_components += len(invalid_indices)
+                        continue
+                    updated_json = canonical_json(
+                        {"schema_version": int(payload.get("schema_version", 1)), "components": remaining}
+                    )
+                    updated_key = _stored_answer_key(remaining)
+                    duplicate = connection.execute(
+                        "SELECT id, weight FROM answers WHERE question_id = ? "
+                        "AND normalized_key = ? AND id != ?",
+                        (question_id, updated_key, answer_id),
+                    ).fetchone()
+                    if duplicate is not None:
+                        survivor_id = int(duplicate["id"])
+                        connection.execute(
+                            "UPDATE answers SET weight = weight + ?, updated_at=CURRENT_TIMESTAMP "
+                            "WHERE id = ?",
+                            (int(row["weight"]), survivor_id),
+                        )
+                        connection.execute(
+                            "UPDATE contributions SET answer_id = ? WHERE answer_id = ?",
+                            (survivor_id, answer_id),
+                        )
+                        connection.execute(
+                            "UPDATE reply_records SET answer_id = ? WHERE answer_id = ?",
+                            (survivor_id, answer_id),
+                        )
+                        connection.execute("DELETE FROM answers WHERE id = ?", (answer_id,))
+                        merged_answers += 1
+                    else:
+                        connection.execute(
+                            "UPDATE answers SET components_json = ?, normalized_key = ?, "
+                            "updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                            (updated_json, updated_key, answer_id),
+                        )
+                        connection.execute("DELETE FROM answer_media WHERE answer_id = ?", (answer_id,))
+                        updated_answers += 1
+                    removed_components += len(invalid_indices)
+                orphan_questions = 0
+                for question_id in affected_question_ids:
+                    orphan_questions += connection.execute(
+                        "DELETE FROM questions WHERE id = ? "
+                        "AND NOT EXISTS(SELECT 1 FROM answers WHERE question_id = ?)",
+                        (question_id, question_id),
+                    ).rowcount
+                details = {
+                    "plan_id": plan_id,
+                    "group_id": str(group_id),
+                    "mode": mode,
+                    "removed_components": removed_components,
+                    "updated_answers": updated_answers,
+                    "deleted_answers": deleted_answers,
+                    "merged_answers": merged_answers,
+                    "orphan_questions": orphan_questions,
+                }
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="cleanup_invalid_media",
+                    target=f"group:{group_id}",
+                    details=details,
+                )
+                connection.commit()
+                return {"applied": True, **details}
+            except Exception:
+                connection.rollback()
+                raise
+
+    @staticmethod
+    def _delete_answer_for_cleanup(connection: sqlite3.Connection, answer_id: int) -> None:
+        connection.execute(
+            "UPDATE reply_records SET state = 'deleted', deleted_at=CURRENT_TIMESTAMP "
+            "WHERE answer_id = ? AND state = 'active'",
+            (int(answer_id),),
+        )
+        connection.execute("DELETE FROM answers WHERE id = ?", (int(answer_id),))
 
     async def search_questions(
         self,
@@ -1245,3 +1411,36 @@ def _plain_text_from_components(components_json: str) -> str:
         if isinstance(data, dict):
             return str(data.get("text", "")).strip()
     return ""
+
+
+def _stored_answer_key(components: list[dict[str, Any]]) -> str:
+    matching_components = []
+    transient_fields = {
+        "url",
+        "path",
+        "base64",
+        "message_id",
+        "time",
+        "seq",
+        "media_path",
+        "content_hash",
+        "media_state",
+    }
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        data = component.get("data", {})
+        if not isinstance(data, dict):
+            data = {}
+        matching_data = {
+            str(key): value for key, value in data.items() if str(key) not in transient_fields
+        }
+        file_value = matching_data.get("file")
+        if isinstance(file_value, str) and file_value.lower().startswith(
+            ("http://", "https://", "file:", "base64://", "data:")
+        ):
+            matching_data.pop("file", None)
+        matching_components.append(
+            {"type": str(component.get("type", "")), "data": matching_data}
+        )
+    return normalized_components_key(matching_components)

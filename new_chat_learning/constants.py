@@ -1,3 +1,3 @@
 PLUGIN_NAME = "NewChatLearning"
-PLUGIN_VERSION = "0.1.0-beta.11"
+PLUGIN_VERSION = "0.1.0-beta.12"
 SCHEMA_VERSION = 7

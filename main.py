@@ -185,7 +185,9 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl migrate-prepare <文件> - 准备旧词库导入\n"
                 "/ncl migrate-apply <导入ID> confirm - 备份并导入当前群\n"
                 "/ncl media-scan - 扫描并标记本群媒体状态\n"
-                "/ncl media-preview - 预览本群失效媒体影响"
+                "/ncl media-preview - 预览本群失效媒体影响\n"
+                "/ncl media-cleanup-prepare [prune|drop-answer] - 准备清理\n"
+                "/ncl media-cleanup-apply <计划ID> confirm - 备份并执行清理"
             )
         )
 
@@ -418,6 +420,80 @@ class NewChatLearningPlugin(star.Star):
                 f"失效组件：{preview['media_components']}，受影响答案：{preview['affected_answers']}，"
                 f"受影响问题：{preview['affected_questions']}，"
                 f"清理后可能为空的答案：{preview['answers_becoming_empty']}"
+            )
+        )
+
+    @ncl.command("media-cleanup-prepare")
+    async def ncl_media_cleanup_prepare(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        mode = self._command_tail(event, "media-cleanup-prepare").strip() or "prune"
+        if mode not in {"prune", "drop-answer"}:
+            event.set_result(
+                MessageEventResult().message(
+                    "用法：/ncl media-cleanup-prepare [prune|drop-answer]"
+                )
+            )
+            return
+        result = await self.app.media.prepare_cleanup(
+            group_id=event.get_group_id(),
+            actor_id=event.get_sender_id(),
+            mode=mode,
+        )
+        if not result.get("prepared"):
+            event.set_result(MessageEventResult().message("本群当前没有已标记的失效媒体。"))
+            return
+        mode_name = "移除失效组件" if mode == "prune" else "删除含失效媒体的整条答案"
+        event.set_result(
+            MessageEventResult().message(
+                "本群媒体清理计划已准备，尚未修改词库。\n"
+                f"模式：{mode_name}\n"
+                f"失效组件：{result['invalid_components']}，"
+                f"更新答案：{result['update_answers']}，删除答案：{result['delete_answers']}\n"
+                "计划一小时后过期。确认执行：\n"
+                f"/ncl media-cleanup-apply {result['plan_id']} confirm"
+            )
+        )
+
+    @ncl.command("media-cleanup-apply")
+    async def ncl_media_cleanup_apply(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        parts = self._command_tail(event, "media-cleanup-apply").split()
+        if len(parts) != 2 or parts[1].lower() != "confirm":
+            event.set_result(
+                MessageEventResult().message(
+                    "用法：/ncl media-cleanup-apply <计划ID> confirm\n"
+                    "该操作会先备份数据库，再执行已预览的本群媒体清理。"
+                )
+            )
+            return
+        result = await self.app.media.apply_cleanup(
+            plan_id=parts[0].lower(),
+            group_id=event.get_group_id(),
+            actor_id=event.get_sender_id(),
+        )
+        if not result.get("applied"):
+            reasons = {
+                "plan_not_found": "找不到清理计划。",
+                "plan_not_ready": "清理计划已执行或不可用。",
+                "wrong_group": "清理计划不属于当前群。",
+                "wrong_actor": "清理计划只能由创建它的管理员确认。",
+                "plan_expired": "清理计划已过期，请重新准备。",
+                "plan_stale": "词库或扫描状态已变化，请重新扫描并准备。",
+                "invalid_plan": "清理计划格式无效。",
+            }
+            event.set_result(
+                MessageEventResult().message(reasons.get(result.get("reason"), "清理未执行。"))
+            )
+            return
+        event.set_result(
+            MessageEventResult().message(
+                "本群失效媒体清理完成。\n"
+                f"移除组件：{result['removed_components']}，更新答案：{result['updated_answers']}，"
+                f"删除答案：{result['deleted_answers']}，合并重复答案：{result['merged_answers']}，"
+                f"删除空问题：{result['orphan_questions']}\n"
+                f"执行前备份：{Path(result['backup_path']).name}"
             )
         )
 

@@ -6,15 +6,17 @@ import hashlib
 import ipaddress
 import json
 import mimetypes
+import secrets
 import socket
 import tempfile
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO
 
-from new_chat_learning.domain.message import NormalizedMessage
+from new_chat_learning.domain.message import NormalizedMessage, canonical_json
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
@@ -33,6 +35,8 @@ class MediaService:
         self.data_dir = Path(data_dir)
         self.media_dir = self.data_dir / "media"
         self.temp_dir = self.data_dir / "temp"
+        self.cleanup_dir = self.temp_dir / "media-cleanups"
+        self.backup_dir = self.data_dir / "backups"
         self.store = store
         self.config = config
         self._lock = asyncio.Lock()
@@ -82,6 +86,122 @@ class MediaService:
 
     async def health_preview(self, group_id: str) -> dict[str, object]:
         return await self.store.media_health_preview(str(group_id))
+
+    async def prepare_cleanup(
+        self, *, group_id: str, actor_id: str, mode: str = "prune"
+    ) -> dict[str, object]:
+        if mode not in {"prune", "drop-answer"}:
+            return {"prepared": False, "reason": "invalid_mode"}
+        await self.scan_group(str(group_id))
+        candidates = await self.store.media_cleanup_candidates(str(group_id))
+        if not candidates:
+            return {"prepared": False, "reason": "no_invalid_media"}
+        operations = []
+        invalid_components = 0
+        delete_answers = 0
+        update_answers = 0
+        for candidate in candidates:
+            components_json = str(candidate["components_json"])
+            references = candidate["invalid_references"]
+            invalid_signature = [
+                [int(reference["component_index"]), str(reference["state"])]
+                for reference in references
+            ]
+            action = "delete" if mode == "drop-answer" else "prune"
+            if mode == "prune":
+                invalid_indices = {item[0] for item in invalid_signature}
+                try:
+                    payload = json.loads(components_json)
+                    remaining = [
+                        component
+                        for index, component in enumerate(payload.get("components", []))
+                        if index not in invalid_indices
+                    ]
+                except (TypeError, ValueError):
+                    remaining = []
+                if not remaining or not _components_are_sendable(remaining):
+                    action = "delete"
+            invalid_components += len(invalid_signature)
+            delete_answers += int(action == "delete")
+            update_answers += int(action == "prune")
+            operations.append(
+                {
+                    "answer_id": int(candidate["answer_id"]),
+                    "components_sha256": hashlib.sha256(
+                        components_json.encode("utf-8")
+                    ).hexdigest(),
+                    "invalid_signature": invalid_signature,
+                    "action": action,
+                }
+            )
+        plan_id = secrets.token_hex(16)
+        created_at = datetime.now(timezone.utc)
+        manifest = {
+            "plan_id": plan_id,
+            "status": "prepared",
+            "group_id": str(group_id),
+            "actor_id": str(actor_id),
+            "mode": mode,
+            "created_at": created_at.isoformat(),
+            "expires_at": (created_at + timedelta(hours=1)).isoformat(),
+            "invalid_components": invalid_components,
+            "affected_answers": len(operations),
+            "update_answers": update_answers,
+            "delete_answers": delete_answers,
+            "operations": operations,
+        }
+        self.cleanup_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = self.cleanup_dir / f"{plan_id}.json"
+        await asyncio.to_thread(manifest_path.write_text, canonical_json(manifest), "utf-8")
+        return {"prepared": True, **manifest}
+
+    async def apply_cleanup(
+        self, *, plan_id: str, group_id: str, actor_id: str
+    ) -> dict[str, object]:
+        if len(plan_id) != 32 or any(character not in "0123456789abcdef" for character in plan_id):
+            return {"applied": False, "reason": "plan_not_found"}
+        manifest_path = self.cleanup_dir / f"{plan_id}.json"
+        try:
+            manifest = json.loads(await asyncio.to_thread(manifest_path.read_text, "utf-8"))
+        except (OSError, ValueError, TypeError):
+            return {"applied": False, "reason": "plan_not_found"}
+        if manifest.get("status") != "prepared":
+            return {"applied": False, "reason": "plan_not_ready"}
+        if str(manifest.get("group_id")) != str(group_id):
+            return {"applied": False, "reason": "wrong_group"}
+        if str(manifest.get("actor_id")) != str(actor_id):
+            return {"applied": False, "reason": "wrong_actor"}
+        try:
+            expires_at = datetime.fromisoformat(str(manifest["expires_at"]))
+        except (KeyError, TypeError, ValueError):
+            return {"applied": False, "reason": "invalid_plan"}
+        if datetime.now(timezone.utc) >= expires_at:
+            return {"applied": False, "reason": "plan_expired"}
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = self.backup_dir / f"before-media-cleanup-{timestamp}-{plan_id[:12]}.sqlite3"
+        await self.store.backup_to(backup_path)
+        try:
+            result = await self.store.apply_media_cleanup(
+                plan_id=plan_id,
+                group_id=str(group_id),
+                actor_id=str(actor_id),
+                mode=str(manifest["mode"]),
+                operations=list(manifest["operations"]),
+            )
+        except ValueError as error:
+            if str(error) == "cleanup_plan_stale":
+                return {
+                    "applied": False,
+                    "reason": "plan_stale",
+                    "backup_path": str(backup_path),
+                }
+            raise
+        await self.scan_group(str(group_id))
+        manifest["status"] = "applied"
+        manifest["applied_at"] = datetime.now(timezone.utc).isoformat()
+        manifest["backup_name"] = backup_path.name
+        await asyncio.to_thread(manifest_path.write_text, canonical_json(manifest), "utf-8")
+        return {**result, "backup_path": str(backup_path)}
 
     def _inspect_answer(self, components_json: str) -> tuple[list[dict[str, object]], bool]:
         try:
@@ -373,6 +493,21 @@ def _is_sendable_non_media(component_type: str, data: dict) -> bool:
     if component_type == "share":
         return bool(data.get("url") and data.get("title"))
     return component_type in {"music", "musicshare", "dice"}
+
+
+def _components_are_sendable(components: list[dict]) -> bool:
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        component_type = str(component.get("type", "")).lower()
+        data = component.get("data", {})
+        if not isinstance(data, dict):
+            continue
+        if component_type in MEDIA_TYPES:
+            return True
+        if _is_sendable_non_media(component_type, data):
+            return True
+    return False
 
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
