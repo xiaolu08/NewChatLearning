@@ -1,0 +1,103 @@
+{
+  "tool": "RecoWork",
+  "schema_version": 2,
+  "recowork_version": "2.0.0",
+  "template": "idea-engineering",
+  "template_version": "2.0.1",
+  "target": "local-agent-project",
+  "target_version": "1.0.1",
+  "locale": "zh",
+  "generated_at": "2026-08-12T17:52:56.810Z",
+  "files": {
+    "README.md": {
+      "ownership": "template",
+      "source_hash": "30935df16f18e6e05a1e60a56b33cdf2af46078c86cbfeb59013559104fd71af",
+      "baseline_hash": "30935df16f18e6e05a1e60a56b33cdf2af46078c86cbfeb59013559104fd71af",
+      "user_modified": false
+    },
+    "工作方法/产物保鲜规范.md": {
+      "ownership": "methods",
+      "source_hash": "c5f8733ee1fb844d3bae0c050c2d424b2d6fda0fc595ac0a60dce694a182324e",
+      "baseline_hash": "c5f8733ee1fb844d3bae0c050c2d424b2d6fda0fc595ac0a60dce694a182324e",
+      "user_modified": false
+    },
+    "工作方法/假设与验证规范.md": {
+      "ownership": "methods",
+      "source_hash": "6a2a4995ca290567b627532a399336f2ea61c315d33ebcf6556adbd41e2605e1",
+      "baseline_hash": "6a2a4995ca290567b627532a399336f2ea61c315d33ebcf6556adbd41e2605e1",
+      "user_modified": false
+    },
+    "工作方法/发散与收敛方法.md": {
+      "ownership": "methods",
+      "source_hash": "8c2e95e0718867ca27b9a76d8b01a620df1b53a25cae418cfd23ecbea53e9e33",
+      "baseline_hash": "8c2e95e0718867ca27b9a76d8b01a620df1b53a25cae418cfd23ecbea53e9e33",
+      "user_modified": false
+    },
+    "工作方法/文档规范.md": {
+      "ownership": "methods",
+      "source_hash": "572edd039de4e86fd28bb760686b900daa52333111e7257dbfe425b93d7286b3",
+      "baseline_hash": "572edd039de4e86fd28bb760686b900daa52333111e7257dbfe425b93d7286b3",
+      "user_modified": false
+    },
+    "工作方法/角色设定.md": {
+      "ownership": "methods",
+      "source_hash": "6948fa079654f3d8718123dc9a3fe7a599542b398e72288d712385a3f74c6842",
+      "baseline_hash": "6948fa079654f3d8718123dc9a3fe7a599542b398e72288d712385a3f74c6842",
+      "user_modified": false
+    },
+    "想法空间/01-问题与机会/index.md": {
+      "ownership": "workspace",
+      "source_hash": "16815ce698fcb5376d58ca24611f61a129a562b1044327e26ed297617d4673b6",
+      "baseline_hash": "16815ce698fcb5376d58ca24611f61a129a562b1044327e26ed297617d4673b6",
+      "user_modified": true
+    },
+    "想法空间/02-脑暴留痕/index.md": {
+      "ownership": "workspace",
+      "source_hash": "f53dc0e58661437de59e6dbcfe5db9432689c38d1bde80701062434adf10b4c0",
+      "baseline_hash": "f53dc0e58661437de59e6dbcfe5db9432689c38d1bde80701062434adf10b4c0",
+      "user_modified": true
+    },
+    "想法空间/03-方向归纳/index.md": {
+      "ownership": "workspace",
+      "source_hash": "9ec818e62859c87accc74e9b20d2c6f94c3ffa21d23a5d5035ed4b6dbfb020e0",
+      "baseline_hash": "9ec818e62859c87accc74e9b20d2c6f94c3ffa21d23a5d5035ed4b6dbfb020e0",
+      "user_modified": true
+    },
+    "想法空间/04-假设与验证/index.md": {
+      "ownership": "workspace",
+      "source_hash": "bc0172133c0a7acc0143f73877d2c0a51fdfa9780a02b8d59df7d5474a22febc",
+      "baseline_hash": "bc0172133c0a7acc0143f73877d2c0a51fdfa9780a02b8d59df7d5474a22febc",
+      "user_modified": true
+    },
+    "想法空间/05-决策与下一步/index.md": {
+      "ownership": "workspace",
+      "source_hash": "7906d7be3d3f8502e36ec27cd313085a3d610794579714347918a95dfb7f6229",
+      "baseline_hash": "7906d7be3d3f8502e36ec27cd313085a3d610794579714347918a95dfb7f6229",
+      "user_modified": true
+    },
+    "想法空间/index.md": {
+      "ownership": "workspace",
+      "source_hash": "d052923f2c3b7eda0a260ad7890ccd5ced80b616a8821debb3edb011a7f6a099",
+      "baseline_hash": "d052923f2c3b7eda0a260ad7890ccd5ced80b616a8821debb3edb011a7f6a099",
+      "user_modified": true
+    },
+    "想法空间/待确认问题.md": {
+      "ownership": "workspace",
+      "source_hash": "9f927c2091a1cd3537d0fb60c381e002989a731aa3630fa66d249d2ecb547232",
+      "baseline_hash": "9f927c2091a1cd3537d0fb60c381e002989a731aa3630fa66d249d2ecb547232",
+      "user_modified": true
+    },
+    "想法空间/想法简报.md": {
+      "ownership": "workspace",
+      "source_hash": "228754fc4ac31503551fefa4ee8948a7fca5a9624766bd80d70040a651054886",
+      "baseline_hash": "228754fc4ac31503551fefa4ee8948a7fca5a9624766bd80d70040a651054886",
+      "user_modified": true
+    },
+    "AGENTS.md": {
+      "ownership": "target",
+      "source_hash": "9241738f859000a1670675a6e151ecd20aad472af01eaff2fbd7d6be51be5e8a",
+      "baseline_hash": "9241738f859000a1670675a6e151ecd20aad472af01eaff2fbd7d6be51be5e8a",
+      "user_modified": false
+    }
+  }
+}

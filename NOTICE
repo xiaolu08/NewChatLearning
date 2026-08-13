@@ -1,0 +1,19 @@
+NewChatLearning
+Copyright (C) 2026 xiaolu08 and NewChatLearning contributors
+
+This project is an in-progress AstrBot port and modernization of the ideas,
+behaviors, and covered implementation of ChatLearning:
+
+  https://github.com/JHue58/ChatLearning
+
+ChatLearning is licensed under the GNU Affero General Public License,
+Version 3. Copyright in the original project remains with its respective
+authors and contributors.
+
+NewChatLearning is a modified and separately named project. It is not an
+official release of ChatLearning, AstrBot, NapCat, or Tencent QQ, and it is
+not endorsed by those projects or their maintainers.
+
+The repository remains marked Beta until its maintainer explicitly approves
+a formal release. The Beta label is a project-status notice and does not add
+restrictions to the rights granted by the AGPL-3.0 license.

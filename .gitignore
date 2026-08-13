@@ -1,0 +1,56 @@
+# NewChatLearning runtime data
+data/
+runtime/
+media/
+backups/
+logs/
+temp/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+secrets/
+password.json
+*.key
+*.pem
+
+# Legacy and shared word stocks may contain private or unsafe content
+*.cl
+*.clc
+WordStock/
+【词库共享】3.0.0以上/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# Local diagnostics and exports
+diagnostics/
+exports/
+*.log
+*.bak
