@@ -71,6 +71,7 @@ NewChatLearning/
 - 主入口：`/ncl help`、`/ncl status`、`/ncl learning`、`/ncl reply`、`/ncl silent`、`/ncl target`、`/ncl library`、`/ncl media`、`/ncl tts`、`/ncl task`、`/ncl admin`。
 - 当前词库管理命令：`/ncl search <关键词>`、`/ncl show <问题ID>`、`/ncl add <问题> => <答案>`、`/ncl add-regex <表达式> => <答案>`、`/ncl weight <答案ID> <权重>`、`/ncl delete-answer <答案ID>`、`/ncl delete-question <问题ID>`。
 - 词库管理命令始终限定当前群作用域。全局管理员和插件管理员仍按当前群操作；群子管理员不能借助问题或答案 ID 访问其他群。
+- WebUI 词库页复用同一应用服务；读取要求独立登录会话，新增与权重修改要求 CSRF，答案和问题删除还要求密码再认证与删除前数据库备份。
 - 原版别名保持可用并可整体关闭；所有别名映射到同一应用服务。
 - 快速删除 `!d` / `!delete` 仅管理员可用，必须引用 NewChatLearning 最近发送的可追溯回复。
 - 高风险批量操作优先引导至 WebUI，不在群聊中展示敏感内容。

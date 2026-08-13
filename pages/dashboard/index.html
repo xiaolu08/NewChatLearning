@@ -13,11 +13,13 @@
       h1 { margin: 0; font-size: 20px; font-weight: 650; }
       h2 { margin: 0 0 8px; font-size: 18px; }
       p { margin: 0; color: var(--muted); }
-      button, input, select { font: inherit; }
+      button, input, select, textarea { font: inherit; }
       button { border: 1px solid transparent; border-radius: 6px; background: var(--accent); color: #fff; min-height: 38px; padding: 8px 14px; cursor: pointer; }
       button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
+      button.danger { background: var(--danger); }
       button:disabled { opacity: .55; cursor: wait; }
       input { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
+      textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
       select { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; }
       label { display: block; color: var(--muted); margin: 14px 0 5px; }
       main { max-width: 1120px; margin: 0 auto; padding: 24px; }
@@ -50,10 +52,22 @@
       .summary span { display: block; color: var(--muted); margin-bottom: 4px; }
       .summary strong { font-size: 19px; }
       .result { min-height: 24px; margin-top: 12px; color: var(--muted); }
+      .split { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(360px, 1.15fr); gap: 18px; }
+      .list { border: 1px solid var(--line); background: var(--panel); min-height: 240px; max-height: 520px; overflow: auto; }
+      .list button { width: 100%; background: transparent; color: var(--text); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; padding: 12px; }
+      .list button:last-child { border-bottom: 0; }
+      .list button.active { box-shadow: inset 3px 0 var(--accent); background: var(--bg); }
+      .list small, .answer-row small { display: block; color: var(--muted); margin-top: 3px; }
+      .detail { border-top: 1px solid var(--line); padding-top: 14px; }
+      .answer-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+      .answer-row:last-child { border-bottom: 0; }
+      .answer-row input { min-height: 36px; }
+      .inline-check { display: flex; align-items: center; gap: 8px; color: var(--text); margin: 14px 0 5px; }
+      .inline-check input { width: auto; min-height: auto; }
       dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 22px; }
       dialog::backdrop { background: rgb(0 0 0 / .45); }
       dialog .actions { justify-content: flex-end; margin-top: 18px; }
-      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
+      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
     </style>
   </head>
   <body>
@@ -77,6 +91,7 @@
       <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
       <nav class="tabs" aria-label="管理模块">
         <button id="tab-overview" class="active" type="button">概览</button>
+        <button id="tab-library" type="button">词库</button>
         <button id="tab-media" type="button">媒体</button>
       </nav>
       <div id="overview-view"><div class="grid">
@@ -95,6 +110,28 @@
         <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
         <tr><th>数据目录</th><td id="data-dir">-</td></tr>
       </tbody></table></section></div>
+      <div id="library-view" class="hidden">
+        <div class="toolbar">
+          <div class="field"><label for="library-group">群聊</label><input id="library-group" list="library-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="library-groups"></datalist></div>
+          <div class="field"><label for="library-query">搜索问题</label><input id="library-query" maxlength="200" placeholder="留空可查看最近问题"></div>
+          <button id="library-search" type="button">搜索</button>
+        </div>
+        <div class="split">
+          <div><div id="library-results" class="list"><p style="padding:14px">选择群聊后搜索词库。</p></div><div id="library-message" class="result" role="status"></div></div>
+          <div>
+            <section style="margin-top:0"><h2>添加问答</h2>
+              <label for="add-question">问题</label><textarea id="add-question" maxlength="4000"></textarea>
+              <label for="add-answer">答案</label><textarea id="add-answer" maxlength="4000"></textarea>
+              <label class="inline-check"><input id="add-regex" type="checkbox"> 将问题作为正则表达式</label>
+              <button id="library-add" type="button">添加问答</button>
+            </section>
+            <section id="question-detail" class="detail hidden">
+              <div class="actions" style="justify-content:space-between;align-items:center"><h2 id="question-title">问题详情</h2><button id="delete-question" class="danger" type="button">删除问题</button></div>
+              <p id="question-copy"></p><div id="answer-list"></div>
+            </section>
+          </div>
+        </div>
+      </div>
       <div id="media-view" class="hidden">
         <div class="toolbar">
           <div class="field"><label for="media-group">群聊</label><input id="media-group" list="media-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="media-groups"></datalist></div>
@@ -129,9 +166,21 @@
         <div class="actions"><button id="reauth-cancel" class="secondary" type="button">取消</button><button type="submit">执行清理</button></div>
       </form>
     </dialog>
+    <dialog id="library-delete-dialog">
+      <form id="library-delete-form">
+        <h2 id="library-delete-title">确认删除词库记录</h2>
+        <p id="library-delete-copy">执行前会自动备份数据库。请输入当前管理密码确认。</p>
+        <label for="library-delete-password">管理密码</label>
+        <input id="library-delete-password" type="password" autocomplete="current-password" required>
+        <div id="library-delete-message" class="message" role="status"></div>
+        <div class="actions"><button id="library-delete-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">确认删除</button></div>
+      </form>
+    </dialog>
     <script>
       let authState = null;
       let cleanupPlan = null;
+      let currentQuestion = null;
+      let pendingLibraryDelete = null;
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
       const setText = (id, value) => { el(id).textContent = String(value); };
@@ -171,24 +220,29 @@
         setText("revision", status.config_revision);
         setText("library", status.library.mode === "global" ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）` : "仅本群");
         setText("data-dir", status.data_dir);
-        await loadMediaGroups();
+        await loadGroups();
       }
 
       function showView(view) {
         const media = view === "media";
-        el("overview-view").classList.toggle("hidden", media);
+        const library = view === "library";
+        el("overview-view").classList.toggle("hidden", media || library);
+        el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
-        el("tab-overview").classList.toggle("active", !media);
+        el("tab-overview").classList.toggle("active", !media && !library);
+        el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
       }
 
-      async function loadMediaGroups() {
+      async function loadGroups() {
         try {
           const data = payloadData(await bridge.apiGet("api/media/groups"));
-          el("media-groups").replaceChildren(...(data.group_ids || []).map(groupId => {
-            const option = document.createElement("option"); option.value = groupId; return option;
-          }));
-          if (!el("media-group").value && data.group_ids?.length) el("media-group").value = data.group_ids[0];
+          for (const prefix of ["media", "library"]) {
+            el(`${prefix}-groups`).replaceChildren(...(data.group_ids || []).map(groupId => {
+              const option = document.createElement("option"); option.value = groupId; return option;
+            }));
+            if (!el(`${prefix}-group`).value && data.group_ids?.length) el(`${prefix}-group`).value = data.group_ids[0];
+          }
         } catch (_) {}
       }
 
@@ -196,6 +250,53 @@
         const groupId = el("media-group").value.trim();
         if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
         return groupId;
+      }
+
+      function selectedLibraryGroup() {
+        const groupId = el("library-group").value.trim();
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
+        return groupId;
+      }
+
+      function renderLibraryResults(rows) {
+        const buttons = rows.map(row => {
+          const button = document.createElement("button"); button.type = "button";
+          button.dataset.questionId = row.question_id;
+          button.textContent = `Q${row.question_id} ${row.plain_text || "[空消息]"}`;
+          const meta = document.createElement("small"); meta.textContent = `${row.is_regex ? "正则" : "文本"} · ${row.answer_count} 个答案 · 总权重 ${row.total_weight}`;
+          button.append(meta); button.addEventListener("click", () => loadQuestion(row.question_id)); return button;
+        });
+        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "没有匹配问题。"; buttons.push(p); }
+        el("library-results").replaceChildren(...buttons);
+      }
+
+      async function searchLibrary() {
+        const data = payloadData(await bridge.apiGet("api/library/search", { group_id: selectedLibraryGroup(), query: el("library-query").value.trim() }));
+        renderLibraryResults(data.questions || []); setText("library-message", `找到 ${(data.questions || []).length} 条问题。`);
+      }
+
+      async function loadQuestion(questionId) {
+        const data = payloadData(await bridge.apiGet("api/library/question", { group_id: selectedLibraryGroup(), question_id: questionId }));
+        currentQuestion = data; el("question-detail").classList.remove("hidden");
+        setText("question-title", `Q${data.question_id} · ${data.is_regex ? "正则问题" : "文本问题"}`);
+        setText("question-copy", `${data.preview} · 记录频次 ${data.frequency}`);
+        document.querySelectorAll("#library-results button").forEach(button => button.classList.toggle("active", Number(button.dataset.questionId) === Number(questionId)));
+        const rows = (data.answers || []).map(answer => {
+          const row = document.createElement("div"); row.className = "answer-row";
+          const copy = document.createElement("div"); copy.textContent = answer.preview; const meta = document.createElement("small"); meta.textContent = `A${answer.answer_id}`; copy.append(meta);
+          const weight = document.createElement("input"); weight.type = "number"; weight.min = "1"; weight.max = "1000000000"; weight.value = answer.weight; weight.setAttribute("aria-label", `答案 A${answer.answer_id} 权重`);
+          weight.addEventListener("change", async () => { try { await postSecure("api/library/weight", { group_id: selectedLibraryGroup(), answer_id: answer.answer_id, weight: Number(weight.value) }); setText("library-message", `A${answer.answer_id} 权重已更新。`); } catch (error) { weight.value = answer.weight; setText("library-message", error?.message || "权重更新失败。"); } });
+          const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger"; remove.textContent = "删除"; remove.addEventListener("click", () => openLibraryDelete("answer", answer.answer_id));
+          row.append(copy, weight, remove); return row;
+        });
+        el("answer-list").replaceChildren(...rows);
+      }
+
+      function openLibraryDelete(target, id) {
+        pendingLibraryDelete = { target, id };
+        setText("library-delete-title", target === "question" ? `删除问题 Q${id}` : `删除答案 A${id}`);
+        setText("library-delete-copy", target === "question" ? "这会删除问题及其全部答案。执行前会自动备份数据库。" : "执行前会自动备份数据库；若这是最后一个答案，空问题也会被删除。");
+        el("library-delete-password").value = ""; setText("library-delete-message", ""); el("library-delete-dialog").showModal();
       }
 
       function renderPreview(preview) {
@@ -239,7 +340,27 @@
         finally { authState = null; await refreshAuth(); }
       });
       el("tab-overview").addEventListener("click", () => showView("overview"));
+      el("tab-library").addEventListener("click", () => showView("library"));
       el("tab-media").addEventListener("click", () => showView("media"));
+      el("library-search").addEventListener("click", async () => { try { await searchLibrary(); } catch (error) { setText("library-message", error?.message || "搜索失败。"); } });
+      el("library-query").addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); el("library-search").click(); } });
+      el("library-add").addEventListener("click", async () => {
+        try {
+          const data = await postSecure("api/library/add", { group_id: selectedLibraryGroup(), question: el("add-question").value.trim(), answer: el("add-answer").value.trim(), is_regex: el("add-regex").checked });
+          el("add-question").value = ""; el("add-answer").value = ""; setText("library-message", `${data.created ? "已添加" : "已增加权重"}：Q${data.question_id} / A${data.answer_id}。`); await searchLibrary(); await loadQuestion(data.question_id);
+        } catch (error) { setText("library-message", error?.message || "添加失败。"); }
+      });
+      el("delete-question").addEventListener("click", () => { if (currentQuestion) openLibraryDelete("question", currentQuestion.question_id); });
+      el("library-delete-cancel").addEventListener("click", () => el("library-delete-dialog").close());
+      el("library-delete-form").addEventListener("submit", async event => {
+        event.preventDefault(); if (!pendingLibraryDelete) return;
+        const target = pendingLibraryDelete.target; const id = pendingLibraryDelete.id;
+        try {
+          const data = await postSecure(`api/library/delete-${target}`, { group_id: selectedLibraryGroup(), [`${target}_id`]: id, password: el("library-delete-password").value });
+          el("library-delete-dialog").close(); pendingLibraryDelete = null; currentQuestion = null; el("question-detail").classList.add("hidden");
+          setText("library-message", `删除完成，执行前备份：${data.backup_name}`); await searchLibrary();
+        } catch (error) { el("library-delete-password").value = ""; setText("library-delete-message", error?.message || "删除未执行。"); }
+      });
       el("media-preview").addEventListener("click", async () => {
         try { setText("media-message", "读取中..."); await loadMediaPreview(); setText("media-message", "预览已更新。"); }
         catch (error) { setText("media-message", error?.message || "读取失败。"); }

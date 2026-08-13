@@ -783,6 +783,17 @@ class SQLiteStore:
             result["answers"] = [dict(row) for row in answers]
             return result
 
+    async def answer_detail(self, group_id: str, answer_id: int) -> dict[str, Any] | None:
+        async with self._lock:
+            connection = self._require_connection()
+            row = connection.execute(
+                "SELECT a.id AS answer_id, a.question_id, a.weight "
+                "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
+                "WHERE a.id = ? AND q.group_id = ?",
+                (int(answer_id), str(group_id)),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
     async def add_custom_pair(
         self,
         *,

@@ -64,6 +64,22 @@ class NewChatLearningPlugin(star.Star):
                 "NewChatLearning 修改密码",
             ),
             ("media/groups", self.web_media_groups, ["GET"], "NewChatLearning 媒体群列表"),
+            ("library/search", self.web_library_search, ["GET"], "NewChatLearning 词库搜索"),
+            ("library/question", self.web_library_question, ["GET"], "NewChatLearning 问题详情"),
+            ("library/add", self.web_library_add, ["POST"], "NewChatLearning 添加问答"),
+            ("library/weight", self.web_library_weight, ["POST"], "NewChatLearning 修改权重"),
+            (
+                "library/delete-answer",
+                self.web_library_delete_answer,
+                ["POST"],
+                "NewChatLearning 删除答案",
+            ),
+            (
+                "library/delete-question",
+                self.web_library_delete_question,
+                ["POST"],
+                "NewChatLearning 删除问题",
+            ),
             ("media/preview", self.web_media_preview, ["GET"], "NewChatLearning 媒体影响预览"),
             ("media/scan", self.web_media_scan, ["POST"], "NewChatLearning 媒体扫描"),
             (
@@ -723,6 +739,133 @@ class NewChatLearningPlugin(star.Star):
         group_ids = await self.app.store.list_question_group_ids()
         return self._web_json({"status": "ok", "data": {"group_ids": group_ids}})
 
+    async def web_library_search(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(request.query.get("group_id", ""))
+        query = str(request.query.get("query", "")).strip()
+        if group_id is None:
+            return self._web_json({"status": "error", "message": "群号无效。"}, status_code=400)
+        if len(query) > 200:
+            return self._web_json({"status": "error", "message": "搜索关键词不能超过 200 个字符。"}, status_code=400)
+        rows = await self.app.library.search(group_id, query, limit=50)
+        return self._web_json({"status": "ok", "data": {"questions": rows}})
+
+    async def web_library_question(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(request.query.get("group_id", ""))
+        question_id = self._web_positive_int(request.query.get("question_id", ""))
+        if group_id is None or question_id is None:
+            return self._web_json({"status": "error", "message": "问题参数无效。"}, status_code=400)
+        detail = await self.app.library.show(group_id, question_id)
+        if detail is None:
+            return self._web_json({"status": "error", "message": "本群不存在该问题。"}, status_code=404)
+        public_detail = dict(detail)
+        public_detail["preview"] = component_preview(detail["components_json"], 400)
+        public_detail.pop("components_json", None)
+        public_detail["answers"] = [
+            {
+                **answer,
+                "preview": component_preview(answer["components_json"], 400),
+            }
+            for answer in detail["answers"]
+        ]
+        for answer in public_detail["answers"]:
+            answer.pop("components_json", None)
+        return self._web_json({"status": "ok", "data": public_detail})
+
+    async def web_library_add(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        question = str(payload.get("question", "")).strip()
+        answer = str(payload.get("answer", "")).strip()
+        is_regex = payload.get("is_regex", False)
+        if group_id is None or not question or not answer or not isinstance(is_regex, bool):
+            return self._web_json({"status": "error", "message": "问答参数无效。"}, status_code=400)
+        try:
+            result = await self.app.library.add_text_pair(
+                group_id=group_id,
+                actor_id=self._web_actor_id(),
+                question=question,
+                answer=answer,
+                is_regex=is_regex,
+            )
+        except ValueError as exc:
+            messages = {
+                "text_too_long": "问题和答案均不能超过 4000 个字符。",
+                "regex_too_long": "正则表达式不能超过 1000 个字符。",
+                "invalid_regex": "正则表达式无法编译。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(str(exc), "问答内容无效。")},
+                status_code=400,
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_library_weight(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        answer_id = self._web_positive_int(payload.get("answer_id", ""))
+        weight = self._web_positive_int(payload.get("weight", ""), maximum=1_000_000_000)
+        if group_id is None or answer_id is None or weight is None:
+            return self._web_json({"status": "error", "message": "答案 ID 或权重无效。"}, status_code=400)
+        changed = await self.app.library.set_weight(
+            group_id=group_id,
+            actor_id=self._web_actor_id(),
+            answer_id=answer_id,
+            weight=weight,
+        )
+        if not changed:
+            return self._web_json({"status": "error", "message": "本群不存在该答案。"}, status_code=404)
+        return self._web_json({"status": "ok", "data": {"changed": True, "weight": weight}})
+
+    async def web_library_delete_answer(self):
+        return await self._web_library_delete("answer")
+
+    async def web_library_delete_question(self):
+        return await self._web_library_delete("question")
+
+    async def _web_library_delete(self, target: str):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        reauthentication = await self.app.web_auth.reauthenticate(
+            session_token=self._web_session_token(),
+            csrf_token=str(payload.get("csrf_token", "")),
+            password=str(payload.get("password", "")),
+        )
+        if reauthentication != "ok":
+            return self._web_json({"status": "error", "message": "密码确认失败，删除未执行。"}, status_code=403)
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        target_id = self._web_positive_int(payload.get(f"{target}_id", ""))
+        if group_id is None or target_id is None:
+            return self._web_json({"status": "error", "message": "删除参数无效。"}, status_code=400)
+        if target == "answer":
+            detail = await self.app.store.answer_detail(group_id, target_id)
+            if detail is None:
+                return self._web_json({"status": "error", "message": "本群不存在该答案。"}, status_code=404)
+            result = await self.app.library.delete_answer_with_backup(
+                group_id=group_id, actor_id=self._web_actor_id(), answer_id=target_id
+            )
+        else:
+            detail = await self.app.library.show(group_id, target_id)
+            if detail is None:
+                return self._web_json({"status": "error", "message": "本群不存在该问题。"}, status_code=404)
+            result = await self.app.library.delete_question_with_backup(
+                group_id=group_id, actor_id=self._web_actor_id(), question_id=target_id
+            )
+        public_result = dict(result)
+        public_result["backup_name"] = Path(result["backup_path"]).name
+        public_result.pop("backup_path", None)
+        return self._web_json({"status": "ok", "data": public_result})
+
     async def web_media_preview(self):
         if self.app is None:
             return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
@@ -820,9 +963,18 @@ class NewChatLearningPlugin(star.Star):
             )
         return payload, None
 
+    async def _authorized_web_read(self):
+        if self.app is None:
+            return self._web_json(
+                {"status": "error", "message": "插件尚未初始化"}, status_code=503
+            )
+        if not await self.app.web_auth.authorize(self._web_session_token()):
+            return self._web_json({"status": "error", "message": "需要登录"}, status_code=401)
+        return None
+
     async def _web_payload(self) -> dict:
         body = await request.body()
-        if len(body) > 8192:
+        if len(body) > 32768:
             return {}
         try:
             payload = __import__("json").loads(body.decode("utf-8"))
@@ -855,6 +1007,16 @@ class NewChatLearningPlugin(star.Star):
     def _web_group_id(value) -> str | None:
         group_id = str(value).strip()
         return group_id if group_id.isdigit() and 5 <= len(group_id) <= 20 else None
+
+    @staticmethod
+    def _web_positive_int(value, *, maximum: int | None = None) -> int | None:
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        if parsed < 1 or (maximum is not None and parsed > maximum):
+            return None
+        return parsed
 
     @staticmethod
     def _web_json(data, *, status_code: int = 200):

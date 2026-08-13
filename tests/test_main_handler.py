@@ -601,3 +601,119 @@ def test_web_media_cleanup_reauthenticates_and_hides_backup_path(monkeypatch):
     assert response["status"] == "ok"
     assert response["data"]["backup_name"] == "before-cleanup.sqlite3"
     assert "backup_path" not in response["data"]
+
+
+def test_web_library_add_requires_csrf_and_reports_invalid_regex(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert token == "session"
+            assert csrf == "csrf"
+            return True
+
+    class Library:
+        async def add_text_pair(self, **kwargs):
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["is_regex"] is True
+            raise ValueError("invalid_regex")
+
+    async def body():
+        return b'{"group_id":"10001","question":"([","answer":"bad","is_regex":true,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.library = Library()
+
+    response = asyncio.run(plugin.web_library_add())
+
+    assert response["status"] == "error"
+    assert response["message"] == "正则表达式无法编译。"
+
+
+def test_web_library_delete_reauthenticates_is_group_scoped_and_hides_path(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **kwargs):
+            assert kwargs["password"] == "long-enough-password"
+            return "ok"
+
+    class Store:
+        async def answer_detail(self, group_id, answer_id):
+            assert (group_id, answer_id) == ("10001", 17)
+            return {"answer_id": 17, "question_id": 4, "weight": 2}
+
+    class Library:
+        async def delete_answer_with_backup(self, **kwargs):
+            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            assert kwargs == {"group_id": "10001", "actor_id": expected_actor, "answer_id": 17}
+            return {
+                "deleted": True,
+                "orphan_question_removed": False,
+                "backup_path": "C:/private/backups/before-library-delete-answer.sqlite3",
+            }
+
+    async def body():
+        return b'{"group_id":"10001","answer_id":17,"password":"long-enough-password","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.store = Store()
+    plugin.app.library = Library()
+
+    response = asyncio.run(plugin.web_library_delete_answer())
+
+    assert response["status"] == "ok"
+    assert response["data"]["backup_name"] == "before-library-delete-answer.sqlite3"
+    assert "backup_path" not in response["data"]
+
+
+def test_web_library_delete_rejects_cross_group_answer_before_backup(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **_kwargs):
+            return "ok"
+
+    class Store:
+        async def answer_detail(self, group_id, answer_id):
+            assert (group_id, answer_id) == ("10002", 17)
+
+    class Library:
+        async def delete_answer_with_backup(self, **_kwargs):
+            raise AssertionError("cross-group deletion must not create a backup")
+
+    async def body():
+        return b'{"group_id":"10002","answer_id":17,"password":"long-enough-password","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.store = Store()
+    plugin.app.library = Library()
+
+    response = asyncio.run(plugin.web_library_delete_answer())
+
+    assert response["status"] == "error"
+    assert response["message"] == "本群不存在该答案。"

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 import regex
 
@@ -58,8 +60,9 @@ def component_preview(components_json: str, limit: int = 80) -> str:
 
 
 class LibraryService:
-    def __init__(self, store: SQLiteStore) -> None:
+    def __init__(self, store: SQLiteStore, data_dir: Path | None = None) -> None:
         self.store = store
+        self.backup_dir = Path(data_dir) / "backups" if data_dir is not None else None
 
     async def search(self, group_id: str, query: str, limit: int = 10) -> list[dict]:
         return await self.store.search_questions(group_id, query.strip(), limit=limit)
@@ -126,3 +129,34 @@ class LibraryService:
             actor_id=actor_id,
             question_id=question_id,
         )
+
+    async def delete_answer_with_backup(
+        self, *, group_id: str, actor_id: str, answer_id: int
+    ) -> dict:
+        backup_path = await self._backup_before_delete("answer", answer_id)
+        result = await self.delete_answer(
+            group_id=group_id,
+            actor_id=actor_id,
+            answer_id=answer_id,
+        )
+        return {**result, "backup_path": str(backup_path)}
+
+    async def delete_question_with_backup(
+        self, *, group_id: str, actor_id: str, question_id: int
+    ) -> dict:
+        backup_path = await self._backup_before_delete("question", question_id)
+        deleted = await self.delete_question(
+            group_id=group_id,
+            actor_id=actor_id,
+            question_id=question_id,
+        )
+        return {"deleted": deleted, "backup_path": str(backup_path)}
+
+    async def _backup_before_delete(self, target: str, target_id: int) -> Path:
+        if self.backup_dir is None:
+            raise RuntimeError("library_backup_directory_unavailable")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        backup_path = self.backup_dir / (
+            f"before-library-delete-{target}-{timestamp}-{target[0].upper()}{target_id}.sqlite3"
+        )
+        return await self.store.backup_to(backup_path)

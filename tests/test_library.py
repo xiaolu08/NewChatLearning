@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 
 import pytest
 
@@ -129,3 +130,45 @@ def test_invalid_regex_is_rejected_before_database_write(tmp_path):
     statistics = asyncio.run(scenario())
     assert statistics["questions"] == 0
     assert statistics["answers"] == 0
+
+
+def test_library_deletion_creates_integrity_checked_backup(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "library-backup.sqlite3")
+        await store.open()
+        library = LibraryService(store, tmp_path)
+        try:
+            pair = await library.add_text_pair(
+                group_id="10001",
+                actor_id="7",
+                question="需要备份的问题",
+                answer="需要备份的答案",
+            )
+            result = await library.delete_answer_with_backup(
+                group_id="10001",
+                actor_id="webui:test",
+                answer_id=pair["answer_id"],
+            )
+            audits = [
+                row[0]
+                for row in store._require_connection().execute(
+                    "SELECT action FROM audit_log ORDER BY id"
+                )
+            ]
+            return pair, result, audits
+        finally:
+            await store.close()
+
+    pair, result, audits = asyncio.run(scenario())
+    backup_path = __import__("pathlib").Path(result["backup_path"])
+    assert result["deleted"] is True
+    assert backup_path.name.endswith(f"-A{pair['answer_id']}.sqlite3")
+    backup = sqlite3.connect(backup_path)
+    try:
+        assert backup.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        assert backup.execute(
+            "SELECT COUNT(*) FROM answers WHERE id = ?", (pair["answer_id"],)
+        ).fetchone()[0] == 1
+    finally:
+        backup.close()
+    assert audits[-1] == "delete_answer"

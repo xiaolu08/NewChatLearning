@@ -79,6 +79,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 两阶段媒体清理默认只移除失效组件；可显式选择整条答案删除，并在执行前备份
 - 内置管理页面首次本机设密、独立 scrypt 密码、服务端会话、CSRF、登录限流和认证审计
 - WebUI 媒体页支持按群扫描、影响预览、两阶段清理、执行前密码确认和备份结果
+- WebUI 词库页支持按群搜索、问题详情、文本/正则问答添加、答案权重修改和带备份的安全删除
 - 分享、音乐和骰子组件原生重建，闪照按普通图片安全降级
 - SQLite schema v4 媒体来源元数据与健康状态迁移
 - 分群词库默认隔离，以及实时全局联合查询
@@ -95,7 +96,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 
 - 转发、商城表情、XML 等长尾消息的完整重建
 - WebUI 备份浏览、校验与恢复入口
-- 词库管理的媒体问答编辑、批量操作与完整 WebUI 编辑页
+- 词库管理的媒体问答编辑与批量操作
 - WebUI 的群、词库、媒体、TTS、任务、备份与审计完整管理页面
 - TTS 驱动与旧词库迁移工具
 - Windows + AstrBot + NapCat 实机验收

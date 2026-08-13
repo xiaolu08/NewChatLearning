@@ -22,7 +22,7 @@ class RuntimeApplication:
         self.config = ConfigService(astrbot_config)
         self.store = SQLiteStore(self.data_dir / "new_chat_learning.sqlite3")
         self.learning = LearningService(self.store, self.config.learning_interval_seconds)
-        self.library = LibraryService(self.store)
+        self.library = LibraryService(self.store, self.data_dir)
         self.media = MediaService(self.data_dir, self.store, self.config)
         self.migration = MigrationService(self.data_dir, self.store)
         self.reply = ReplyService(self.store, self.config)
