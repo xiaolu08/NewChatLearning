@@ -9,6 +9,7 @@ from new_chat_learning.application.audit import AuditService
 from new_chat_learning.application.backup import BackupService
 from new_chat_learning.application.content_filter import ContentFilterService
 from new_chat_learning.application.contribution_cleanup import ContributionCleanupService
+from new_chat_learning.application.diagnostics import RuntimeDiagnostics
 from new_chat_learning.application.export import LibraryExportService
 from new_chat_learning.application.filter_cleanup import FilterCleanupService
 from new_chat_learning.application.learning import LearningResult, LearningService
@@ -31,6 +32,7 @@ class RuntimeApplication:
         self.data_dir = Path(data_dir)
         self.config = ConfigService(astrbot_config)
         self.store = SQLiteStore(self.data_dir / "new_chat_learning.sqlite3")
+        self.diagnostics = RuntimeDiagnostics()
         self.learning = LearningService(self.store, self.config.learning_interval_seconds)
         self.library = LibraryService(self.store, self.data_dir)
         self.backup = BackupService(self.data_dir, self.store)
@@ -286,3 +288,6 @@ class RuntimeApplication:
             "database": database,
             "statistics": statistics,
         }
+
+    async def diagnostic_snapshot(self) -> dict[str, Any]:
+        return await self.diagnostics.snapshot(self.store, self.config)

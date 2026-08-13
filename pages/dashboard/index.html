@@ -43,8 +43,8 @@
       .error { color: var(--danger); }
       .hidden { display: none !important; }
       .actions { display: flex; gap: 8px; }
-      .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
-      .tabs button { background: transparent; color: var(--muted); border-radius: 0; padding: 10px 14px; }
+      .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; }
+      .tabs button { flex: 0 0 auto; background: transparent; color: var(--muted); border-radius: 0; padding: 10px 14px; }
       .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
       .toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
       .toolbar label { margin: 0 0 5px; }
@@ -114,6 +114,7 @@
         <button id="tab-migration" type="button">迁移</button>
         <button id="tab-tts" type="button">语音</button>
         <button id="tab-backups" type="button">备份</button>
+        <button id="tab-diagnostics" type="button">诊断</button>
         <button id="tab-audit" type="button">审计</button>
       </nav>
       <div id="overview-view">
@@ -322,6 +323,14 @@
           <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新登录。</p></section></div>
         </div>
       </div>
+      <div id="diagnostics-view" class="hidden">
+        <div class="notice">运行计数仅保存在内存中，插件重载后会归零。页面不展示或保存消息正文、用户 QQ、消息 ID 和组件内容。</div>
+        <div class="toolbar">
+          <button id="diagnostics-refresh" class="secondary" type="button">刷新诊断</button>
+          <div id="diagnostics-message" class="result" role="status"></div>
+        </div>
+        <div class="table-scroll"><table><thead><tr><th>群聊 / 模式</th><th>词库</th><th>学习链</th><th>撤回</th><th>回复</th><th>最后活动</th></tr></thead><tbody id="diagnostics-body"></tbody></table></div>
+      </div>
       <div id="audit-view" class="hidden">
         <div class="toolbar">
           <div class="field"><label for="audit-action">动作</label><select id="audit-action"><option value="">全部动作</option></select></div>
@@ -469,8 +478,9 @@
         const migration = view === "migration";
         const tts = view === "tts";
         const backups = view === "backups";
+        const diagnostics = view === "diagnostics";
         const audit = view === "audit";
-        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || migration || tts || backups || audit);
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || migration || tts || backups || diagnostics || audit);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
@@ -479,8 +489,9 @@
         el("migration-view").classList.toggle("hidden", !migration);
         el("tts-view").classList.toggle("hidden", !tts);
         el("backups-view").classList.toggle("hidden", !backups);
+        el("diagnostics-view").classList.toggle("hidden", !diagnostics);
         el("audit-view").classList.toggle("hidden", !audit);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !migration && !tts && !backups && !audit);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !migration && !tts && !backups && !diagnostics && !audit);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
@@ -489,12 +500,14 @@
         el("tab-migration").classList.toggle("active", migration);
         el("tab-tts").classList.toggle("active", tts);
         el("tab-backups").classList.toggle("active", backups);
+        el("tab-diagnostics").classList.toggle("active", diagnostics);
         el("tab-audit").classList.toggle("active", audit);
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
         if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
         if (migration) loadMigrationStatus().catch(error => setText("migration-message", error?.message || "迁移记录读取失败。"));
         if (tts) loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。"));
         if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
+        if (diagnostics) loadDiagnostics().catch(error => setText("diagnostics-message", error?.message || "运行诊断读取失败。"));
         if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。"));
       }
 
@@ -814,6 +827,31 @@
         setText("audit-message", data.has_more ? "已加载本页，可继续读取更早记录。" : "已到达当前筛选的最早记录。");
       }
 
+      async function loadDiagnostics() {
+        const data = payloadData(await bridge.apiGet("api/diagnostics"));
+        const modeNames = { disabled: "停用", learning: "仅学习", reply: "仅回复", learning_reply: "学习并回复", silent: "静默学习" };
+        const reasonNames = { disabled: "停用", cooldown: "冷却", filtered: "过滤", no_match: "无匹配", probability: "概率跳过", exact: "精确", regex: "正则", similarity: "相似" };
+        const rows = (data.groups || []).map(group => {
+          const row = document.createElement("tr");
+          const runtime = group.runtime || {}; const database = group.database || {};
+          const reasons = Object.entries(runtime.reply_reasons || {}).map(([reason, count]) => `${reasonNames[reason] || reason}: ${count}`).join(" · ") || "无决策";
+          const values = [
+            `${group.group_id}\n${modeNames[group.mode] || group.mode}`,
+            `问题 ${database.questions || 0} · 答案 ${database.answers || 0} · 总权重 ${database.answer_weight || 0}\n待固化 ${database.pending_messages || 0} · 活跃回复 ${database.active_replies || 0} · 媒体 ${database.media_assets || 0}`,
+            `规范化 ${runtime.normalized_messages || 0} · 接受 ${runtime.accepted_learning_messages || 0} · 问答 ${runtime.learned_pairs || 0}\n重复 ${runtime.duplicates || 0} · 断链 ${runtime.chain_resets || 0}`,
+            `事件 ${runtime.recalls_received || 0} · 删除待固化 ${runtime.pending_recalls_removed || 0}`,
+            `决策 ${runtime.reply_decisions || 0} · 发送 ${runtime.successful_sends || 0}\n${reasons}`,
+            runtime.last_activity_at ? new Date(runtime.last_activity_at).toLocaleString() : "本次运行暂无",
+          ];
+          for (const value of values) { const cell = document.createElement("td"); cell.textContent = value; cell.style.whiteSpace = "pre-line"; row.append(cell); }
+          return row;
+        });
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6; cell.textContent = "暂无已配置或有词库数据的群聊。"; row.append(cell); rows.push(row); }
+        el("diagnostics-body").replaceChildren(...rows);
+        const startedAt = data.runtime_started_at ? new Date(data.runtime_started_at).toLocaleString() : "未知";
+        setText("diagnostics-message", `运行计数起点：${startedAt}。已刷新 ${(data.groups || []).length} 个群聊。`);
+      }
+
       async function inspectBackup(name, button) {
         const data = payloadData(await bridge.apiGet("api/backups/inspect", { name }));
         selectedBackup = data.restorable ? data : null;
@@ -872,7 +910,14 @@
       el("tab-migration").addEventListener("click", () => showView("migration"));
       el("tab-tts").addEventListener("click", () => showView("tts"));
       el("tab-backups").addEventListener("click", () => showView("backups"));
+      el("tab-diagnostics").addEventListener("click", () => showView("diagnostics"));
       el("tab-audit").addEventListener("click", () => showView("audit"));
+      el("diagnostics-refresh").addEventListener("click", async () => {
+        const button = el("diagnostics-refresh"); button.disabled = true; setText("diagnostics-message", "正在刷新诊断...");
+        try { await loadDiagnostics(); }
+        catch (error) { setText("diagnostics-message", error?.message || "运行诊断刷新失败。"); }
+        finally { button.disabled = false; }
+      });
       el("migration-refresh").addEventListener("click", () => loadMigrationStatus().catch(error => setText("migration-message", error?.message || "迁移记录读取失败。")));
       el("migration-upload").addEventListener("click", async () => {
         const file = el("migration-file").files?.[0];

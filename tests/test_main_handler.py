@@ -192,6 +192,47 @@ def test_successful_local_reply_stops_llm_and_persists_history(monkeypatch):
     assert event.stopped is True
 
 
+def test_message_reply_records_privacy_safe_diagnostics(monkeypatch):
+    main_module = load_main(monkeypatch)
+    candidate = SimpleNamespace(
+        answer_id=1,
+        question_id=2,
+        plain_text="hello",
+        components=({"type": "Plain", "data": {"text": "hello"}},),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(candidate, "exact"))
+
+    class Diagnostics:
+        def __init__(self):
+            self.events = []
+
+        def record(self, group_id, event, *, reason=""):
+            self.events.append((group_id, event, reason))
+
+    class Store:
+        async def register_reply(self, **_kwargs):
+            return None
+
+    plugin.app.diagnostics = Diagnostics()
+    plugin.app.store = Store()
+    event = Event()
+    chain = SimpleNamespace(chain=["hello"])
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+    monkeypatch.setattr(main_module, "normalize_group_message", lambda _event: candidate)
+    monkeypatch.setattr(main_module, "reply_matching_key", lambda *_args: "private-key")
+    monkeypatch.setattr(main_module, "render_message_chain", lambda *_args, **_kwargs: chain)
+    monkeypatch.setattr(main_module, "send_group_message_with_id", _send_without_id)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert plugin.app.diagnostics.events == [
+        ("10001", "normalized_messages", ""),
+        ("10001", "reply_decisions", "exact"),
+        ("10001", "successful_sends", ""),
+    ]
+    assert "private-key" not in repr(plugin.app.diagnostics.events)
+
+
 def test_successful_tts_reply_sends_voice_but_persists_text_history(monkeypatch, tmp_path):
     main_module = load_main(monkeypatch)
     candidate = SimpleNamespace(
@@ -2191,6 +2232,37 @@ def test_web_audit_requires_login_and_passes_bounded_cursor(monkeypatch):
     response = asyncio.run(plugin.web_audit())
     assert response["status"] == "ok"
     assert response["data"]["entries"][0]["id"] == 49
+
+
+def test_web_diagnostics_requires_login_and_returns_snapshot(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, _csrf=None):
+            assert token == "session"
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def diagnostic_snapshot(self):
+            return {
+                "runtime_counters_reset_on_reload": True,
+                "groups": [{"group_id": "10001", "mode": "silent"}],
+            }
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_diagnostics())
+
+    assert response["status"] == "ok"
+    assert response["data"]["groups"] == [{"group_id": "10001", "mode": "silent"}]
 
 
 def test_web_audit_rejects_invalid_page_size(monkeypatch):

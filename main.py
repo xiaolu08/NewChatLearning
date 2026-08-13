@@ -235,6 +235,7 @@ class NewChatLearningPlugin(star.Star):
                 "NewChatLearning 恢复备份",
             ),
             ("audit", self.web_audit, ["GET"], "NewChatLearning 审计日志"),
+            ("diagnostics", self.web_diagnostics, ["GET"], "NewChatLearning 运行诊断"),
         ):
             self.context.register_web_api(
                 f"/{PLUGIN_NAME}/api/{suffix}", handler, methods, description
@@ -256,7 +257,10 @@ class NewChatLearningPlugin(star.Star):
             return
         recall = parse_recall_notice(event)
         if recall is not None:
-            await self.app.recall(recall)
+            result = await self.app.recall(recall)
+            self._record_diagnostic(recall.group_id, "recalls_received")
+            if result.recalled_pending:
+                self._record_diagnostic(recall.group_id, "pending_recalls_removed")
             return
         group_id = event.get_group_id()
         legacy_command = None
@@ -282,8 +286,17 @@ class NewChatLearningPlugin(star.Star):
         message = normalize_group_message(event)
         if message is None:
             return
+        self._record_diagnostic(group_id, "normalized_messages")
         if learning_enabled:
-            await self.app.observe(message)
+            learning = await self.app.observe(message)
+            if getattr(learning, "accepted", False):
+                self._record_diagnostic(group_id, "accepted_learning_messages")
+            if getattr(learning, "learned_pair", False):
+                self._record_diagnostic(group_id, "learned_pairs")
+            if getattr(learning, "duplicate", False):
+                self._record_diagnostic(group_id, "duplicates")
+            if getattr(learning, "chain_reset", False):
+                self._record_diagnostic(group_id, "chain_resets")
         if not reply_enabled:
             return
 
@@ -298,6 +311,7 @@ class NewChatLearningPlugin(star.Star):
             plain_text=message.plain_text,
             mentioned_bot=mentioned_bot,
         )
+        self._record_diagnostic(group_id, "reply_decisions", reason=decision.reason)
         if not decision.should_reply or decision.candidate is None:
             return
         settings = self.app.config.reply_settings()
@@ -323,6 +337,7 @@ class NewChatLearningPlugin(star.Star):
         if decision.wait_seconds > 0:
             await asyncio.sleep(decision.wait_seconds)
         sent_message_id = await send_group_message_with_id(event, chain)
+        self._record_diagnostic(group_id, "successful_sends")
         self.app.reply.mark_sent(group_id)
         if sent_message_id is not None:
             await self.app.store.register_reply(
@@ -344,6 +359,11 @@ class NewChatLearningPlugin(star.Star):
         except Exception:
             self.logger.exception("Failed to persist NewChatLearning local reply.")
         event.stop_event()
+
+    def _record_diagnostic(self, group_id: str, event: str, *, reason: str = "") -> None:
+        diagnostics = getattr(self.app, "diagnostics", None)
+        if diagnostics is not None:
+            diagnostics.record(group_id, event, reason=reason)
 
     async def _handle_fast_delete(
         self,
@@ -2258,6 +2278,14 @@ class NewChatLearningPlugin(star.Star):
                 status_code=400,
             )
         return self._web_json({"status": "ok", "data": result})
+
+    async def web_diagnostics(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {"status": "ok", "data": await self.app.diagnostic_snapshot()}
+        )
 
     async def web_backup_inspect(self):
         error = await self._authorized_web_read()

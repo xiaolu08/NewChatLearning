@@ -228,6 +228,43 @@ class SQLiteStore:
             result["media_bytes"] = int(media_bytes[0])
             return result
 
+    async def diagnostic_group_summaries(self) -> dict[str, dict[str, int]]:
+        async with self._lock:
+            rows = self._require_connection().execute(
+                "WITH group_ids AS ("
+                "SELECT group_id FROM groups UNION SELECT group_id FROM questions "
+                "UNION SELECT group_id FROM pending_messages UNION SELECT group_id FROM reply_records"
+                ") SELECT g.group_id, "
+                "(SELECT COUNT(*) FROM questions q WHERE q.group_id = g.group_id) AS questions, "
+                "(SELECT COUNT(*) FROM answers a JOIN questions q ON q.id = a.question_id "
+                " WHERE q.group_id = g.group_id) AS answers, "
+                "(SELECT COALESCE(SUM(a.weight), 0) FROM answers a "
+                " JOIN questions q ON q.id = a.question_id WHERE q.group_id = g.group_id) "
+                " AS answer_weight, "
+                "(SELECT COUNT(*) FROM pending_messages p WHERE p.group_id = g.group_id) "
+                " AS pending_messages, "
+                "(SELECT COUNT(*) FROM reply_records r WHERE r.group_id = g.group_id "
+                " AND r.state = 'active') AS active_replies, "
+                "(SELECT COUNT(DISTINCT am.content_hash) FROM answer_media am "
+                " JOIN answers a ON a.id = am.answer_id JOIN questions q ON q.id = a.question_id "
+                " WHERE q.group_id = g.group_id AND am.content_hash != '') AS media_assets "
+                "FROM group_ids g ORDER BY g.group_id"
+            ).fetchall()
+            return {
+                str(row["group_id"]): {
+                    key: int(row[key])
+                    for key in (
+                        "questions",
+                        "answers",
+                        "answer_weight",
+                        "pending_messages",
+                        "active_replies",
+                        "media_assets",
+                    )
+                }
+                for row in rows
+            }
+
     async def is_blacklisted(self, *, group_id: str, user_id: str, scope: str) -> bool:
         scope_group = str(group_id) if scope == "group" else ""
         async with self._lock:

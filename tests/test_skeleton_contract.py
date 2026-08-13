@@ -85,6 +85,14 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'confirmed: true' in dashboard
     assert 'id="audit-view"' in dashboard
     assert 'apiGet("api/audit"' in dashboard
+    assert 'id="tab-diagnostics"' in dashboard
+    assert 'id="diagnostics-view"' in dashboard
+    assert 'apiGet("api/diagnostics")' in dashboard
+    diagnostics_refresh = dashboard.split(
+        'el("diagnostics-refresh").addEventListener', 1
+    )[1].split('el("migration-refresh")', 1)[0]
+    assert 'refreshAuth()' not in diagnostics_refresh
+    assert 'location.reload' not in diagnostics_refresh
     assert 'await refreshOverview();' in dashboard
     refresh_handler = dashboard.split(
         'el("overview-refresh").addEventListener', 1

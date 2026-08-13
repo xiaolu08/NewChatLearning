@@ -116,7 +116,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 转发、商城表情、XML 等长尾消息的完整重建
 - 无人值守的定时词库清理（当前只支持管理员主动预览并确认执行，不会后台自动删除）
 - 词库管理的媒体问答编辑与批量操作
-- WebUI 的任务与诊断完整管理页面
+- WebUI 的任务管理页面；诊断页已提供按群只读运行计数与词库汇总
 - 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 云端 TTS，以及 DPAPI 密钥保护与调用额度
 - 旧 `.cl` 格式反向导出工具
 - Windows + AstrBot + NapCat 实机验收
