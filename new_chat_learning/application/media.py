@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import ipaddress
+import json
 import mimetypes
 import socket
 import tempfile
@@ -47,6 +48,101 @@ class MediaService:
             localized.append(updated)
             changed = changed or updated is not component
         return replace(message, components=tuple(localized)) if changed else message
+
+    async def scan_group(self, group_id: str) -> dict[str, object]:
+        scanned_answers = 0
+        scanned_components = 0
+        after_answer_id = 0
+        while True:
+            rows = await self.store.answer_component_batch(
+                group_id=str(group_id), after_answer_id=after_answer_id
+            )
+            if not rows:
+                break
+            for row in rows:
+                answer_id = int(row["answer_id"])
+                references, sendable = await asyncio.to_thread(
+                    self._inspect_answer, str(row["components_json"])
+                )
+                await self.store.replace_answer_media(
+                    answer_id=answer_id,
+                    references=references,
+                    answer_sendable_without_invalid=sendable,
+                )
+                scanned_answers += 1
+                scanned_components += len(references)
+                after_answer_id = answer_id
+        preview = await self.store.media_health_preview(str(group_id))
+        return {
+            "group_id": str(group_id),
+            "scanned_answers": scanned_answers,
+            "scanned_components": scanned_components,
+            "preview": preview,
+        }
+
+    async def health_preview(self, group_id: str) -> dict[str, object]:
+        return await self.store.media_health_preview(str(group_id))
+
+    def _inspect_answer(self, components_json: str) -> tuple[list[dict[str, object]], bool]:
+        try:
+            payload = json.loads(components_json)
+        except (TypeError, ValueError):
+            return [], False
+        components = payload.get("components", []) if isinstance(payload, dict) else []
+        if not isinstance(components, list):
+            return [], False
+        references: list[dict[str, object]] = []
+        has_sendable_non_media = False
+        for index, component in enumerate(components):
+            if not isinstance(component, dict):
+                continue
+            component_type = str(component.get("type", "")).lower()
+            data = component.get("data", {})
+            if not isinstance(data, dict):
+                continue
+            if component_type in MEDIA_TYPES:
+                references.append(self._inspect_media_reference(index, component_type, data))
+            elif _is_sendable_non_media(component_type, data):
+                has_sendable_non_media = True
+        has_healthy_media = any(reference["state"] == "healthy" for reference in references)
+        return references, has_sendable_non_media or has_healthy_media
+
+    def _inspect_media_reference(
+        self, component_index: int, media_type: str, data: dict
+    ) -> dict[str, object]:
+        relative_path = str(data.get("media_path") or "")
+        content_hash = str(data.get("content_hash") or "")
+        source_url = str(data.get("url") or "")
+        base = {
+            "component_index": component_index,
+            "media_type": media_type,
+            "content_hash": content_hash,
+            "relative_path": relative_path,
+            "source_url": source_url,
+        }
+        if relative_path:
+            safe_path = _safe_relative_media_path(self.data_dir, relative_path)
+            if safe_path is None:
+                return {**base, "state": "quarantined", "reason": "path_outside_data_dir"}
+            absolute_path = self.data_dir / safe_path
+            if not absolute_path.is_file():
+                return {**base, "state": "missing", "reason": "local_file_missing"}
+            if content_hash:
+                actual_hash, _size = _hash_file(absolute_path)
+                if actual_hash.lower() != content_hash.lower():
+                    return {**base, "state": "quarantined", "reason": "hash_mismatch"}
+            return {**base, "state": "healthy", "reason": "local_file_ok"}
+        source = source_url or str(data.get("file_") or data.get("file") or data.get("path") or "")
+        if source.startswith(("http://", "https://")):
+            base["source_url"] = source
+            try:
+                _validate_public_url(source)
+            except ValueError as error:
+                return {**base, "state": "expired_remote", "reason": str(error)}
+            return {**base, "state": "healthy", "reason": "remote_url_safe_not_downloaded"}
+        if source.startswith("base64://"):
+            return {**base, "state": "healthy", "reason": "embedded_base64"}
+        return {**base, "state": "unsupported", "reason": "no_sendable_media_source"}
 
     async def _localize_component(
         self,
@@ -263,6 +359,20 @@ def _validate_public_url(url: str) -> None:
         ip = ipaddress.ip_address(address[4][0])
         if not ip.is_global:
             raise ValueError("private media URL is not allowed")
+
+
+def _is_sendable_non_media(component_type: str, data: dict) -> bool:
+    if component_type == "plain":
+        return bool(str(data.get("text", "")))
+    if component_type == "face":
+        return data.get("id") is not None
+    if component_type in {"at", "atall"}:
+        return bool(str(data.get("qq", "")))
+    if component_type == "json":
+        return isinstance(data.get("data"), (dict, str))
+    if component_type == "share":
+        return bool(data.get("url") and data.get("title"))
+    return component_type in {"music", "musicshare", "dice"}
 
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):

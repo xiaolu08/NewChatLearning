@@ -183,7 +183,9 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl delete-question <问题ID> - 删除问题及全部答案\n"
                 "/ncl migrate-scan <文件或目录> - 安全扫描旧 .cl 词库\n"
                 "/ncl migrate-prepare <文件> - 准备旧词库导入\n"
-                "/ncl migrate-apply <导入ID> confirm - 备份并导入当前群"
+                "/ncl migrate-apply <导入ID> confirm - 备份并导入当前群\n"
+                "/ncl media-scan - 扫描并标记本群媒体状态\n"
+                "/ncl media-preview - 预览本群失效媒体影响"
             )
         )
 
@@ -384,6 +386,38 @@ class NewChatLearningPlugin(star.Star):
                 f"跳过答案：{report['skipped_answers']}，"
                 f"未知组件：{report['unknown_components']}\n"
                 f"确认导入当前群：/ncl migrate-apply {report['import_id']} confirm"
+            )
+        )
+
+    @ncl.command("media-scan")
+    async def ncl_media_scan(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        result = await self.app.media.scan_group(event.get_group_id())
+        preview = result["preview"]
+        event.set_result(
+            MessageEventResult().message(
+                "本群媒体健康扫描完成（只标记，不删除）。\n"
+                f"扫描答案：{result['scanned_answers']}，媒体组件：{result['scanned_components']}\n"
+                f"失效组件：{preview['media_components']}，受影响答案：{preview['affected_answers']}，"
+                f"清理后可能为空：{preview['answers_becoming_empty']}"
+            )
+        )
+
+    @ncl.command("media-preview")
+    async def ncl_media_preview(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        preview = await self.app.media.health_preview(event.get_group_id())
+        states = preview.get("states", {})
+        state_text = "，".join(f"{key} {value}" for key, value in states.items()) or "暂无扫描记录"
+        event.set_result(
+            MessageEventResult().message(
+                "本群失效媒体影响预览（不会删除内容）\n"
+                f"状态：{state_text}\n"
+                f"失效组件：{preview['media_components']}，受影响答案：{preview['affected_answers']}，"
+                f"受影响问题：{preview['affected_questions']}，"
+                f"清理后可能为空的答案：{preview['answers_becoming_empty']}"
             )
         )
 

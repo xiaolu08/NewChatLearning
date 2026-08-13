@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import sqlite3
 
 import pytest
@@ -214,3 +215,140 @@ def test_missing_but_already_counted_asset_can_be_restored_at_full_quota(tmp_pat
 
     assert restored.components[0]["data"]["media_path"]
     assert stored.read_bytes() == payload
+
+
+def test_health_scan_marks_missing_media_without_deleting_answer(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "scan.sqlite3")
+        await store.open()
+        service = MediaService(tmp_path / "data", store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        components = {
+            "schema_version": 1,
+            "components": [
+                {
+                    "type": "Image",
+                    "data": {
+                        "media_path": "media/aa/missing.png",
+                        "content_hash": "a" * 64,
+                    },
+                }
+            ],
+        }
+        connection.execute(
+            "INSERT INTO answers(id, question_id, components_json, normalized_key) "
+            "VALUES(10, 1, ?, 'a')",
+            (json.dumps(components),),
+        )
+        connection.commit()
+        try:
+            result = await service.scan_group("10001")
+            answer_count = connection.execute("SELECT COUNT(*) FROM answers").fetchone()[0]
+            state, reason = connection.execute(
+                "SELECT state, reason FROM answer_media WHERE answer_id = 10"
+            ).fetchone()
+        finally:
+            await store.close()
+        return result, answer_count, state, reason
+
+    result, answer_count, state, reason = asyncio.run(scenario())
+
+    assert answer_count == 1
+    assert state == "missing"
+    assert reason == "local_file_missing"
+    assert result["preview"]["answers_becoming_empty"] == 1
+
+
+def test_health_scan_quarantines_path_traversal_and_hash_mismatch(tmp_path):
+    data_dir = tmp_path / "data"
+    valid_file = data_dir / "media" / "ok.bin"
+    valid_file.parent.mkdir(parents=True)
+    valid_file.write_bytes(b"actual")
+    answers = [
+        {"type": "File", "data": {"media_path": "../outside.bin"}},
+        {
+            "type": "Image",
+            "data": {"media_path": "media/ok.bin", "content_hash": "0" * 64},
+        },
+    ]
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "unsafe.sqlite3")
+        await store.open()
+        service = MediaService(data_dir, store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        for answer_id, component in enumerate(answers, 10):
+            payload = json.dumps({"schema_version": 1, "components": [component]})
+            connection.execute(
+                "INSERT INTO answers(id, question_id, components_json, normalized_key) "
+                "VALUES(?, 1, ?, ?)",
+                (answer_id, payload, f"a{answer_id}"),
+            )
+        connection.commit()
+        try:
+            await service.scan_group("10001")
+            return connection.execute(
+                "SELECT state, reason FROM answer_media ORDER BY answer_id"
+            ).fetchall()
+        finally:
+            await store.close()
+
+    rows = asyncio.run(scenario())
+
+    assert [tuple(row) for row in rows] == [
+        ("quarantined", "path_outside_data_dir"),
+        ("quarantined", "hash_mismatch"),
+    ]
+
+
+def test_health_scan_preserves_mixed_answer_and_accepts_safe_legacy_url(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "new_chat_learning.application.media.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("8.8.8.8", 443))],
+    )
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "legacy.sqlite3")
+        await store.open()
+        service = MediaService(tmp_path / "data", store, ConfigService({}))
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO questions(id, group_id, normalized_key, components_json) "
+            "VALUES(1, '10001', 'q', '{}')"
+        )
+        payload = json.dumps(
+            {
+                "schema_version": 1,
+                "components": [
+                    {"type": "Plain", "data": {"text": "still sendable"}},
+                    {"type": "Image", "data": {"url": "https://example.test/old.jpg"}},
+                ],
+            }
+        )
+        connection.execute(
+            "INSERT INTO answers(id, question_id, components_json, normalized_key) "
+            "VALUES(10, 1, ?, 'a')",
+            (payload,),
+        )
+        connection.commit()
+        try:
+            result = await service.scan_group("10001")
+            row = connection.execute(
+                "SELECT state, reason, answer_sendable_without_invalid FROM answer_media"
+            ).fetchone()
+        finally:
+            await store.close()
+        return result, row
+
+    result, row = asyncio.run(scenario())
+
+    assert tuple(row) == ("healthy", "remote_url_safe_not_downloaded", 1)
+    assert result["preview"]["media_components"] == 0

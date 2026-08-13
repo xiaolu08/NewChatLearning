@@ -74,6 +74,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - SQLite schema v3 问题纯文本索引、正则标记与旧库自动回填
 - 图片、闪照、语音、视频和文件的本地持久化、SHA-256 去重与配额保护
 - 媒体使用相对路径保存，本地缺失时回退远程 URL；拒绝私网媒体下载
+- `/ncl media-scan` 对本群答案执行只读媒体健康检查并持久化失效标记
+- `/ncl media-preview` 汇总失效组件、受影响问答及清理后可能为空的答案
 - 分享、音乐和骰子组件原生重建，闪照按普通图片安全降级
 - SQLite schema v4 媒体来源元数据与健康状态迁移
 - 分群词库默认隔离，以及实时全局联合查询
@@ -89,7 +91,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 尚未完成：
 
 - 转发、商城表情、XML 等长尾消息的完整重建
-- 媒体健康扫描、失效标记预览与 WebUI 清理工具
+- 基于扫描标记的 WebUI 媒体清理确认、备份与执行工具
 - 词库管理的媒体问答编辑、批量操作与完整 WebUI 编辑页
 - 完整管理 WebUI 与独立登录安全机制
 - TTS 驱动与旧词库迁移工具

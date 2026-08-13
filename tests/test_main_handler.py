@@ -374,3 +374,32 @@ def test_migrate_apply_targets_current_group_and_reports_backup(monkeypatch):
     assert "合并问题记录 2，合并答案记录 3" in event.result.text
     assert "before-import.sqlite3" in event.result.text
     assert "不会自动开启" in event.result.text
+
+
+def test_media_scan_reports_read_only_impact(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Media:
+        async def scan_group(self, group_id):
+            assert group_id == "10001"
+            return {
+                "scanned_answers": 12,
+                "scanned_components": 5,
+                "preview": {
+                    "media_components": 3,
+                    "affected_answers": 2,
+                    "answers_becoming_empty": 1,
+                },
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.media = Media()
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = "/ncl media-scan"
+
+    asyncio.run(plugin.ncl_media_scan(event))
+
+    assert "只标记，不删除" in event.result.text
+    assert "失效组件：3" in event.result.text
+    assert "清理后可能为空：1" in event.result.text

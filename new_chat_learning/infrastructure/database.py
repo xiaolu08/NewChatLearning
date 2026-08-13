@@ -83,6 +83,21 @@ CREATE TABLE IF NOT EXISTS media_assets (
     checked_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS answer_media (
+    answer_id INTEGER NOT NULL REFERENCES answers(id) ON DELETE CASCADE,
+    component_index INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    content_hash TEXT NOT NULL DEFAULT '',
+    relative_path TEXT NOT NULL DEFAULT '',
+    source_url TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    answer_sendable_without_invalid INTEGER NOT NULL DEFAULT 0
+        CHECK(answer_sendable_without_invalid IN (0, 1)),
+    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(answer_id, component_index)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     actor_id TEXT NOT NULL,
@@ -120,6 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_questions_group ON questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(group_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_media_state ON media_assets(state);
+CREATE INDEX IF NOT EXISTS idx_answer_media_state ON answer_media(state);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_reply_records_recent
 ON reply_records(platform, group_id, state, id DESC);
@@ -179,6 +195,7 @@ class SQLiteStore:
                 "answers",
                 "pending_messages",
                 "media_assets",
+                "answer_media",
                 "audit_log",
                 "reply_records",
                 "legacy_imports",
@@ -451,6 +468,94 @@ class SQLiteStore:
                 (content_hash,),
             ).fetchone()
             return dict(row) if row is not None else None
+
+    async def answer_component_batch(
+        self,
+        *,
+        group_id: str,
+        after_answer_id: int = 0,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT a.id AS answer_id, a.components_json FROM answers AS a "
+                "JOIN questions AS q ON q.id = a.question_id "
+                "WHERE q.group_id = ? AND a.id > ? ORDER BY a.id LIMIT ?",
+                (str(group_id), int(after_answer_id), max(1, min(2000, int(limit)))),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    async def replace_answer_media(
+        self,
+        *,
+        answer_id: int,
+        references: list[dict[str, Any]],
+        answer_sendable_without_invalid: bool,
+    ) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            connection.execute("DELETE FROM answer_media WHERE answer_id = ?", (int(answer_id),))
+            connection.executemany(
+                "INSERT INTO answer_media(answer_id, component_index, media_type, "
+                "content_hash, relative_path, source_url, state, reason, "
+                "answer_sendable_without_invalid, checked_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                [
+                    (
+                        int(answer_id),
+                        int(reference["component_index"]),
+                        str(reference["media_type"]),
+                        str(reference.get("content_hash", "")),
+                        str(reference.get("relative_path", "")),
+                        str(reference.get("source_url", "")),
+                        str(reference["state"]),
+                        str(reference.get("reason", "")),
+                        int(answer_sendable_without_invalid),
+                    )
+                    for reference in references
+                ],
+            )
+            for reference in references:
+                content_hash = str(reference.get("content_hash", ""))
+                if content_hash:
+                    connection.execute(
+                        "UPDATE media_assets SET state = ?, checked_at = CURRENT_TIMESTAMP "
+                        "WHERE content_hash = ? AND relative_path = ?",
+                        (
+                            str(reference["state"]),
+                            content_hash,
+                            str(reference.get("relative_path", "")),
+                        ),
+                    )
+            connection.commit()
+
+    async def media_health_preview(self, group_id: str) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            params = (str(group_id),)
+            summary = connection.execute(
+                "SELECT COUNT(*) AS media_components, "
+                "COUNT(DISTINCT am.answer_id) AS affected_answers, "
+                "COUNT(DISTINCT q.id) AS affected_questions, "
+                "COUNT(DISTINCT q.group_id) AS affected_groups, "
+                "COUNT(DISTINCT CASE WHEN am.answer_sendable_without_invalid = 0 "
+                "THEN am.answer_id END) AS answers_becoming_empty "
+                "FROM answer_media AS am JOIN answers AS a ON a.id = am.answer_id "
+                "JOIN questions AS q ON q.id = a.question_id "
+                "WHERE q.group_id = ? AND am.state != 'healthy'",
+                params,
+            ).fetchone()
+            states = connection.execute(
+                "SELECT am.state, COUNT(*) AS count FROM answer_media AS am "
+                "JOIN answers AS a ON a.id = am.answer_id "
+                "JOIN questions AS q ON q.id = a.question_id "
+                "WHERE q.group_id = ? GROUP BY am.state ORDER BY am.state",
+                params,
+            ).fetchall()
+            result = dict(summary)
+            result["states"] = {str(row["state"]): int(row["count"]) for row in states}
+            return result
 
     async def search_questions(
         self,
@@ -1071,6 +1176,20 @@ class SQLiteStore:
                 "ALTER TABLE media_assets ADD COLUMN source_url TEXT NOT NULL DEFAULT ''"
             )
         connection.execute("UPDATE media_assets SET state = 'healthy' WHERE state = 'available'")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS answer_media ("
+            "answer_id INTEGER NOT NULL REFERENCES answers(id) ON DELETE CASCADE, "
+            "component_index INTEGER NOT NULL, media_type TEXT NOT NULL, "
+            "content_hash TEXT NOT NULL DEFAULT '', relative_path TEXT NOT NULL DEFAULT '', "
+            "source_url TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, "
+            "reason TEXT NOT NULL DEFAULT '', answer_sendable_without_invalid INTEGER NOT NULL "
+            "DEFAULT 0 CHECK(answer_sendable_without_invalid IN (0, 1)), "
+            "checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+            "PRIMARY KEY(answer_id, component_index))"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_answer_media_state ON answer_media(state)"
+        )
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"
         ).fetchall()
