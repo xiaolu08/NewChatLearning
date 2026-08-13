@@ -717,3 +717,105 @@ def test_web_library_delete_rejects_cross_group_answer_before_backup(monkeypatch
 
     assert response["status"] == "error"
     assert response["message"] == "本群不存在该答案。"
+
+
+def test_web_group_settings_update_requires_csrf_and_binds_actor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def update_group_settings(self, **kwargs):
+            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            assert kwargs == {
+                "group_id": "10001",
+                "mode": "silent",
+                "target_user_ids": ["12345", "67890"],
+                "expected_revision": "oldrevision",
+                "actor_id": expected_actor,
+            }
+            return {
+                "group_id": "10001",
+                "mode": "silent",
+                "target_user_ids": ["12345", "67890"],
+                "revision": "newrevision",
+            }
+
+    async def body():
+        return b'{"group_id":"10001","mode":"silent","target_user_ids":["12345","67890","12345"],"revision":"oldrevision","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_group_settings_update())
+
+    assert response["status"] == "ok"
+    assert response["data"]["revision"] == "newrevision"
+
+
+def test_web_group_settings_update_rejects_stale_revision(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Config:
+        revision = "currentrevision"
+
+    class App:
+        web_auth = Auth()
+        config = Config()
+
+        async def update_group_settings(self, **_kwargs):
+            raise ValueError("revision_conflict")
+
+    async def body():
+        return b'{"group_id":"10001","mode":"learning","target_user_ids":[],"revision":"oldrevision","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_group_settings_update())
+
+    assert response["status"] == "error"
+    assert response["data"]["revision"] == "currentrevision"
+
+
+def test_web_group_settings_update_rejects_invalid_target_user(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    async def body():
+        return b'{"group_id":"10001","mode":"learning","target_user_ids":["not-a-qq"],"revision":"revision","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_group_settings_update())
+
+    assert response["status"] == "error"
+    assert response["message"] == "目标用户 QQ 号无效。"

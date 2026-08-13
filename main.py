@@ -64,6 +64,14 @@ class NewChatLearningPlugin(star.Star):
                 "NewChatLearning 修改密码",
             ),
             ("media/groups", self.web_media_groups, ["GET"], "NewChatLearning 媒体群列表"),
+            ("groups", self.web_groups, ["GET"], "NewChatLearning 群聊列表"),
+            ("groups/settings", self.web_group_settings, ["GET"], "NewChatLearning 群聊设置"),
+            (
+                "groups/settings/update",
+                self.web_group_settings_update,
+                ["POST"],
+                "NewChatLearning 保存群聊设置",
+            ),
             ("library/search", self.web_library_search, ["GET"], "NewChatLearning 词库搜索"),
             ("library/question", self.web_library_question, ["GET"], "NewChatLearning 问题详情"),
             ("library/add", self.web_library_add, ["POST"], "NewChatLearning 添加问答"),
@@ -738,6 +746,84 @@ class NewChatLearningPlugin(star.Star):
             return self._web_json({"status": "error", "message": "需要登录"}, status_code=401)
         group_ids = await self.app.store.list_question_group_ids()
         return self._web_json({"status": "ok", "data": {"group_ids": group_ids}})
+
+    async def web_groups(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        stored = await self.app.store.list_question_group_ids()
+        group_ids = sorted(set(stored) | set(self.app.config.configured_group_ids()))
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "group_ids": group_ids,
+                    "revision": self.app.config.revision,
+                },
+            }
+        )
+
+    async def web_group_settings(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(request.query.get("group_id", ""))
+        if group_id is None:
+            return self._web_json({"status": "error", "message": "群号无效。"}, status_code=400)
+        return self._web_json(
+            {"status": "ok", "data": self.app.config.group_settings(group_id)}
+        )
+
+    async def web_group_settings_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        mode = str(payload.get("mode", "")).strip()
+        revision = str(payload.get("revision", "")).strip()
+        raw_targets = payload.get("target_user_ids", [])
+        if group_id is None or not isinstance(raw_targets, list):
+            return self._web_json({"status": "error", "message": "群聊设置无效。"}, status_code=400)
+        targets = []
+        for value in raw_targets:
+            user_id = str(value).strip()
+            if not user_id.isdigit() or not 5 <= len(user_id) <= 20:
+                return self._web_json(
+                    {"status": "error", "message": "目标用户 QQ 号无效。"}, status_code=400
+                )
+            if user_id not in targets:
+                targets.append(user_id)
+        if len(targets) > 100:
+            return self._web_json(
+                {"status": "error", "message": "单群最多配置 100 个定向用户。"},
+                status_code=400,
+            )
+        try:
+            result = await self.app.update_group_settings(
+                group_id=group_id,
+                mode=mode,
+                target_user_ids=targets,
+                expected_revision=revision,
+                actor_id=self._web_actor_id(),
+            )
+        except ValueError as exc:
+            if str(exc) == "revision_conflict":
+                return self._web_json(
+                    {
+                        "status": "error",
+                        "message": "配置已被其他入口修改，请刷新后重试。",
+                        "data": {"revision": self.app.config.revision},
+                    },
+                    status_code=409,
+                )
+            return self._web_json({"status": "error", "message": "群聊模式无效。"}, status_code=400)
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist NewChatLearning group settings.")
+            return self._web_json(
+                {"status": "error", "message": "AstrBot 插件配置保存失败，设置未生效。"},
+                status_code=503,
+            )
+        return self._web_json({"status": "ok", "data": result})
 
     async def web_library_search(self):
         error = await self._authorized_web_read()

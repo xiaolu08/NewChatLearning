@@ -26,6 +26,7 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert schema["storage"]["items"]["media_max_file_mb"]["default"] == 50.0
     assert schema["learning"]["items"]["enabled"]["default"] is False
     assert schema["learning"]["items"]["interval_seconds"]["default"] == 900
+    assert schema["learning"]["items"]["target_users"]["type"] == "template_list"
     assert schema["reply"]["items"]["enabled"]["default"] is False
     assert schema["reply"]["items"]["probability_percent"]["default"] == 50.0
     assert schema["reply"]["items"]["regex_enabled"]["default"] is True
@@ -38,3 +39,4 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
     assert 'id="library"' in dashboard
+    assert 'id="tab-groups"' in dashboard

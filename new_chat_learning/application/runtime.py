@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 from new_chat_learning.web.auth import WebAuthService
+
+logger = logging.getLogger(__name__)
 
 
 class RuntimeApplication:
@@ -41,7 +44,37 @@ class RuntimeApplication:
 
     async def observe(self, message: NormalizedMessage) -> LearningResult:
         localized = await self.media.localize_message(message)
-        return await self.learning.observe(localized)
+        return await self.learning.observe(
+            localized,
+            answer_sender_ids=self.config.learning_target_users_for(message.group_id),
+        )
+
+    async def update_group_settings(
+        self,
+        *,
+        group_id: str,
+        mode: str,
+        target_user_ids: list[str],
+        expected_revision: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        before = self.config.group_settings(group_id)
+        result = await self.config.update_group_settings(
+            group_id=group_id,
+            mode=mode,
+            target_user_ids=target_user_ids,
+            expected_revision=expected_revision,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_group_settings",
+                target=f"group:{group_id}",
+                details={"before": before, "after": result, "source": "webui"},
+            )
+        except Exception:
+            logger.exception("Group settings were saved but audit recording failed.")
+        return result
 
     async def recall(self, notice: RecallNotice) -> LearningResult:
         return await self.learning.recall(notice)

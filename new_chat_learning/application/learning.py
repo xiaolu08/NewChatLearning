@@ -20,8 +20,16 @@ class LearningService:
         self.store = store
         self.interval_seconds = interval_seconds
 
-    async def observe(self, message: NormalizedMessage) -> LearningResult:
-        result = await self.store.observe_message(message, self.interval_seconds)
+    async def observe(
+        self,
+        message: NormalizedMessage,
+        answer_sender_ids: tuple[str, ...] = (),
+    ) -> LearningResult:
+        result = await self.store.observe_message(
+            message,
+            self.interval_seconds,
+            answer_sender_ids=answer_sender_ids,
+        )
         return LearningResult(accepted=not result["duplicate"], **result)
 
     async def recall(self, notice: RecallNotice) -> LearningResult:

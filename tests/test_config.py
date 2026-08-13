@@ -1,3 +1,7 @@
+import asyncio
+
+import pytest
+
 from new_chat_learning.infrastructure.config import ConfigService
 
 
@@ -134,3 +138,98 @@ def test_multiple_tags_create_separate_weighted_scopes_and_accept_legacy_dict():
         ("10001", "10002"),
         ("10001", "10003"),
     )
+
+
+def test_target_users_are_group_scoped_and_normalized():
+    service = ConfigService(
+        {
+            "learning": {
+                "enabled": True,
+                "group_ids": ["10001"],
+                "target_users": [
+                    {"group_id": "10001", "user_ids": ["7", "7", "bad", "8"]},
+                    {"group_id": "10002", "user_ids": ["9"]},
+                ],
+            }
+        }
+    )
+
+    assert service.learning_target_users_for("10001") == ("7", "8")
+    assert service.learning_target_users_for("10002") == ("9",)
+    assert service.group_settings("10001")["mode"] == "learning"
+
+
+def test_group_settings_save_to_astrbot_config_and_reject_stale_revision():
+    class Source(dict):
+        saves = 0
+
+        async def save_config_async(self):
+            self.saves += 1
+            return True
+
+    source = Source()
+    service = ConfigService(source)
+    revision = service.revision
+
+    result = asyncio.run(
+        service.update_group_settings(
+            group_id="10001",
+            mode="silent",
+            target_user_ids=["12345", "67890"],
+            expected_revision=revision,
+        )
+    )
+
+    assert result["mode"] == "silent"
+    assert result["target_user_ids"] == ["12345", "67890"]
+    assert source["learning"]["group_ids"] == ["10001"]
+    assert source["reply"]["group_ids"] == []
+    assert source["reply"]["silent_group_ids"] == ["10001"]
+    assert source.saves == 1
+    with pytest.raises(ValueError, match="revision_conflict"):
+        asyncio.run(
+            service.update_group_settings(
+                group_id="10001",
+                mode="disabled",
+                target_user_ids=[],
+                expected_revision=revision,
+            )
+        )
+
+
+def test_group_settings_roll_back_when_astrbot_save_fails():
+    class Source(dict):
+        async def save_config_async(self):
+            raise OSError("disk full")
+
+    source = Source({"learning": {"enabled": False, "group_ids": []}})
+    service = ConfigService(source)
+
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_group_settings(
+                group_id="10001",
+                mode="learning",
+                target_user_ids=[],
+                expected_revision=service.revision,
+            )
+        )
+
+    assert source == {"learning": {"enabled": False, "group_ids": []}}
+
+
+def test_group_settings_refuse_memory_only_configuration():
+    source = {"learning": {"enabled": False, "group_ids": []}}
+    service = ConfigService(source)
+
+    with pytest.raises(RuntimeError, match="config_persistence_unavailable"):
+        asyncio.run(
+            service.update_group_settings(
+                group_id="10001",
+                mode="learning",
+                target_user_ids=[],
+                expected_revision=service.revision,
+            )
+        )
+
+    assert source == {"learning": {"enabled": False, "group_ids": []}}

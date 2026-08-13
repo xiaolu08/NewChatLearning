@@ -1050,7 +1050,11 @@ class SQLiteStore:
             connection.commit()
 
     async def observe_message(
-        self, message: NormalizedMessage, interval_seconds: int
+        self,
+        message: NormalizedMessage,
+        interval_seconds: int,
+        *,
+        answer_sender_ids: tuple[str, ...] = (),
     ) -> dict[str, bool]:
         async with self._lock:
             connection = self._require_connection()
@@ -1075,7 +1079,8 @@ class SQLiteStore:
                 chain_reset = False
                 if previous is not None:
                     elapsed = message.timestamp - int(previous["timestamp"])
-                    if 0 <= elapsed <= interval_seconds:
+                    sender_allowed = not answer_sender_ids or message.sender_id in answer_sender_ids
+                    if 0 <= elapsed <= interval_seconds and sender_allowed:
                         question_id = self._upsert_question(
                             connection,
                             message.group_id,
@@ -1095,7 +1100,7 @@ class SQLiteStore:
                             ),
                         )
                         learned_pair = True
-                    else:
+                    elif not (0 <= elapsed <= interval_seconds):
                         self._upsert_question(
                             connection,
                             message.group_id,

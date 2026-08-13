@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from copy import deepcopy
@@ -10,6 +11,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "learning": {
         "enabled": False,
         "group_ids": [],
+        "target_users": [],
         "interval_seconds": 900,
     },
     "reply": {
@@ -51,6 +53,7 @@ class ConfigService:
 
     def __init__(self, source: dict[str, Any] | None) -> None:
         self._source = source if source is not None else {}
+        self._lock = asyncio.Lock()
 
     def snapshot(self) -> dict[str, Any]:
         merged = deepcopy(DEFAULT_CONFIG)
@@ -77,6 +80,25 @@ class ConfigService:
             return False
         group_ids = {str(item).strip() for item in learning.get("group_ids", [])}
         return str(group_id) in group_ids
+
+    def learning_target_users_for(self, group_id: str) -> tuple[str, ...]:
+        learning = self.snapshot()["learning"]
+        for entry in learning.get("target_users", []):
+            if not isinstance(entry, dict) or str(entry.get("group_id", "")).strip() != str(
+                group_id
+            ):
+                continue
+            user_ids = entry.get("user_ids", [])
+            if not isinstance(user_ids, list):
+                return ()
+            return tuple(
+                dict.fromkeys(
+                    str(user_id).strip()
+                    for user_id in user_ids
+                    if str(user_id).strip().isdigit()
+                )
+            )
+        return ()
 
     @property
     def learning_interval_seconds(self) -> int:
@@ -191,6 +213,134 @@ class ConfigService:
             "tagged_groups": len(group_tags),
             "tags": sorted({tag for tags in group_tags.values() for tag in tags}),
         }
+
+    def configured_group_ids(self) -> list[str]:
+        snapshot = self.snapshot()
+        values = {
+            str(group_id).strip()
+            for section, key in (
+                ("learning", "group_ids"),
+                ("reply", "group_ids"),
+                ("reply", "silent_group_ids"),
+            )
+            for group_id in snapshot[section].get(key, [])
+            if str(group_id).strip()
+        }
+        values.update(
+            str(entry.get("group_id", "")).strip()
+            for entry in snapshot["learning"].get("target_users", [])
+            if isinstance(entry, dict) and str(entry.get("group_id", "")).strip()
+        )
+        return sorted(values)
+
+    def group_settings(self, group_id: str) -> dict[str, Any]:
+        snapshot = self.snapshot()
+        group_id = str(group_id)
+        learning_groups = {str(item).strip() for item in snapshot["learning"]["group_ids"]}
+        reply_groups = {str(item).strip() for item in snapshot["reply"]["group_ids"]}
+        silent_groups = {
+            str(item).strip() for item in snapshot["reply"]["silent_group_ids"]
+        }
+        learning = bool(snapshot["learning"]["enabled"]) and group_id in learning_groups
+        reply = bool(snapshot["reply"]["enabled"]) and group_id in reply_groups
+        if group_id in silent_groups and learning:
+            mode = "silent"
+        elif learning and reply:
+            mode = "learning_reply"
+        elif learning:
+            mode = "learning"
+        elif reply:
+            mode = "reply"
+        else:
+            mode = "disabled"
+        return {
+            "group_id": group_id,
+            "mode": mode,
+            "learning_enabled": learning,
+            "reply_enabled": reply and group_id not in silent_groups,
+            "silent": group_id in silent_groups,
+            "target_user_ids": list(self.learning_target_users_for(group_id)),
+            "revision": self.revision,
+        }
+
+    async def update_group_settings(
+        self,
+        *,
+        group_id: str,
+        mode: str,
+        target_user_ids: list[str],
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        if mode not in {"disabled", "learning", "reply", "learning_reply", "silent"}:
+            raise ValueError("invalid_mode")
+        if mode not in {"learning", "learning_reply", "silent"}:
+            target_user_ids = []
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            original = deepcopy(self._source)
+            try:
+                learning = self._source.setdefault("learning", {})
+                reply = self._source.setdefault("reply", {})
+                learning_groups = self._replace_group_membership(
+                    learning.get("group_ids", []),
+                    group_id,
+                    mode in {"learning", "learning_reply", "silent"},
+                )
+                reply_groups = self._replace_group_membership(
+                    reply.get("group_ids", []),
+                    group_id,
+                    mode in {"reply", "learning_reply"},
+                )
+                silent_groups = self._replace_group_membership(
+                    reply.get("silent_group_ids", []), group_id, mode == "silent"
+                )
+                learning["group_ids"] = learning_groups
+                reply["group_ids"] = reply_groups
+                reply["silent_group_ids"] = silent_groups
+                if mode in {"learning", "learning_reply", "silent"}:
+                    learning["enabled"] = True
+                if mode in {"reply", "learning_reply"}:
+                    reply["enabled"] = True
+                targets = [
+                    entry
+                    for entry in learning.get("target_users", [])
+                    if isinstance(entry, dict)
+                    and str(entry.get("group_id", "")).strip() != group_id
+                ]
+                if target_user_ids:
+                    targets.append({"group_id": group_id, "user_ids": target_user_ids})
+                learning["target_users"] = targets
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.group_settings(group_id)
+
+    async def _persist_source(self) -> None:
+        save_async = getattr(self._source, "save_config_async", None)
+        if callable(save_async):
+            committed = await save_async()
+            if committed is False:
+                raise RuntimeError("config_save_superseded")
+            return
+        save = getattr(self._source, "save_config", None)
+        if callable(save):
+            await asyncio.to_thread(save)
+            return
+        raise RuntimeError("config_persistence_unavailable")
+
+    @staticmethod
+    def _replace_group_membership(values: Any, group_id: str, enabled: bool) -> list[str]:
+        result = [
+            str(value).strip()
+            for value in values
+            if str(value).strip() and str(value).strip() != group_id
+        ] if isinstance(values, list) else []
+        if enabled:
+            result.append(group_id)
+        return list(dict.fromkeys(result))
 
     @staticmethod
     def _normalized_group_tags(value: Any) -> dict[str, tuple[str, ...]]:

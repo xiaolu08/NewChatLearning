@@ -64,10 +64,15 @@
       .answer-row input { min-height: 36px; }
       .inline-check { display: flex; align-items: center; gap: 8px; color: var(--text); margin: 14px 0 5px; }
       .inline-check input { width: auto; min-height: auto; }
+      .mode-options { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); border: 1px solid var(--line); background: var(--panel); }
+      .mode-options label { margin: 0; padding: 12px; border-right: 1px solid var(--line); color: var(--text); cursor: pointer; }
+      .mode-options label:last-child { border-right: 0; }
+      .mode-options input { width: auto; min-height: auto; margin-right: 6px; }
+      .settings-band { border-top: 1px solid var(--line); padding-top: 18px; }
       dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 22px; }
       dialog::backdrop { background: rgb(0 0 0 / .45); }
       dialog .actions { justify-content: flex-end; margin-top: 18px; }
-      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
+      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } .mode-options { grid-template-columns: minmax(0, 1fr); } .mode-options label { border-right: 0; border-bottom: 1px solid var(--line); } .mode-options label:last-child { border-bottom: 0; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
     </style>
   </head>
   <body>
@@ -91,6 +96,7 @@
       <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
       <nav class="tabs" aria-label="管理模块">
         <button id="tab-overview" class="active" type="button">概览</button>
+        <button id="tab-groups" type="button">群聊</button>
         <button id="tab-library" type="button">词库</button>
         <button id="tab-media" type="button">媒体</button>
       </nav>
@@ -110,6 +116,27 @@
         <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
         <tr><th>数据目录</th><td id="data-dir">-</td></tr>
       </tbody></table></section></div>
+      <div id="groups-view" class="hidden">
+        <div class="toolbar">
+          <div class="field"><label for="settings-group">群聊</label><input id="settings-group" list="settings-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="settings-groups"></datalist></div>
+          <button id="group-load" class="secondary" type="button">读取设置</button>
+        </div>
+        <section class="settings-band">
+          <h2>运行模式</h2>
+          <div class="mode-options" role="radiogroup" aria-label="群聊运行模式">
+            <label><input type="radio" name="group-mode" value="disabled">停用</label>
+            <label><input type="radio" name="group-mode" value="learning">仅学习</label>
+            <label><input type="radio" name="group-mode" value="reply">仅回复</label>
+            <label><input type="radio" name="group-mode" value="learning_reply">学习并回复</label>
+            <label><input type="radio" name="group-mode" value="silent">静默学习</label>
+          </div>
+          <label for="target-users">定向学习用户</label>
+          <textarea id="target-users" placeholder="每行填写一个目标用户 QQ 号"></textarea>
+          <p id="target-hint">留空时学习群内所有合格成员；仅学习、学习并回复或静默学习模式可使用定向用户。</p>
+          <div class="toolbar" style="margin-top:16px"><button id="group-save" type="button">保存群聊设置</button></div>
+          <div id="group-message" class="result" role="status"></div>
+        </section>
+      </div>
       <div id="library-view" class="hidden">
         <div class="toolbar">
           <div class="field"><label for="library-group">群聊</label><input id="library-group" list="library-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="library-groups"></datalist></div>
@@ -181,6 +208,7 @@
       let cleanupPlan = null;
       let currentQuestion = null;
       let pendingLibraryDelete = null;
+      let groupRevision = null;
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
       const setText = (id, value) => { el(id).textContent = String(value); };
@@ -226,24 +254,50 @@
       function showView(view) {
         const media = view === "media";
         const library = view === "library";
-        el("overview-view").classList.toggle("hidden", media || library);
+        const groups = view === "groups";
+        el("overview-view").classList.toggle("hidden", media || library || groups);
+        el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
-        el("tab-overview").classList.toggle("active", !media && !library);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups);
+        el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
       }
 
       async function loadGroups() {
         try {
-          const data = payloadData(await bridge.apiGet("api/media/groups"));
-          for (const prefix of ["media", "library"]) {
+          const data = payloadData(await bridge.apiGet("api/groups"));
+          groupRevision = data.revision;
+          for (const prefix of ["media", "library", "settings"]) {
             el(`${prefix}-groups`).replaceChildren(...(data.group_ids || []).map(groupId => {
               const option = document.createElement("option"); option.value = groupId; return option;
             }));
             if (!el(`${prefix}-group`).value && data.group_ids?.length) el(`${prefix}-group`).value = data.group_ids[0];
           }
         } catch (_) {}
+      }
+
+      function selectedSettingsGroup() {
+        const groupId = el("settings-group").value.trim();
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
+        return groupId;
+      }
+
+      async function loadGroupSettings() {
+        const data = payloadData(await bridge.apiGet("api/groups/settings", { group_id: selectedSettingsGroup() }));
+        groupRevision = data.revision;
+        const mode = document.querySelector(`input[name="group-mode"][value="${data.mode}"]`);
+        if (mode) mode.checked = true;
+        el("target-users").value = (data.target_user_ids || []).join("\n");
+        updateTargetState(); setText("group-message", `已读取群 ${data.group_id} 的设置。`);
+      }
+
+      function updateTargetState() {
+        const mode = document.querySelector('input[name="group-mode"]:checked')?.value || "disabled";
+        const enabled = ["learning", "learning_reply", "silent"].includes(mode);
+        el("target-users").disabled = !enabled;
+        el("target-hint").textContent = enabled ? "留空时学习群内所有合格成员；填写后只固化这些用户紧随上一条消息给出的答案。" : "当前模式不学习消息，定向用户设置会被清空。";
       }
 
       function selectedGroup() {
@@ -340,8 +394,20 @@
         finally { authState = null; await refreshAuth(); }
       });
       el("tab-overview").addEventListener("click", () => showView("overview"));
+      el("tab-groups").addEventListener("click", () => showView("groups"));
       el("tab-library").addEventListener("click", () => showView("library"));
       el("tab-media").addEventListener("click", () => showView("media"));
+      document.querySelectorAll('input[name="group-mode"]').forEach(input => input.addEventListener("change", updateTargetState));
+      el("group-load").addEventListener("click", async () => { try { await loadGroupSettings(); } catch (error) { setText("group-message", error?.message || "设置读取失败。"); } });
+      el("group-save").addEventListener("click", async () => {
+        try {
+          const mode = document.querySelector('input[name="group-mode"]:checked')?.value;
+          if (!mode) throw new Error("请选择群聊运行模式。");
+          const targets = el("target-users").value.split(/\s+/).map(value => value.trim()).filter(Boolean);
+          const data = await postSecure("api/groups/settings/update", { group_id: selectedSettingsGroup(), mode, target_user_ids: targets, revision: groupRevision || "" });
+          groupRevision = data.revision; setText("group-message", "群聊设置已保存到 AstrBot 插件配置。"); await loadGroups();
+        } catch (error) { setText("group-message", error?.message || "设置保存失败。"); }
+      });
       el("library-search").addEventListener("click", async () => { try { await searchLibrary(); } catch (error) { setText("library-message", error?.message || "搜索失败。"); } });
       el("library-query").addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); el("library-search").click(); } });
       el("library-add").addEventListener("click", async () => {

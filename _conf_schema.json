@@ -74,6 +74,28 @@
         "hint": "每项填写一个 QQ 群号。留空时不学习任何群。",
         "default": []
       },
+      "target_users": {
+        "description": "定向学习用户",
+        "type": "template_list",
+        "hint": "配置后，该群只有这些用户紧随其他群消息发言时才会固化为答案；其他消息仍可作为下一条问题。",
+        "templates": {
+          "target_users": {
+            "name": "群聊定向用户",
+            "display_item": "group_id",
+            "hide_hint_in_list": true,
+            "items": {
+              "group_id": {"description": "群号", "type": "string", "default": ""},
+              "user_ids": {
+                "description": "目标用户 QQ 号",
+                "type": "list",
+                "items": {"type": "string"},
+                "default": []
+              }
+            }
+          }
+        },
+        "default": []
+      },
       "interval_seconds": {
         "description": "问答链最大间隔（秒）",
         "type": "int",

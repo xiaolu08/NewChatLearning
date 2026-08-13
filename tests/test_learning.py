@@ -78,3 +78,32 @@ def test_interval_breaks_chain_and_recall_removes_pending(tmp_path):
     assert stats["questions"] == 1
     assert stats["answers"] == 0
     assert stats["pending_messages"] == 0
+
+
+def test_targeted_learning_only_finalizes_target_user_answers(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "targeted.sqlite3")
+        await store.open()
+        learning = LearningService(store, interval_seconds=900)
+        try:
+            await learning.observe(message("m1", 1000, "最初问题", sender="6"), ("42",))
+            ignored = await learning.observe(
+                message("m2", 1001, "非目标用户发言", sender="7"), ("42",)
+            )
+            learned = await learning.observe(
+                message("m3", 1002, "目标用户答案", sender="42"), ("42",)
+            )
+            detail = await store.search_questions("10001", "非目标用户发言")
+            absent = await store.search_questions("10001", "最初问题")
+            return ignored, learned, detail, absent
+        finally:
+            await store.close()
+
+    ignored, learned, detail, absent = asyncio.run(scenario())
+
+    assert ignored.learned_pair is False
+    assert ignored.chain_reset is False
+    assert learned.learned_pair is True
+    assert len(detail) == 1
+    assert detail[0]["answer_count"] == 1
+    assert absent == []
