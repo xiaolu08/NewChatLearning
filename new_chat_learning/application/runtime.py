@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from new_chat_learning.application.audit import AuditService
 from new_chat_learning.application.backup import BackupService
 from new_chat_learning.application.content_filter import ContentFilterService
 from new_chat_learning.application.contribution_cleanup import ContributionCleanupService
@@ -31,6 +32,7 @@ class RuntimeApplication:
         self.learning = LearningService(self.store, self.config.learning_interval_seconds)
         self.library = LibraryService(self.store, self.data_dir)
         self.backup = BackupService(self.data_dir, self.store)
+        self.audit = AuditService(self.store)
         self.media = MediaService(self.data_dir, self.store, self.config)
         self.migration = MigrationService(self.data_dir, self.store)
         self.content_filter = ContentFilterService(self.config)

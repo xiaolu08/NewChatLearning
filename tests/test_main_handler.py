@@ -1239,6 +1239,91 @@ def test_web_backups_requires_login_and_returns_safe_metadata(monkeypatch):
     assert "path" not in response["data"]["backups"][0]
 
 
+def test_web_audit_requires_login_and_passes_bounded_cursor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, _csrf=None):
+            assert token == "session"
+            return True
+
+    class Audit:
+        async def list_entries(self, **kwargs):
+            assert kwargs == {
+                "action": "delete_answer",
+                "before_id": 50,
+                "limit": 25,
+            }
+            return {
+                "entries": [{"id": 49, "action": "delete_answer"}],
+                "has_more": False,
+                "next_before_id": None,
+                "actions": [],
+            }
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(
+            cookies={"ncl_admin_session": "session"},
+            query={"action": "delete_answer", "before_id": "50", "limit": "25"},
+        ),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.audit = Audit()
+
+    response = asyncio.run(plugin.web_audit())
+    assert response["status"] == "ok"
+    assert response["data"]["entries"][0]["id"] == 49
+
+
+def test_web_audit_rejects_invalid_page_size(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf=None):
+            return True
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(
+            cookies={"ncl_admin_session": "session"},
+            query={"action": "", "before_id": "", "limit": "1000"},
+        ),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_audit())
+    assert response["status"] == "error"
+    assert response["message"] == "分页大小必须在 1 到 100 之间。"
+
+
+def test_web_audit_rejects_invalid_cursor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf=None):
+            return True
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(
+            cookies={"ncl_admin_session": "session"},
+            query={"action": "", "before_id": "not-an-id", "limit": "50"},
+        ),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_audit())
+    assert response["status"] == "error"
+    assert response["message"] == "审计分页游标无效。"
+
+
 def test_web_backup_inspect_rejects_invalid_name(monkeypatch):
     main_module = load_main(monkeypatch)
 

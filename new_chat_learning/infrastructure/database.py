@@ -368,6 +368,46 @@ class SQLiteStore:
             )
             connection.commit()
 
+    async def audit_entries(
+        self,
+        *,
+        action: str = "",
+        before_id: int | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            clauses: list[str] = []
+            parameters: list[Any] = []
+            if action:
+                clauses.append("action = ?")
+                parameters.append(str(action))
+            if before_id is not None:
+                clauses.append("id < ?")
+                parameters.append(int(before_id))
+            where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            page_size = max(1, min(100, int(limit)))
+            rows = connection.execute(
+                "SELECT id, actor_id, action, target, details_json, created_at "
+                f"FROM audit_log {where} ORDER BY id DESC LIMIT ?",
+                (*parameters, page_size + 1),
+            ).fetchall()
+            has_more = len(rows) > page_size
+            rows = rows[:page_size]
+            actions = connection.execute(
+                "SELECT action, COUNT(*) AS count FROM audit_log "
+                "GROUP BY action ORDER BY action"
+            ).fetchall()
+            return {
+                "entries": [dict(row) for row in rows],
+                "has_more": has_more,
+                "next_before_id": int(rows[-1]["id"]) if has_more and rows else None,
+                "actions": [
+                    {"action": str(row["action"]), "count": int(row["count"])}
+                    for row in actions
+                ],
+            }
+
     async def import_legacy_jsonl(
         self,
         *,

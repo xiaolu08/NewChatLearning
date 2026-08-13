@@ -41,6 +41,9 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'id="library"' in dashboard
     assert 'id="tab-groups"' in dashboard
     assert 'id="overview-refresh"' in dashboard
+    assert 'id="tab-audit"' in dashboard
+    assert 'id="audit-view"' in dashboard
+    assert 'apiGet("api/audit"' in dashboard
     assert 'await refreshOverview();' in dashboard
     refresh_handler = dashboard.split(
         'el("overview-refresh").addEventListener', 1

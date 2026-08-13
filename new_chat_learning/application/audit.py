@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import ipaddress
+import json
+import re
+from typing import Any
+
+from new_chat_learning.infrastructure.database import SQLiteStore
+
+ACTION_NAMES = {
+    "add_custom_pair": "添加自定义问答",
+    "blacklist_block": "人工封禁",
+    "blacklist_unblock": "解除封禁",
+    "cleanup_filtered_answers": "过滤词库清理",
+    "cleanup_invalid_media": "失效媒体清理",
+    "delete_answer": "删除答案",
+    "delete_member_contributions": "删除成员贡献",
+    "delete_question": "删除问题",
+    "fast_delete_answer": "快速删除答案",
+    "import_legacy_library": "导入旧词库",
+    "restore_database_backup": "恢复数据库备份",
+    "set_answer_weight": "修改答案权重",
+    "update_filter_settings": "更新过滤设置",
+    "update_group_settings": "更新群聊设置",
+    "webui_login": "WebUI 登录",
+    "webui_logout": "WebUI 退出",
+    "webui_password_change": "修改 WebUI 密码",
+    "webui_password_setup": "设置 WebUI 密码",
+    "webui_reauthentication": "危险操作再认证",
+}
+
+SAFE_DETAIL_KEYS = {
+    "affected_questions",
+    "answer_count",
+    "backup_name",
+    "blocked",
+    "config_revision",
+    "created",
+    "deleted_answers",
+    "group_id",
+    "hit_count",
+    "import_id",
+    "is_regex",
+    "manual",
+    "merged_answers",
+    "new_weight",
+    "old_weight",
+    "orphan_question_removed",
+    "orphan_questions",
+    "plan_id",
+    "question_count",
+    "question_id",
+    "reduced_answers",
+    "removed_components",
+    "removed_contributions",
+    "removed_pending_messages",
+    "result",
+    "rule_type_counts",
+    "safety_backup_name",
+    "scope",
+    "source",
+    "source_name",
+    "updated_answers",
+    "weight",
+}
+
+
+class AuditService:
+    def __init__(self, store: SQLiteStore) -> None:
+        self.store = store
+
+    async def list_entries(
+        self, *, action: str = "", before_id: int | None = None, limit: int = 50
+    ) -> dict[str, Any]:
+        action = str(action).strip()
+        if action and not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", action):
+            raise ValueError("invalid_audit_action")
+        page = await self.store.audit_entries(
+            action=action,
+            before_id=before_id,
+            limit=limit,
+        )
+        return {
+            **page,
+            "entries": [self._public_entry(entry) for entry in page["entries"]],
+            "actions": [
+                {
+                    **entry,
+                    "label": ACTION_NAMES.get(entry["action"], entry["action"]),
+                }
+                for entry in page["actions"]
+            ],
+        }
+
+    @staticmethod
+    def _public_entry(entry: dict[str, Any]) -> dict[str, Any]:
+        action = str(entry["action"])
+        try:
+            details = json.loads(str(entry.get("details_json", "{}")))
+        except (TypeError, ValueError):
+            details = {}
+        safe_details = {
+            key: _safe_value(value)
+            for key, value in details.items()
+            if key in SAFE_DETAIL_KEYS and _safe_value(value) is not None
+        } if isinstance(details, dict) else {}
+        return {
+            "id": int(entry["id"]),
+            "action": action,
+            "action_label": ACTION_NAMES.get(action, action),
+            "actor": _public_actor(str(entry.get("actor_id", ""))),
+            "target": _public_target(str(entry.get("target", ""))),
+            "details": safe_details,
+            "created_at": str(entry["created_at"]),
+        }
+
+
+def _safe_value(value: Any) -> Any | None:
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, int | float):
+        return value
+    if isinstance(value, str):
+        if len(value) > 160 or "/" in value or "\\" in value or value.startswith("file:"):
+            return None
+        return value
+    if isinstance(value, dict) and len(value) <= 20:
+        result = {}
+        for key, item in value.items():
+            safe = _safe_value(item)
+            if re.fullmatch(r"[a-zA-Z0-9_:-]{1,64}", str(key)) and safe is not None:
+                result[str(key)] = safe
+        return result
+    return None
+
+
+def _public_actor(actor: str) -> str:
+    if actor.startswith("webui:") or actor == "session":
+        return "WebUI 会话"
+    try:
+        ipaddress.ip_address(actor)
+    except ValueError:
+        return actor[:80] if actor else "未知"
+    return "客户端地址已隐藏"
+
+
+def _public_target(target: str) -> str:
+    if len(target) > 120 or "/" in target or "\\" in target or target.startswith("file:"):
+        return "已隐藏"
+    return target or "-"

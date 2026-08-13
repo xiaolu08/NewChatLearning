@@ -106,6 +106,7 @@
         <button id="tab-filters" type="button">过滤</button>
         <button id="tab-media" type="button">媒体</button>
         <button id="tab-backups" type="button">备份</button>
+        <button id="tab-audit" type="button">审计</button>
       </nav>
       <div id="overview-view">
       <div class="toolbar">
@@ -239,6 +240,15 @@
           <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新登录。</p></section></div>
         </div>
       </div>
+      <div id="audit-view" class="hidden">
+        <div class="toolbar">
+          <div class="field"><label for="audit-action">动作</label><select id="audit-action"><option value="">全部动作</option></select></div>
+          <button id="audit-refresh" class="secondary" type="button">刷新日志</button>
+        </div>
+        <div class="table-scroll"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标</th><th>摘要</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+        <div class="toolbar" style="margin-top:16px"><button id="audit-more" class="secondary" type="button">加载更早记录</button></div>
+        <div id="audit-message" class="result" role="status"></div>
+      </div>
     </main>
     <dialog id="reauth-dialog">
       <form id="reauth-form">
@@ -301,6 +311,7 @@
       let filterCleanupPlan = null;
       let selectedBackup = null;
       let contributionPlan = null;
+      let auditBeforeId = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
@@ -354,20 +365,24 @@
         const groups = view === "groups";
         const filters = view === "filters";
         const backups = view === "backups";
-        el("overview-view").classList.toggle("hidden", media || library || groups || filters || backups);
+        const audit = view === "audit";
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters || backups || audit);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
         el("filters-view").classList.toggle("hidden", !filters);
         el("backups-view").classList.toggle("hidden", !backups);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !backups);
+        el("audit-view").classList.toggle("hidden", !audit);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !backups && !audit);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
         el("tab-filters").classList.toggle("active", filters);
         el("tab-backups").classList.toggle("active", backups);
+        el("tab-audit").classList.toggle("active", audit);
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
         if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
+        if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。"));
       }
 
       async function loadGroups() {
@@ -541,6 +556,42 @@
         el("backups-list").replaceChildren(...buttons); setText("backups-message", `共 ${(data.backups || []).length} 个备份。`);
       }
 
+      function auditDetails(details) {
+        const entries = Object.entries(details || {});
+        return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ") : "-";
+      }
+
+      async function loadAudit(reset) {
+        const action = el("audit-action").value;
+        const query = { action, limit: 50 };
+        if (!reset && auditBeforeId) query.before_id = auditBeforeId;
+        const data = payloadData(await bridge.apiGet("api/audit", query));
+        if (reset) {
+          const selected = action;
+          el("audit-action").replaceChildren(
+            Object.assign(document.createElement("option"), { value: "", textContent: "全部动作" }),
+            ...(data.actions || []).map(item => Object.assign(document.createElement("option"), { value: item.action, textContent: `${item.label} (${item.count})` }))
+          );
+          el("audit-action").value = selected;
+        }
+        const rows = (data.entries || []).map(entry => {
+          const row = document.createElement("tr");
+          const createdAt = String(entry.created_at).replace(" ", "T");
+          for (const value of [new Date(`${createdAt}Z`).toLocaleString(), entry.action_label, entry.actor, entry.target, auditDetails(entry.details)]) {
+            const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+          }
+          return row;
+        });
+        if (reset) el("audit-body").replaceChildren(...rows);
+        else el("audit-body").append(...rows);
+        if (reset && !rows.length) {
+          const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "暂无审计记录。"; row.append(cell); el("audit-body").append(row);
+        }
+        auditBeforeId = data.next_before_id || null;
+        el("audit-more").disabled = !data.has_more;
+        setText("audit-message", data.has_more ? "已加载本页，可继续读取更早记录。" : "已到达当前筛选的最早记录。");
+      }
+
       async function inspectBackup(name, button) {
         const data = payloadData(await bridge.apiGet("api/backups/inspect", { name }));
         selectedBackup = data.restorable ? data : null;
@@ -596,7 +647,11 @@
       el("tab-filters").addEventListener("click", () => showView("filters"));
       el("tab-media").addEventListener("click", () => showView("media"));
       el("tab-backups").addEventListener("click", () => showView("backups"));
+      el("tab-audit").addEventListener("click", () => showView("audit"));
       el("backups-refresh").addEventListener("click", () => loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。")));
+      el("audit-refresh").addEventListener("click", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
+      el("audit-action").addEventListener("change", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
+      el("audit-more").addEventListener("click", () => loadAudit(false).catch(error => setText("audit-message", error?.message || "更早记录读取失败。")));
       el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; el("backup-restore-password").value = ""; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新登录。`); el("backup-restore-dialog").showModal(); });
       el("backup-restore-cancel").addEventListener("click", () => el("backup-restore-dialog").close());
       el("backup-restore-form").addEventListener("submit", async event => {

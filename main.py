@@ -160,6 +160,7 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 恢复备份",
             ),
+            ("audit", self.web_audit, ["GET"], "NewChatLearning 审计日志"),
         ):
             self.context.register_web_api(
                 f"/{PLUGIN_NAME}/api/{suffix}", handler, methods, description
@@ -1431,6 +1432,41 @@ class NewChatLearningPlugin(star.Star):
         return self._web_json(
             {"status": "ok", "data": {"backups": await self.app.backup.list_backups()}}
         )
+
+    async def web_audit(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        action = str(request.query.get("action", "")).strip()
+        raw_before_id = str(request.query.get("before_id", "")).strip()
+        before_id = self._web_positive_int(raw_before_id) if raw_before_id else None
+        if raw_before_id and before_id is None:
+            return self._web_json(
+                {"status": "error", "message": "审计分页游标无效。"},
+                status_code=400,
+            )
+        raw_limit = str(request.query.get("limit", "50")).strip()
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            limit = 0
+        if not 1 <= limit <= 100:
+            return self._web_json(
+                {"status": "error", "message": "分页大小必须在 1 到 100 之间。"},
+                status_code=400,
+            )
+        try:
+            result = await self.app.audit.list_entries(
+                action=action,
+                before_id=before_id,
+                limit=limit,
+            )
+        except ValueError:
+            return self._web_json(
+                {"status": "error", "message": "审计动作筛选无效。"},
+                status_code=400,
+            )
+        return self._web_json({"status": "ok", "data": result})
 
     async def web_backup_inspect(self):
         error = await self._authorized_web_read()
