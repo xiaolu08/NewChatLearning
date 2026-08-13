@@ -1,17 +1,17 @@
 ---
-title: NewChatLearning NapCat 消息兼容表
+title: NewChatLearning NapCat 消息兼容矩阵
 version: 0.1
 date: 2026-08-13
 status: 当前有效
 ---
 
-# NewChatLearning NapCat 消息兼容表
+# NewChatLearning NapCat 消息兼容矩阵
 
-## 结论在前
+## 摘要
 
 首版以 AstrBot 的 OneBot v11 组件为主接口，必要时读取 NapCat 原始事件补齐撤回、卡片和转发信息。所有类型都要区分“可匹配、可长期保存、可重新发送”，旧 Mirai 数据只承诺尽力降级，不承诺过期媒体恢复。
 
-## 正文
+## 兼容策略
 
 | 原版类型 | NapCat/AstrBot 方向 | 匹配 | 保存 | 重发策略 |
 | --- | --- | --- | --- | --- |
@@ -44,10 +44,11 @@ status: 当前有效
 - 扫描只读检测，清理必须先预览。
 - 默认删除失效组件；答案无剩余可发送组件时删除答案。
 
-## 关联引用
+## 相关文档
 
-- [数据模型](./数据模型.md)
-- [全功能验收清单](./全功能验收清单.md)
+- [系统设计](../architecture/system-design.md)
+- [数据模型](../architecture/data-model.md)
+- [首个 Beta 验收标准](../testing/beta-acceptance.md)
 
 ## 变更记录
 

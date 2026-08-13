@@ -1,17 +1,17 @@
 ---
-title: ChatLearning AstrBot 功能迁移矩阵
+title: ChatLearning 功能兼容矩阵
 version: 1.0
 date: 2026-08-13
 status: 当前有效
 ---
 
-# ChatLearning AstrBot 功能迁移矩阵
+# ChatLearning 功能兼容矩阵
 
-## 结论在前
+## 摘要
 
 已确认采用“兼容行为内核 + AstrBot 原生外壳 + 安全迁移工具”的方向。完整性按用户可观察能力验收，内部存储和并发模型允许现代化。首个可运行 Beta 必须覆盖原版全部功能；开发期间可以使用内部里程碑，但不能把缺少原版能力的版本作为完成交付。
 
-## 正文
+## 兼容性分析
 
 ### 迁移原则
 
@@ -105,11 +105,13 @@ status: 当前有效
 - 不用“禁止生产使用”“禁止商用”等附加限制破坏 AGPL 权利；风险通过醒目的非正式/无担保说明表达。
 - 公开网络部署时提供对应源码访问入口，满足 AGPL 网络交互条款的工程要求。
 
-## 关联引用
+## 相关文档
 
-- [想法简报](../想法简报.md)
-- [问题与机会](../01-问题与机会/ChatLearning-AstrBot-移植.md)
-- [待确认问题](../待确认问题.md)
+- [项目概述](../product/project-overview.md)
+- [产品需求与约束](../product/requirements.md)
+- [决策记录](../product/decision-log.md)
+- [上游项目评估](./upstream-assessment.md)
+- [首个 Beta 验收标准](../testing/beta-acceptance.md)
 
 ## 变更记录
 

@@ -1,19 +1,19 @@
 ---
-title: NewChatLearning 项目约定
+title: NewChatLearning 产品需求与约束
 version: 1.0
 date: 2026-08-13
 status: 当前有效
 ---
 
-# NewChatLearning 项目约定
+# NewChatLearning 产品需求与约束
 
-## 结论在前
+## 摘要
 
 NewChatLearning 是 ChatLearning 面向 AstrBot + NapCat 的 QQ 群完整移植项目。首个对用户可运行的版本必须覆盖原版全部能力，同时加入静默学习、定向用户学习、现代 WebUI、媒体持久化和安全迁移；在用户批准前始终标记为 Beta。核心学习和回复不调用 LLM，云端费用只允许来自用户主动启用的 TTS。
 
-## 正文
+## 需求定义
 
-### 不可变约束
+### 核心约束
 
 1. 项目名为 `NewChatLearning`。
 2. 首版平台为 Windows、AstrBot、NapCat、OneBot v11、QQ 群。
@@ -26,7 +26,7 @@ NewChatLearning 是 ChatLearning 面向 AstrBot + NapCat 的 QQ 群完整移植�
 9. 在用户批准前所有版本和仓库说明保持 Beta / 非正式状态。
 10. 许可证采用与原项目兼容的 AGPL-3.0，并保留原作者归属和修改说明。
 
-### 新增能力
+### NewChatLearning 扩展能力
 
 - 静默学习：指定群完整学习但绝不自动词库回复，管理员命令除外。
 - 定向学习：只采集目标用户紧随群消息给出的答案。
@@ -36,18 +36,19 @@ NewChatLearning 是 ChatLearning 面向 AstrBot + NapCat 的 QQ 群完整移植�
 - 多厂商 TTS 和通用 HTTP TTS，云端驱动默认关闭。
 - 受限 `.cl` 导入、迁移报告、备份恢复和成员贡献删除。
 
-### 下一步
+### 实施范围
 
 进入本地项目工程阶段，依次建立插件骨架、数据库与领域层、NapCat 适配、命令与权限、WebUI、TTS、迁移工具、全功能测试和 Beta 发布材料。GitHub 推送在用户提供并确认目标仓库后进行。
 
-## 关联引用
+## 相关文档
 
-- [开发规格](./开发规格.md)
-- [数据模型](./数据模型.md)
-- [NapCat 消息兼容表](./NapCat消息兼容表.md)
-- [WebUI 与安全规范](./WebUI与安全规范.md)
-- [全功能验收清单](./全功能验收清单.md)
-- [待确认问题](../待确认问题.md)
+- [项目概述](./project-overview.md)
+- [决策记录](./decision-log.md)
+- [系统设计](../architecture/system-design.md)
+- [数据模型](../architecture/data-model.md)
+- [NapCat 消息兼容矩阵](../compatibility/napcat-messages.md)
+- [WebUI 与安全规范](../security/webui-security.md)
+- [首个 Beta 验收标准](../testing/beta-acceptance.md)
 
 ## 变更记录
 

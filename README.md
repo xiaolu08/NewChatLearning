@@ -70,14 +70,13 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 
 ## 技术文档
 
-- [产品需求与项目约束](./想法空间/05-决策与下一步/项目约定.md)
-- [系统架构与实现规格](./想法空间/05-决策与下一步/开发规格.md)
-- [数据库与持久化设计](./想法空间/05-决策与下一步/数据模型.md)
-- [NapCat 消息兼容矩阵](./想法空间/05-决策与下一步/NapCat消息兼容表.md)
-- [WebUI 与安全规范](./想法空间/05-决策与下一步/WebUI与安全规范.md)
-- [首个 Beta 验收标准](./想法空间/05-决策与下一步/全功能验收清单.md)
-
-当前技术文档仍位于内部研究目录中。随着实现推进，这些内容会逐步整理到标准的 `docs/` 目录，形成面向使用者和贡献者的正式文档。
+- [文档中心](./docs/README.md)
+- [产品需求与项目约束](./docs/product/requirements.md)
+- [系统架构与实现规格](./docs/architecture/system-design.md)
+- [数据库与持久化设计](./docs/architecture/data-model.md)
+- [NapCat 消息兼容矩阵](./docs/compatibility/napcat-messages.md)
+- [WebUI 与安全规范](./docs/security/webui-security.md)
+- [首个 Beta 验收标准](./docs/testing/beta-acceptance.md)
 
 ## 数据与隐私
 

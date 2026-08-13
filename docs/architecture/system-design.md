@@ -1,19 +1,19 @@
 ---
-title: NewChatLearning 开发规格
+title: NewChatLearning 系统设计
 version: 0.1
 date: 2026-08-13
 status: 当前有效
 ---
 
-# NewChatLearning 开发规格
+# NewChatLearning 系统设计
 
-## 结论在前
+## 摘要
 
 实现采用分层异步架构：AstrBot/NapCat 适配层只负责事件与消息转换，领域层负责学习和回复规则，SQLite 仓储负责一致性，WebUI 与聊天命令通过同一应用服务操作数据。开发可以分内部里程碑推进，但只有全功能验收通过后才形成首个可运行 Beta。
 
-## 正文
+## 架构设计
 
-### 建议目录
+### 代码结构
 
 ```text
 NewChatLearning/
@@ -85,14 +85,15 @@ NewChatLearning/
 - 日志禁止记录密钥、完整敏感消息和 TTS 请求头；诊断包默认脱敏。
 - 所有配置修改、导入、删除、恢复、权限变化和登录事件进入审计日志。
 
-## 关联引用
+## 相关文档
 
-- [项目约定](./项目约定.md)
-- [数据模型](./数据模型.md)
-- [全功能验收清单](./全功能验收清单.md)
+- [产品需求与约束](../product/requirements.md)
+- [数据模型](./data-model.md)
+- [NapCat 消息兼容矩阵](../compatibility/napcat-messages.md)
+- [首个 Beta 验收标准](../testing/beta-acceptance.md)
 
 ## 变更记录
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
-| 2026-08-13 | 0.1 | 建立首版完整开发规格。 |
+| 2026-08-13 | 0.1 | 建立首版系统设计。 |

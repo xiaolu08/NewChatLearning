@@ -1,30 +1,43 @@
-# 想法探索与验证工作流包
+# NewChatLearning Engineering Guide
 
-当前工作流使用 RecoWork 模板 `idea-engineering`，target 为 `local-agent-project`，locale 为 `zh`。
+## Project Scope
 
-## 用途
+NewChatLearning is a Beta-stage AstrBot plugin that ports ChatLearning to Windows, NapCat, OneBot v11, and QQ group chats.
 
-把与 AI 的脑暴从发散想法推进到方向归纳、假设验证和可执行下一步。
+## Required Reading
 
-## 适用对象
+Before changing behavior or architecture, read:
 
-- 创业者
-- 产品经理
-- 创作者
-- 希望探索新方向的团队
+- `README.md`
+- `docs/product/requirements.md`
+- `docs/architecture/system-design.md`
+- `docs/architecture/data-model.md`
+- `docs/compatibility/napcat-messages.md`
+- `docs/security/webui-security.md`
+- `docs/testing/beta-acceptance.md`
 
-## 预期产物
+## Engineering Rules
 
-- 本地化工作方法目录
-- 想法探索角色设定
-- 想法空间与方向归纳
-- 假设、验证与下一步决策
-- 产物保鲜与过程留痕规则
+- Preserve the zero-LLM-token core learning and reply pipeline.
+- Keep the first usable Beta aligned with the documented original-feature parity target.
+- Treat Windows + AstrBot + NapCat as the initial supported environment.
+- Never commit `.cl` samples, runtime databases, downloaded media, backups, logs, or credentials.
+- Use restricted parsing for legacy pickle data; never load unknown `.cl` files directly in the plugin process.
+- Keep WebUI, chat commands, and AstrBot plugin configuration on one versioned configuration service.
+- Record security-sensitive, destructive, import, permission, and configuration operations in the audit log.
+- Maintain AGPL-3.0 attribution and the notices in `NOTICE`.
+- Keep README, metadata, and releases marked Beta until the maintainer explicitly approves a formal release.
 
-## 工作协议
+## Documentation
 
-- 在开始或续接一次想法探索前先读取 `README.md`、`工作方法/角色设定.md`、`工作方法/`、`想法空间/` 和 `rw-manifest.json`。
-- 把已验证的结论沉淀到 `想法空间/05-决策与下一步/`，并更新受影响的索引。
-- 返回结果前，对照模板用途和预期产物自审。
-- 选择优先方向、验证计划或进入项目执行前，先给出想法约定并等待用户明确确认。
-- 把想法简报、方向、假设和决策放在 `想法空间/`。先充分发散，再区分事实、假设和证据；收敛到优先方向前等待用户确认。
+- Community and contributor documentation belongs under `docs/`.
+- Update `docs/README.md` when adding, renaming, replacing, or removing a document.
+- Distinguish confirmed requirements, implementation decisions, research evidence, and unresolved release items.
+- Use professional project terminology and avoid internal brainstorming or workflow-template language in community-facing files.
+
+## Verification
+
+- Add focused tests for each implementation change.
+- Check all Markdown links after documentation moves.
+- Confirm ignored runtime and legacy data remain untracked before every release-related commit.
+- Do not claim feature completion until the corresponding item in `docs/testing/beta-acceptance.md` is verified.

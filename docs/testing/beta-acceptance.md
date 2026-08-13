@@ -1,17 +1,17 @@
 ---
-title: NewChatLearning 首个 Beta 全功能验收清单
+title: NewChatLearning 首个 Beta 验收标准
 version: 0.1
 date: 2026-08-13
 status: 当前有效
 ---
 
-# NewChatLearning 首个 Beta 全功能验收清单
+# NewChatLearning 首个 Beta 验收标准
 
-## 结论在前
+## 发布要求
 
 首个可运行 Beta 只有在原版功能、现代增强、安全与恢复四个方面全部通过后才算完成。单元测试通过但未在 Windows + AstrBot + NapCat + QQ 群实测的项目不能发布为首个 Beta。
 
-## 正文
+## 验收清单
 
 ### 原版兼容
 
@@ -75,14 +75,14 @@ status: 当前有效
 - [ ] README、metadata、版本和仓库描述均显示 Beta / 非正式。
 - [ ] AGPL-3.0、NOTICE、原作者归属和修改说明完整。
 - [ ] 安装、配置、迁移、隐私、备份、恢复和故障排查文档完整。
-- [ ] GitHub 目标仓库、可见性和推送授权由用户明确确认。
+- [x] GitHub 私有仓库 `xiaolu08/NewChatLearning` 已建立并完成首次推送。
 
-## 关联引用
+## 相关文档
 
-- [项目约定](./项目约定.md)
-- [开发规格](./开发规格.md)
-- [NapCat 消息兼容表](./NapCat消息兼容表.md)
-- [WebUI 与安全规范](./WebUI与安全规范.md)
+- [产品需求与约束](../product/requirements.md)
+- [系统设计](../architecture/system-design.md)
+- [NapCat 消息兼容矩阵](../compatibility/napcat-messages.md)
+- [WebUI 与安全规范](../security/webui-security.md)
 
 ## 变更记录
 

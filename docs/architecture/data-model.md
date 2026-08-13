@@ -7,11 +7,11 @@ status: 当前有效
 
 # NewChatLearning 数据模型
 
-## 结论在前
+## 摘要
 
 SQLite 数据库需要同时支持原版问答权重语义、群/标签/全局检索、贡献追踪、媒体生命周期、权限和审计。问题与答案必须分表，消息组件使用版本化 JSON；所有删除默认软删除或先备份，以支持预览和恢复。
 
-## 正文
+## 数据设计
 
 ### 主要实体
 
@@ -55,10 +55,11 @@ SQLite 数据库需要同时支持原版问答权重语义、群/标签/全局�
 - 媒体：`content_hash` 唯一索引，`status + last_checked_at` 维护索引。
 - 文本候选：SQLite FTS 表保存可检索纯文本；最终相似度仍使用兼容算法确认。
 
-## 关联引用
+## 相关文档
 
-- [开发规格](./开发规格.md)
-- [NapCat 消息兼容表](./NapCat消息兼容表.md)
+- [系统设计](./system-design.md)
+- [NapCat 消息兼容矩阵](../compatibility/napcat-messages.md)
+- [首个 Beta 验收标准](../testing/beta-acceptance.md)
 
 ## 变更记录
 

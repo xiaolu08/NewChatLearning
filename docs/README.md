@@ -1,0 +1,33 @@
+# NewChatLearning 文档中心
+
+这里汇总 NewChatLearning 的产品需求、技术设计、兼容性研究、安全规范和发布验收标准。
+
+## 产品
+
+- [项目概述](./product/project-overview.md)：项目定位、目标环境、核心约束和当前状态。
+- [产品需求与约束](./product/requirements.md)：首个 Beta 的功能范围和不可变要求。
+- [决策记录](./product/decision-log.md)：需求讨论中已经确认的关键产品与技术决策。
+
+## 架构
+
+- [系统设计](./architecture/system-design.md)：组件分层、消息流水线、运行模式、命令和迁移方案。
+- [数据模型](./architecture/data-model.md)：SQLite 实体、消息组件格式、索引和一致性规则。
+
+## 兼容性
+
+- [NapCat 消息兼容矩阵](./compatibility/napcat-messages.md)：原版消息类型在 AstrBot/NapCat 中的保存、匹配和重发策略。
+
+## 安全
+
+- [WebUI 与安全规范](./security/webui-security.md)：管理页面、认证、网络访问、密钥和配置一致性要求。
+
+## 测试与发布
+
+- [首个 Beta 验收标准](./testing/beta-acceptance.md)：功能、消息兼容、安全、可靠性和发布门槛。
+
+## 研究资料
+
+- [上游项目评估](./research/upstream-assessment.md)：原 ChatLearning 的价值、限制、迁移风险和验证建议。
+- [功能兼容矩阵](./research/feature-parity.md)：原版能力到 NewChatLearning 的实现映射。
+
+文档以当前有效版本为准。实现变化如果影响外部行为、数据格式、安全边界或兼容范围，必须同步更新相关文档。

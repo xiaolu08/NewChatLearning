@@ -1,19 +1,19 @@
 ---
-title: NewChatLearning 项目想法简报
+title: NewChatLearning 项目概述
 version: 2.0
 date: 2026-08-13
 status: 当前有效
 ---
 
-# NewChatLearning 项目想法简报
+# NewChatLearning 项目概述
 
-## 结论在前
+## 摘要
 
 `NewChatLearning` 的目标是将 JHue58/ChatLearning 的可观察功能完整迁移为 AstrBot 插件，同时保持核心学习与回复过程不调用 LLM、不主动消耗 Token。首个可运行 Beta 必须覆盖原版全部功能，后续 Beta 用于新设计与 AstrBot/NapCat 兼容修复，不把原版功能拆成多个不完整版本。项目在用户明确允许正式公开前始终使用 Beta 标识，不宣称生产可用。
 
-## 正文
+## 项目定义
 
-### 当前约定
+### 产品范围
 
 - **问题**：Mirai 与旧 QQ 协议生态衰退后，ChatLearning 已无法自然接入当前主流 Bot 环境。
 - **目标用户**：怀念或仍需要群聊自学习词库的 QQ Bot 管理员，以及希望在 AstrBot 中获得非 LLM 群聊拟人回复能力的用户。
@@ -44,7 +44,7 @@ status: 当前有效
 - **WebUI 安全**：管理页面必须登录，不提供默认免密模式；采用强密码哈希、会话 Cookie、CSRF 防护、失败限流和临时锁定，默认仅监听本机地址。
 - **TTS 驱动**：支持火山引擎、阿里云、腾讯云、Azure、OpenAI、OpenAI 风格 TTS，以及可映射 URL、请求头和请求体的通用 HTTP TTS。
 
-### 已确认事实
+### 调研基线
 
 - 研究基线 ChatLearning 上游提交为 `b5b4ac3e44d35bd45aea12b542803178e783118e`，提交日期为 2024-01-30。
 - 研究基线 AstrBot 为 `4.27.3`，提交 `19c029e36da451e4bef15a1adecba89dcef5e008`。
@@ -55,7 +55,7 @@ status: 当前有效
 - 三份共享词库均为 pickle 协议 4，静态检查未发现可调用代码的危险 opcode；受限解析后结构完整，共 107,132 个问题和 303,359 个答案。
 - 样本消息类型覆盖 `Plain`、`Image`、`Face`、`Voice`、`MarketFace`、`Forward`、`Quote`、`At`、`App`、`Xml`、`File`、`FlashImage`、`MusicShare` 和 `Dice`。旧媒体引用是否仍可发送尚未验证。
 
-### 成功信号
+### 成功标准
 
 1. 建立逐项功能矩阵，每项原版能力都有“等价实现、平台限制、替代设计或明确延期”的结论。
 2. 核心学习和回复测试能够证明没有 LLM Provider 调用路径。
@@ -64,16 +64,17 @@ status: 当前有效
 5. 文档包含安装、配置、升级、备份、隐私、故障恢复、许可证和 Beta 警示。
 6. 公开或备份到 GitHub 前由用户确认仓库、可见性和发布状态。
 
-### 当前状态
+### 项目状态
 
-需求探索已完成并形成项目约定。静默学习允许管理员命令返回；WebUI 默认仅本机访问，可显式开启局域网访问，不直接支持公网暴露；云端 TTS 密钥使用 Windows DPAPI 加密，迁移机器后重新填写。后续以开发规格和验收清单为执行依据。
+产品需求分析已经完成并形成正式需求基线。静默学习允许管理员命令返回；WebUI 默认仅本机访问，可显式开启局域网访问，不直接支持公网暴露；云端 TTS 密钥使用 Windows DPAPI 加密，迁移机器后重新填写。后续以系统设计和验收标准为实施依据。
 
-## 关联引用
+## 相关文档
 
-- [问题与机会](./01-问题与机会/ChatLearning-AstrBot-移植.md)
-- [功能迁移矩阵](./03-方向归纳/功能迁移矩阵.md)
-- [待确认问题](./待确认问题.md)
-- [想法空间索引](./index.md)
+- [产品需求与约束](./requirements.md)
+- [决策记录](./decision-log.md)
+- [上游项目评估](../research/upstream-assessment.md)
+- [功能兼容矩阵](../research/feature-parity.md)
+- [文档中心](../README.md)
 
 ## 变更记录
 
