@@ -2,7 +2,7 @@
   "general": {
     "description": "基础设置",
     "type": "object",
-    "hint": "当前版本仅建立可加载的 Beta 插件骨架，自动学习和自动回复尚未开放。",
+    "hint": "当前 Beta 已具备受控群聊采集与相邻问答固化能力；自动回复尚未开放。",
     "obvious_hint": true,
     "items": {
       "enabled": {
@@ -27,6 +27,32 @@
         "type": "list",
         "items": {"type": "string"},
         "default": []
+      }
+    }
+  },
+  "learning": {
+    "description": "学习设置",
+    "type": "object",
+    "hint": "学习默认关闭。启用后仍只采集明确列出的 QQ 群；当前阶段不会自动回复。",
+    "obvious_hint": true,
+    "items": {
+      "enabled": {
+        "description": "启用群聊学习",
+        "type": "bool",
+        "default": false
+      },
+      "group_ids": {
+        "description": "学习群号",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "每项填写一个 QQ 群号。留空时不学习任何群。",
+        "default": []
+      },
+      "interval_seconds": {
+        "description": "问答链最大间隔（秒）",
+        "type": "int",
+        "hint": "相邻两条合格消息超过此间隔时切断问答关系，默认保持原版 900 秒。",
+        "default": 900
       }
     }
   },

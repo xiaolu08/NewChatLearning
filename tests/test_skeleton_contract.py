@@ -22,6 +22,8 @@ def test_config_schema_and_dashboard_entry_are_valid():
     dashboard = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")
 
     assert schema["storage"]["items"]["media_quota_gb"]["default"] == 10.0
+    assert schema["learning"]["items"]["enabled"]["default"] is False
+    assert schema["learning"]["items"]["interval_seconds"]["default"] == 900
     assert schema["tts"]["items"]["enabled"]["default"] is False
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard

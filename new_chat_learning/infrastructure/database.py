@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from new_chat_learning.constants import SCHEMA_VERSION
+from new_chat_learning.domain.message import NormalizedMessage
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS questions (
     group_id TEXT NOT NULL,
     normalized_key TEXT NOT NULL,
     components_json TEXT NOT NULL,
+    frequency INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(group_id, normalized_key)
@@ -37,9 +39,22 @@ CREATE TABLE IF NOT EXISTS answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     components_json TEXT NOT NULL,
+    normalized_key TEXT NOT NULL DEFAULT '',
     weight INTEGER NOT NULL DEFAULT 1 CHECK(weight > 0),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pending_messages (
+    platform TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    normalized_key TEXT NOT NULL,
+    components_json TEXT NOT NULL,
+    PRIMARY KEY(platform, group_id),
+    UNIQUE(platform, message_id)
 );
 
 CREATE TABLE IF NOT EXISTS contributions (
@@ -95,6 +110,7 @@ class SQLiteStore:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(SCHEMA_SQL)
+            self._migrate_schema(connection)
             connection.execute(
                 "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -126,12 +142,164 @@ class SQLiteStore:
     async def statistics(self) -> dict[str, int]:
         async with self._lock:
             connection = self._require_connection()
-            tables = ("groups", "questions", "answers", "media_assets", "audit_log")
+            tables = (
+                "groups",
+                "questions",
+                "answers",
+                "pending_messages",
+                "media_assets",
+                "audit_log",
+            )
             result: dict[str, int] = {}
             for table in tables:
                 row = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
                 result[table] = int(row[0])
             return result
+
+    async def observe_message(
+        self, message: NormalizedMessage, interval_seconds: int
+    ) -> dict[str, bool]:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "INSERT INTO groups(group_id) VALUES(?) ON CONFLICT(group_id) DO NOTHING",
+                    (message.group_id,),
+                )
+                previous = connection.execute(
+                    "SELECT * FROM pending_messages WHERE platform = ? AND group_id = ?",
+                    (message.platform, message.group_id),
+                ).fetchone()
+                if previous is not None and str(previous["message_id"]) == message.message_id:
+                    connection.rollback()
+                    return {
+                        "learned_pair": False,
+                        "chain_reset": False,
+                        "duplicate": True,
+                    }
+                learned_pair = False
+                chain_reset = False
+                if previous is not None:
+                    elapsed = message.timestamp - int(previous["timestamp"])
+                    if 0 <= elapsed <= interval_seconds:
+                        question_id = self._upsert_question(
+                            connection,
+                            message.group_id,
+                            str(previous["normalized_key"]),
+                            str(previous["components_json"]),
+                        )
+                        answer_id = self._upsert_answer(connection, question_id, message)
+                        connection.execute(
+                            "INSERT INTO contributions(answer_id, group_id, user_id, message_id, observed_at, finalized_at) "
+                            "VALUES(?, ?, ?, ?, datetime(?, 'unixepoch'), CURRENT_TIMESTAMP)",
+                            (
+                                answer_id,
+                                message.group_id,
+                                message.sender_id,
+                                message.message_id,
+                                message.timestamp,
+                            ),
+                        )
+                        learned_pair = True
+                    else:
+                        self._upsert_question(
+                            connection,
+                            message.group_id,
+                            str(previous["normalized_key"]),
+                            str(previous["components_json"]),
+                        )
+                        chain_reset = True
+                connection.execute(
+                    "INSERT INTO pending_messages(platform, group_id, sender_id, message_id, timestamp, normalized_key, components_json) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(platform, group_id) DO UPDATE SET "
+                    "sender_id=excluded.sender_id, message_id=excluded.message_id, "
+                    "timestamp=excluded.timestamp, normalized_key=excluded.normalized_key, "
+                    "components_json=excluded.components_json",
+                    (
+                        message.platform,
+                        message.group_id,
+                        message.sender_id,
+                        message.message_id,
+                        message.timestamp,
+                        message.normalized_key,
+                        message.components_json,
+                    ),
+                )
+                connection.commit()
+                return {
+                    "learned_pair": learned_pair,
+                    "chain_reset": chain_reset,
+                    "duplicate": False,
+                }
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def remove_pending_message(self, platform: str, group_id: str, message_id: str) -> bool:
+        async with self._lock:
+            connection = self._require_connection()
+            cursor = connection.execute(
+                "DELETE FROM pending_messages WHERE platform = ? AND group_id = ? AND message_id = ?",
+                (platform, group_id, message_id),
+            )
+            connection.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def _upsert_question(
+        connection: sqlite3.Connection,
+        group_id: str,
+        normalized_key: str,
+        components_json: str,
+    ) -> int:
+        connection.execute(
+            "INSERT INTO questions(group_id, normalized_key, components_json) VALUES(?, ?, ?) "
+            "ON CONFLICT(group_id, normalized_key) DO UPDATE SET "
+            "frequency=questions.frequency + 1, updated_at=CURRENT_TIMESTAMP",
+            (group_id, normalized_key, components_json),
+        )
+        row = connection.execute(
+            "SELECT id FROM questions WHERE group_id = ? AND normalized_key = ?",
+            (group_id, normalized_key),
+        ).fetchone()
+        return int(row[0])
+
+    @staticmethod
+    def _upsert_answer(
+        connection: sqlite3.Connection, question_id: int, message: NormalizedMessage
+    ) -> int:
+        connection.execute(
+            "INSERT INTO answers(question_id, components_json, normalized_key) VALUES(?, ?, ?) "
+            "ON CONFLICT(question_id, normalized_key) DO UPDATE SET "
+            "weight=answers.weight + 1, updated_at=CURRENT_TIMESTAMP",
+            (question_id, message.components_json, message.normalized_key),
+        )
+        row = connection.execute(
+            "SELECT id FROM answers WHERE question_id = ? AND normalized_key = ?",
+            (question_id, message.normalized_key),
+        ).fetchone()
+        return int(row[0])
+
+    @staticmethod
+    def _migrate_schema(connection: sqlite3.Connection) -> None:
+        question_columns = {row[1] for row in connection.execute("PRAGMA table_info(questions)")}
+        if "frequency" not in question_columns:
+            connection.execute(
+                "ALTER TABLE questions ADD COLUMN frequency INTEGER NOT NULL DEFAULT 1"
+            )
+        answer_columns = {row[1] for row in connection.execute("PRAGMA table_info(answers)")}
+        if "normalized_key" not in answer_columns:
+            connection.execute(
+                "ALTER TABLE answers ADD COLUMN normalized_key TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            "UPDATE answers SET normalized_key = 'legacy:' || id WHERE normalized_key = ''"
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_answers_unique ON answers(question_id, normalized_key)"
+        )
 
     def _require_connection(self) -> sqlite3.Connection:
         if self._connection is None:

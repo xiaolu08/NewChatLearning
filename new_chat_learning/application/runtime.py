@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from new_chat_learning.application.learning import LearningResult, LearningService
 from new_chat_learning.constants import PLUGIN_VERSION
+from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
@@ -14,6 +16,7 @@ class RuntimeApplication:
         self.data_dir = Path(data_dir)
         self.config = ConfigService(astrbot_config)
         self.store = SQLiteStore(self.data_dir / "new_chat_learning.sqlite3")
+        self.learning = LearningService(self.store, self.config.learning_interval_seconds)
         self.started_at: datetime | None = None
 
     async def start(self) -> None:
@@ -26,9 +29,16 @@ class RuntimeApplication:
     async def stop(self) -> None:
         await self.store.close()
 
+    async def observe(self, message: NormalizedMessage) -> LearningResult:
+        return await self.learning.observe(message)
+
+    async def recall(self, notice: RecallNotice) -> LearningResult:
+        return await self.learning.recall(notice)
+
     async def status(self) -> dict[str, Any]:
         database = await self.store.health()
         statistics = await self.store.statistics()
+        learning_enabled = bool(self.config.snapshot()["learning"]["enabled"])
         return {
             "name": "NewChatLearning",
             "version": PLUGIN_VERSION,
@@ -36,7 +46,8 @@ class RuntimeApplication:
             "state": "running" if self.started_at else "stopped",
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "zero_token_core": True,
-            "automatic_learning": False,
+            "automatic_learning": learning_enabled,
+            "learning_capture_enabled": learning_enabled,
             "automatic_reply": False,
             "data_dir": str(self.data_dir),
             "config_revision": self.config.revision,

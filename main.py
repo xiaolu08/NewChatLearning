@@ -7,6 +7,10 @@ from astrbot.api.web import json_response
 from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.permissions import is_plugin_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
+from new_chat_learning.platform.napcat.normalizer import (
+    normalize_group_message,
+    parse_recall_notice,
+)
 
 
 class NewChatLearningPlugin(star.Star):
@@ -31,6 +35,22 @@ class NewChatLearningPlugin(star.Star):
         if self.app is not None:
             await self.app.stop()
             self.app = None
+
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=-100)
+    async def capture_group_message(self, event: AstrMessageEvent) -> None:
+        if self.app is None:
+            return
+        recall = parse_recall_notice(event)
+        if recall is not None:
+            await self.app.recall(recall)
+            return
+        group_id = event.get_group_id()
+        if not self.app.config.learning_enabled_for(group_id):
+            return
+        message = normalize_group_message(event)
+        if message is not None:
+            await self.app.observe(message)
 
     @filter.command_group("ncl")
     def ncl(self) -> None:
@@ -65,7 +85,9 @@ class NewChatLearningPlugin(star.Star):
                 f"数据库：schema v{status['database']['schema_version']}\n"
                 f"问题：{status['statistics']['questions']}\n"
                 f"答案：{status['statistics']['answers']}\n"
-                "自动学习与自动回复：尚未启用"
+                f"待固化消息：{status['statistics']['pending_messages']}\n"
+                f"群聊学习：{'已启用' if status['automatic_learning'] else '未启用'}\n"
+                "自动回复：尚未启用"
             )
         event.set_result(MessageEventResult().message(text))
 

@@ -35,7 +35,7 @@
         <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
         <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
         <div class="metric"><span>答案数</span><strong id="answers">-</strong></div>
-        <div class="metric"><span>媒体资源</span><strong id="media">-</strong></div>
+        <div class="metric"><span>待固化消息</span><strong id="pending">-</strong></div>
       </div>
       <section>
         <table>
@@ -61,7 +61,7 @@
           document.getElementById("state").className = "ok";
           setText("questions", status.statistics.questions);
           setText("answers", status.statistics.answers);
-          setText("media", status.statistics.media_assets);
+          setText("pending", status.statistics.pending_messages);
           setText("version", `${status.version} (${status.release_stage})`);
           setText("database", `schema v${status.database.schema_version}, ${status.database.integrity}`);
           setText("revision", status.config_revision);

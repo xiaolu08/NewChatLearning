@@ -61,10 +61,13 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 可由 AstrBot 4.27.3 加载的插件代码骨架
 - SQLite schema、统一配置读取和运行状态服务骨架
 - `/ncl help`、`/ncl status` 管理命令与只读 Dashboard 状态页
+- NapCat/OneBot 群消息规范化与版本化组件 JSON
+- 可配置群白名单的相邻消息学习、重复答案增权和超时断链
+- 尚未固化消息的持久化暂存与群消息撤回清理
 
 尚未完成：
 
-- SQLite 词库仓储与学习、匹配、回复算法实现
+- SQLite 词库查询、匹配和回复算法实现
 - NapCat 消息适配
 - 完整管理 WebUI 与独立登录安全机制
 - TTS 驱动与旧词库迁移工具
