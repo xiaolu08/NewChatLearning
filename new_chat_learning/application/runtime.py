@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from new_chat_learning.application.content_filter import ContentFilterService
+from new_chat_learning.application.filter_cleanup import FilterCleanupService
 from new_chat_learning.application.learning import LearningResult, LearningService
 from new_chat_learning.application.library import LibraryService
 from new_chat_learning.application.media import MediaService
@@ -30,6 +31,12 @@ class RuntimeApplication:
         self.media = MediaService(self.data_dir, self.store, self.config)
         self.migration = MigrationService(self.data_dir, self.store)
         self.content_filter = ContentFilterService(self.config)
+        self.filter_cleanup = FilterCleanupService(
+            self.data_dir,
+            self.store,
+            self.config,
+            self.content_filter,
+        )
         self.reply = ReplyService(self.store, self.config, self.content_filter)
         self.web_auth = WebAuthService(self.data_dir, self.store)
         self.started_at: datetime | None = None

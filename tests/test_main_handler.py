@@ -920,3 +920,129 @@ def test_web_manual_blacklist_update_is_validated_and_audited_by_runtime(monkeyp
 
     response = asyncio.run(plugin.web_filter_blacklist_update())
     assert response["data"]["blocked"] is True
+
+
+def test_web_filter_cleanup_prepare_requires_csrf_and_hides_operations(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class Cleanup:
+        async def prepare_cleanup(self, **kwargs):
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "prepared": True,
+                "plan_id": "a" * 32,
+                "created_at": "2026-08-13T00:00:00+00:00",
+                "expires_at": "2026-08-13T01:00:00+00:00",
+                "affected_answers": 2,
+                "affected_questions": 1,
+                "questions_becoming_empty": 1,
+                "rule_type_counts": {"contains": 2},
+                "operations": [{"answer_id": 7}],
+            }
+
+    async def body():
+        return b'{"group_id":"10001","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.filter_cleanup = Cleanup()
+
+    response = asyncio.run(plugin.web_filter_cleanup_prepare())
+    assert response["status"] == "ok"
+    assert response["data"]["affected_answers"] == 2
+    assert "operations" not in response["data"]
+
+
+def test_web_filter_cleanup_apply_reauthenticates_and_hides_backup_path(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **kwargs):
+            assert kwargs == {
+                "session_token": "session",
+                "csrf_token": "csrf",
+                "password": "long-enough-password",
+            }
+            return "ok"
+
+    class Cleanup:
+        async def apply_cleanup(self, **kwargs):
+            assert kwargs["plan_id"] == "a" * 32
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {
+                "applied": True,
+                "deleted_answers": 2,
+                "orphan_questions": 1,
+                "backup_path": "C:/private/backups/before-filter-cleanup.sqlite3",
+            }
+
+    async def body():
+        return (
+            b'{"group_id":"10001","plan_id":"'
+            + b"a" * 32
+            + b'","password":"long-enough-password","csrf_token":"csrf"}'
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.filter_cleanup = Cleanup()
+
+    response = asyncio.run(plugin.web_filter_cleanup_apply())
+    assert response["status"] == "ok"
+    assert response["data"]["backup_name"] == "before-filter-cleanup.sqlite3"
+    assert "backup_path" not in response["data"]
+
+
+def test_web_filter_cleanup_apply_reports_stale_plan(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+        async def reauthenticate(self, **_kwargs):
+            return "ok"
+
+    class Cleanup:
+        async def apply_cleanup(self, **_kwargs):
+            return {"applied": False, "reason": "plan_stale"}
+
+    async def body():
+        return (
+            b'{"group_id":"10001","plan_id":"'
+            + b"a" * 32
+            + b'","password":"long-enough-password","csrf_token":"csrf"}'
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.filter_cleanup = Cleanup()
+
+    response = asyncio.run(plugin.web_filter_cleanup_apply())
+    assert response["status"] == "error"
+    assert "已变化" in response["message"]

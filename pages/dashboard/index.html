@@ -216,6 +216,7 @@
         </section>
         <section class="settings-band"><div class="actions"><button id="filters-save" type="button">保存过滤设置</button></div><div id="filters-message" class="result" role="status"></div></section>
         <section class="settings-band"><h2>规则测试</h2><div class="toolbar"><div class="field"><label for="filter-test-text">测试内容</label><input id="filter-test-text" maxlength="4000"></div><div class="field"><label for="filter-test-type">组件类型</label><select id="filter-test-type"><option>Plain</option><option>Image</option><option>At</option><option>AtAll</option><option>Quote</option><option>Poke</option><option>Record</option><option>Video</option><option>File</option></select></div><button id="filters-test" class="secondary" type="button">测试</button></div><div id="filter-test-result" class="result"></div></section>
+        <section class="settings-band"><h2>词库清理</h2><p>扫描当前群词库中命中过滤规则的答案。准备阶段只生成一小时有效的预览计划，不会删除内容。</p><div class="toolbar" style="margin-top:14px"><button id="filter-cleanup-prepare" class="secondary" type="button">生成清理计划</button><button id="filter-cleanup-apply" class="danger hidden" type="button">确认删除命中答案</button></div><div id="filter-cleanup-plan" class="result">尚未生成过滤清理计划。</div></section>
         <section class="settings-band"><h2>黑名单</h2><div class="toolbar"><div class="field"><label for="blacklist-user">用户 QQ 号</label><input id="blacklist-user" inputmode="numeric"></div><div class="field"><label for="blacklist-group">群号（按群时必填）</label><input id="blacklist-group" inputmode="numeric"></div><div class="field"><label for="manual-scope">范围</label><select id="manual-scope"><option value="global">全局</option><option value="group">按群</option></select></div><button id="blacklist-block" type="button">人工封禁</button><button id="blacklist-refresh" class="secondary" type="button">刷新</button></div><div class="table-scroll"><table><thead><tr><th>范围</th><th>群号</th><th>用户</th><th>命中</th><th>状态</th><th>操作</th></tr></thead><tbody id="blacklist-body"></tbody></table></div></section>
       </div>
     </main>
@@ -239,6 +240,16 @@
         <div class="actions"><button id="library-delete-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">确认删除</button></div>
       </form>
     </dialog>
+    <dialog id="filter-cleanup-dialog">
+      <form id="filter-cleanup-form">
+        <h2>确认删除命中过滤规则的答案</h2>
+        <p>执行前会自动备份数据库，并重新检查词库与过滤规则。请输入当前管理密码确认。</p>
+        <label for="filter-cleanup-password">管理密码</label>
+        <input id="filter-cleanup-password" type="password" autocomplete="current-password" required>
+        <div id="filter-cleanup-message" class="message" role="status"></div>
+        <div class="actions"><button id="filter-cleanup-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行清理</button></div>
+      </form>
+    </dialog>
     <script>
       let authState = null;
       let cleanupPlan = null;
@@ -247,6 +258,7 @@
       let groupRevision = null;
       let filterRevision = null;
       let filterGroupRules = [];
+      let filterCleanupPlan = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
@@ -516,6 +528,26 @@
       el("filters-test").addEventListener("click", async () => {
         try { const data = await postSecure("api/filters/test", { group_id: selectedFilterGroup(), text: el("filter-test-text").value, component_type: el("filter-test-type").value }); setText("filter-test-result", `回复过滤：${data.reply.matched ? data.reply.rule_type : "未命中"}；敏感词：${data.sensitive.matched ? "命中" : "未命中"}。`); }
         catch (error) { setText("filter-test-result", error?.message || "测试失败。"); }
+      });
+      el("filter-cleanup-prepare").addEventListener("click", async () => {
+        try {
+          const data = await postSecure("api/filters/cleanup/prepare", { group_id: selectedFilterGroup() });
+          filterCleanupPlan = data; el("filter-cleanup-apply").classList.remove("hidden");
+          const types = Object.entries(data.rule_type_counts || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
+          setText("filter-cleanup-plan", `计划 ${data.plan_id}：命中答案 ${data.affected_answers}，涉及问题 ${data.affected_questions}，删除后变空问题 ${data.questions_becoming_empty}。规则类型：${types || "无"}。`);
+          setText("filters-message", "过滤清理计划已生成，词库尚未改变。");
+        } catch (error) { filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden"); setText("filter-cleanup-plan", error?.message || "无法生成清理计划。"); }
+      });
+      el("filter-cleanup-apply").addEventListener("click", () => { el("filter-cleanup-password").value = ""; setText("filter-cleanup-message", ""); el("filter-cleanup-dialog").showModal(); });
+      el("filter-cleanup-cancel").addEventListener("click", () => el("filter-cleanup-dialog").close());
+      el("filter-cleanup-form").addEventListener("submit", async event => {
+        event.preventDefault(); if (!filterCleanupPlan) return;
+        try {
+          const data = await postSecure("api/filters/cleanup/apply", { group_id: selectedFilterGroup(), plan_id: filterCleanupPlan.plan_id, password: el("filter-cleanup-password").value });
+          el("filter-cleanup-dialog").close(); el("filter-cleanup-password").value = ""; filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden");
+          setText("filter-cleanup-plan", `清理完成：删除答案 ${data.deleted_answers}，删除空问题 ${data.orphan_questions}。执行前备份：${data.backup_name}`);
+          setText("filters-message", "过滤规则词库清理已完成。"); await showDashboard(); showView("filters");
+        } catch (error) { el("filter-cleanup-password").value = ""; setText("filter-cleanup-message", error?.message || "清理未执行。"); }
       });
       el("blacklist-refresh").addEventListener("click", () => loadBlacklist().catch(error => setText("filters-message", error?.message || "黑名单读取失败。")));
       el("blacklist-block").addEventListener("click", async () => {

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from typing import Any
 
@@ -84,6 +86,13 @@ class ConfigService:
             self.snapshot(), ensure_ascii=True, sort_keys=True, separators=(",", ":")
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+    @asynccontextmanager
+    async def revision_guard(self, expected_revision: str) -> AsyncIterator[None]:
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            yield
 
     def learning_enabled_for(self, group_id: str) -> bool:
         snapshot = self.snapshot()

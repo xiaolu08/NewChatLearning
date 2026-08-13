@@ -81,6 +81,18 @@ class NewChatLearningPlugin(star.Star):
             ),
             ("filters/test", self.web_filter_test, ["POST"], "NewChatLearning 测试过滤规则"),
             (
+                "filters/cleanup/prepare",
+                self.web_filter_cleanup_prepare,
+                ["POST"],
+                "NewChatLearning 准备过滤词库清理",
+            ),
+            (
+                "filters/cleanup/apply",
+                self.web_filter_cleanup_apply,
+                ["POST"],
+                "NewChatLearning 执行过滤词库清理",
+            ),
+            (
                 "filters/blacklist",
                 self.web_filter_blacklist,
                 ["GET"],
@@ -947,6 +959,83 @@ class NewChatLearningPlugin(star.Star):
             actor_id=self._web_actor_id(),
         )
         return self._web_json({"status": "ok", "data": result})
+
+    async def web_filter_cleanup_prepare(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        if group_id is None:
+            return self._web_json(
+                {"status": "error", "message": "群号无效。"}, status_code=400
+            )
+        result = await self.app.filter_cleanup.prepare_cleanup(
+            group_id=group_id,
+            actor_id=self._web_actor_id(),
+        )
+        if not result.get("prepared"):
+            return self._web_json(
+                {"status": "error", "message": "当前群没有命中过滤规则的答案。"},
+                status_code=409,
+            )
+        public_result = {
+            key: result[key]
+            for key in (
+                "prepared",
+                "plan_id",
+                "created_at",
+                "expires_at",
+                "affected_answers",
+                "affected_questions",
+                "questions_becoming_empty",
+                "rule_type_counts",
+            )
+        }
+        return self._web_json({"status": "ok", "data": public_result})
+
+    async def web_filter_cleanup_apply(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        reauthentication = await self.app.web_auth.reauthenticate(
+            session_token=self._web_session_token(),
+            csrf_token=str(payload.get("csrf_token", "")),
+            password=str(payload.get("password", "")),
+        )
+        if reauthentication != "ok":
+            return self._web_json(
+                {"status": "error", "message": "密码确认失败，清理未执行。"},
+                status_code=403,
+            )
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        plan_id = str(payload.get("plan_id", "")).lower()
+        if group_id is None:
+            return self._web_json(
+                {"status": "error", "message": "群号无效。"}, status_code=400
+            )
+        result = await self.app.filter_cleanup.apply_cleanup(
+            plan_id=plan_id,
+            group_id=group_id,
+            actor_id=self._web_actor_id(),
+        )
+        if not result.get("applied"):
+            reasons = {
+                "plan_not_found": "找不到清理计划。",
+                "plan_not_ready": "清理计划已执行或不可用。",
+                "wrong_group": "清理计划不属于当前群。",
+                "wrong_actor": "清理计划不属于当前 WebUI 操作者。",
+                "plan_expired": "清理计划已过期，请重新准备。",
+                "plan_stale": "词库或过滤规则已变化，请重新生成清理计划。",
+                "invalid_plan": "清理计划格式无效。",
+            }
+            return self._web_json(
+                {"status": "error", "message": reasons.get(result.get("reason"), "清理未执行。")},
+                status_code=409,
+            )
+        public_result = dict(result)
+        public_result["backup_name"] = Path(str(result["backup_path"])).name
+        public_result.pop("backup_path", None)
+        return self._web_json({"status": "ok", "data": public_result})
 
     async def web_library_search(self):
         error = await self._authorized_web_read()

@@ -646,12 +646,83 @@ class SQLiteStore:
         async with self._lock:
             connection = self._require_connection()
             rows = connection.execute(
-                "SELECT a.id AS answer_id, a.components_json FROM answers AS a "
+                "SELECT a.id AS answer_id, a.question_id, a.components_json, "
+                "(SELECT COUNT(*) FROM answers AS siblings "
+                "WHERE siblings.question_id = a.question_id) AS question_answer_count "
+                "FROM answers AS a "
                 "JOIN questions AS q ON q.id = a.question_id "
                 "WHERE q.group_id = ? AND a.id > ? ORDER BY a.id LIMIT ?",
                 (str(group_id), int(after_answer_id), max(1, min(2000, int(limit)))),
             ).fetchall()
             return [dict(row) for row in rows]
+
+    async def apply_filter_cleanup(
+        self,
+        *,
+        plan_id: str,
+        group_id: str,
+        actor_id: str,
+        config_revision: str,
+        operations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        import hashlib
+
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                affected_question_ids: set[int] = set()
+                rule_type_counts: dict[str, int] = {}
+                for operation in operations:
+                    answer_id = int(operation["answer_id"])
+                    row = connection.execute(
+                        "SELECT a.question_id, a.components_json FROM answers AS a "
+                        "JOIN questions AS q ON q.id = a.question_id "
+                        "WHERE a.id = ? AND q.group_id = ?",
+                        (answer_id, str(group_id)),
+                    ).fetchone()
+                    if row is None:
+                        raise ValueError("cleanup_plan_stale")
+                    components_json = str(row["components_json"])
+                    digest = hashlib.sha256(components_json.encode("utf-8")).hexdigest()
+                    if (
+                        digest != str(operation["components_sha256"])
+                        or int(row["question_id"]) != int(operation["question_id"])
+                    ):
+                        raise ValueError("cleanup_plan_stale")
+                    question_id = int(row["question_id"])
+                    affected_question_ids.add(question_id)
+                    rule_type = str(operation["rule_type"])
+                    rule_type_counts[rule_type] = rule_type_counts.get(rule_type, 0) + 1
+                    self._delete_answer_for_cleanup(connection, answer_id)
+                orphan_questions = 0
+                for question_id in affected_question_ids:
+                    orphan_questions += connection.execute(
+                        "DELETE FROM questions WHERE id = ? "
+                        "AND NOT EXISTS(SELECT 1 FROM answers WHERE question_id = ?)",
+                        (question_id, question_id),
+                    ).rowcount
+                details = {
+                    "plan_id": plan_id,
+                    "group_id": str(group_id),
+                    "config_revision": str(config_revision),
+                    "deleted_answers": len(operations),
+                    "affected_questions": len(affected_question_ids),
+                    "orphan_questions": orphan_questions,
+                    "rule_type_counts": dict(sorted(rule_type_counts.items())),
+                }
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="cleanup_filtered_answers",
+                    target=f"group:{group_id}",
+                    details=details,
+                )
+                connection.commit()
+                return {"applied": True, **details}
+            except Exception:
+                connection.rollback()
+                raise
 
     async def replace_answer_media(
         self,
