@@ -6,7 +6,7 @@ from sys import maxsize
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
-from astrbot.api.web import json_response
+from astrbot.api.web import json_response, request
 
 from new_chat_learning.application.library import component_preview, parse_add_pair
 from new_chat_learning.application.runtime import RuntimeApplication
@@ -24,6 +24,15 @@ from new_chat_learning.platform.napcat.normalizer import (
     parse_recall_notice,
     reply_matching_key,
 )
+from new_chat_learning.web.auth import COOKIE_NAME, SESSION_TTL_SECONDS
+
+WEB_HEADERS = {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
 
 
 class NewChatLearningPlugin(star.Star):
@@ -42,6 +51,21 @@ class NewChatLearningPlugin(star.Star):
             ["GET"],
             "NewChatLearning Beta 运行状态",
         )
+        for suffix, handler, methods, description in (
+            ("auth/state", self.web_auth_state, ["GET"], "NewChatLearning 登录状态"),
+            ("auth/setup", self.web_auth_setup, ["POST"], "NewChatLearning 首次设密"),
+            ("auth/login", self.web_auth_login, ["POST"], "NewChatLearning 登录"),
+            ("auth/logout", self.web_auth_logout, ["POST"], "NewChatLearning 退出"),
+            (
+                "auth/change-password",
+                self.web_auth_change_password,
+                ["POST"],
+                "NewChatLearning 修改密码",
+            ),
+        ):
+            self.context.register_web_api(
+                f"/{PLUGIN_NAME}/api/{suffix}", handler, methods, description
+            )
         self.logger.info("NewChatLearning %s Beta skeleton initialized.", PLUGIN_VERSION)
 
     async def terminate(self) -> None:
@@ -587,8 +611,121 @@ class NewChatLearningPlugin(star.Star):
 
     async def web_status(self):
         if self.app is None:
-            return json_response(
+            return self._web_json(
                 {"status": "error", "message": "插件尚未初始化"},
                 status_code=503,
             )
-        return json_response({"status": "ok", "data": await self.app.status()})
+        if not await self.app.web_auth.authorize(self._web_session_token()):
+            return self._web_json(
+                {"status": "error", "message": "需要登录"}, status_code=401
+            )
+        return self._web_json({"status": "ok", "data": await self.app.status()})
+
+    async def web_auth_state(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        state = await self.app.web_auth.state(self._web_session_token())
+        return self._web_json({"status": "ok", "data": state})
+
+    async def web_auth_setup(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        payload = await self._web_payload()
+        result, session = await self.app.web_auth.setup(
+            str(payload.get("password", "")), str(request.client_host or "")
+        )
+        if result != "ok" or session is None:
+            messages = {
+                "already_configured": "管理密码已经设置。",
+                "loopback_required": "首次设置密码只能从本机访问。",
+                "password_too_short": "密码至少需要 12 个字符。",
+                "password_too_long": "密码不能超过 256 个字符。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(result, "无法设置密码。")},
+                status_code=400,
+            )
+        return self._web_session_response(session)
+
+    async def web_auth_login(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        payload = await self._web_payload()
+        result, session = await self.app.web_auth.login(
+            str(payload.get("password", "")), str(request.client_host or "")
+        )
+        if result != "ok" or session is None:
+            status_code = 503 if result == "credential_error" else 429 if result == "locked" else 401
+            return self._web_json(
+                {"status": "error", "message": "登录失败，请稍后重试。"},
+                status_code=status_code,
+            )
+        return self._web_session_response(session)
+
+    async def web_auth_logout(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        payload = await self._web_payload()
+        valid = await self.app.web_auth.logout(
+            self._web_session_token(), str(payload.get("csrf_token", ""))
+        )
+        if not valid:
+            return self._web_json({"status": "error", "message": "请求未授权。"}, status_code=403)
+        response = self._web_json({"status": "ok", "data": {"logged_out": True}})
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return response
+
+    async def web_auth_change_password(self):
+        if self.app is None:
+            return self._web_json({"status": "error", "message": "插件尚未初始化"}, status_code=503)
+        payload = await self._web_payload()
+        result, session = await self.app.web_auth.change_password(
+            session_token=self._web_session_token(),
+            csrf_token=str(payload.get("csrf_token", "")),
+            current_password=str(payload.get("current_password", "")),
+            new_password=str(payload.get("new_password", "")),
+        )
+        if result != "ok" or session is None:
+            messages = {
+                "password_too_short": "新密码至少需要 12 个字符。",
+                "password_too_long": "新密码不能超过 256 个字符。",
+                "invalid_credentials": "当前密码不正确。",
+                "csrf_invalid": "安全令牌已失效，请刷新页面。",
+                "credential_error": "密码文件不可用，请检查本机数据目录。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(result, "请求未授权。")},
+                status_code=403,
+            )
+        return self._web_session_response(session)
+
+    async def _web_payload(self) -> dict:
+        body = await request.body()
+        if len(body) > 8192:
+            return {}
+        try:
+            payload = __import__("json").loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _web_session_token(self) -> str:
+        return str(request.cookies.get(COOKIE_NAME, "") or "")
+
+    def _web_session_response(self, session):
+        response = self._web_json(
+            {"status": "ok", "data": {"csrf_token": session.csrf_token}}
+        )
+        response.set_cookie(
+            COOKIE_NAME,
+            session.token,
+            max_age=SESSION_TTL_SECONDS,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
+        return response
+
+    @staticmethod
+    def _web_json(data, *, status_code: int = 200):
+        return json_response(data, status_code=status_code, headers=WEB_HEADERS)

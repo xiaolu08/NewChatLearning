@@ -17,6 +17,7 @@ temp/
 !.env.example
 secrets/
 password.json
+webui-password.json
 *.key
 *.pem
 

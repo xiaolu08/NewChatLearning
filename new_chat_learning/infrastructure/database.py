@@ -214,6 +214,25 @@ class SQLiteStore:
             result["media_bytes"] = int(media_bytes[0])
             return result
 
+    async def record_audit(
+        self,
+        *,
+        actor_id: str,
+        action: str,
+        target: str,
+        details: dict[str, Any],
+    ) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            self._insert_audit(
+                connection,
+                actor_id=str(actor_id),
+                action=str(action),
+                target=str(target),
+                details=details,
+            )
+            connection.commit()
+
     async def import_legacy_jsonl(
         self,
         *,

@@ -46,6 +46,11 @@ def load_main(monkeypatch):
     event_module.filter = Filter
     web_module = types.ModuleType("astrbot.api.web")
     web_module.json_response = lambda value, **_kwargs: value
+    web_module.request = SimpleNamespace(
+        client_host="127.0.0.1",
+        cookies={},
+        body=lambda: None,
+    )
     api_module = types.ModuleType("astrbot.api")
     api_module.star = star_module
     astrbot_module = types.ModuleType("astrbot")
@@ -426,3 +431,85 @@ def test_media_cleanup_apply_requires_literal_confirmation(monkeypatch):
 
     assert media.called is False
     assert "confirm" in event.result.text
+
+
+def test_web_status_requires_independent_session_and_sets_security_headers(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token):
+            assert token == ""
+            return False
+
+    responses = []
+
+    class Response:
+        def __init__(self, data, status_code, headers):
+            self.data = data
+            self.status_code = status_code
+            self.headers = headers
+
+    def make_response(data, *, status_code=200, headers=None):
+        response = Response(data, status_code, headers or {})
+        responses.append(response)
+        return response
+
+    monkeypatch.setattr(main_module, "json_response", make_response)
+    monkeypatch.setattr(main_module, "request", SimpleNamespace(cookies={}))
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_status())
+
+    assert response.status_code == 401
+    assert response.data["message"] == "需要登录"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert responses == [response]
+
+
+def test_web_login_sets_http_only_strict_cookie(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def login(self, password, client_host):
+            assert password == "long-enough-password"
+            assert client_host == "127.0.0.1"
+            return "ok", SimpleNamespace(token="session-token", csrf_token="csrf-token")
+
+    class Response:
+        def __init__(self, data, status_code, headers):
+            self.data = data
+            self.status_code = status_code
+            self.headers = headers
+            self.cookie = None
+
+        def set_cookie(self, key, value, **kwargs):
+            self.cookie = (key, value, kwargs)
+
+    monkeypatch.setattr(
+        main_module,
+        "json_response",
+        lambda data, *, status_code=200, headers=None: Response(
+            data, status_code, headers or {}
+        ),
+    )
+
+    async def body():
+        return b'{"password":"long-enough-password"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(client_host="127.0.0.1", cookies={}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_auth_login())
+
+    assert response.status_code == 200
+    assert response.data["data"]["csrf_token"] == "csrf-token"
+    assert response.cookie[0:2] == ("ncl_admin_session", "session-token")
+    assert response.cookie[2]["httponly"] is True
+    assert response.cookie[2]["samesite"] == "strict"

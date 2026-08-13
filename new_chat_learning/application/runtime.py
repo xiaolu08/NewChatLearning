@@ -13,6 +13,7 @@ from new_chat_learning.constants import PLUGIN_VERSION
 from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
+from new_chat_learning.web.auth import WebAuthService
 
 
 class RuntimeApplication:
@@ -25,6 +26,7 @@ class RuntimeApplication:
         self.media = MediaService(self.data_dir, self.store, self.config)
         self.migration = MigrationService(self.data_dir, self.store)
         self.reply = ReplyService(self.store, self.config)
+        self.web_auth = WebAuthService(self.data_dir, self.store)
         self.started_at: datetime | None = None
 
     async def start(self) -> None:

@@ -5,14 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>NewChatLearning Beta</title>
     <style>
-      :root { color-scheme: light; --bg: #f4f6f8; --panel: #fff; --text: #17202a; --muted: #68737d; --line: #dce1e5; --accent: #087f5b; --warn: #b25c00; }
-      :root[data-theme="dark"] { color-scheme: dark; --bg: #15191d; --panel: #20262b; --text: #eef2f4; --muted: #aab3ba; --line: #384047; --accent: #52c89a; --warn: #ffb65c; }
+      :root { color-scheme: light; --bg: #f3f5f6; --panel: #fff; --text: #172026; --muted: #69757d; --line: #d9dfe3; --accent: #087f5b; --danger: #c43d3d; --warn: #a85a00; }
+      :root[data-theme="dark"] { color-scheme: dark; --bg: #171b1e; --panel: #22282c; --text: #edf1f3; --muted: #a9b2b8; --line: #3a4247; --accent: #53c99b; --danger: #ff8585; --warn: #ffb75e; }
       * { box-sizing: border-box; }
       body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Microsoft YaHei", sans-serif; }
-      header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+      header { min-height: 64px; background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
       h1 { margin: 0; font-size: 20px; font-weight: 650; }
-      .beta { color: var(--warn); font-weight: 650; }
+      h2 { margin: 0 0 8px; font-size: 18px; }
+      p { margin: 0; color: var(--muted); }
+      button, input { font: inherit; }
+      button { border: 1px solid transparent; border-radius: 6px; background: var(--accent); color: #fff; min-height: 38px; padding: 8px 14px; cursor: pointer; }
+      button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
+      button:disabled { opacity: .55; cursor: wait; }
+      input { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
+      label { display: block; color: var(--muted); margin: 14px 0 5px; }
       main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+      .beta { color: var(--warn); font-weight: 650; }
+      .auth-shell { min-height: calc(100vh - 113px); display: grid; place-items: center; }
+      .auth-panel { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 24px; }
+      .auth-panel button { width: 100%; margin-top: 18px; }
+      .message { min-height: 22px; margin-top: 10px; color: var(--danger); }
       .notice { border-left: 4px solid var(--warn); background: var(--panel); padding: 12px 16px; margin-bottom: 18px; }
       .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
       .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-height: 96px; }
@@ -23,14 +35,31 @@
       th, td { padding: 11px 14px; border: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
       th { width: 210px; color: var(--muted); font-weight: 550; }
       .ok { color: var(--accent); }
-      .error { color: #c92a2a; }
-      @media (max-width: 720px) { header { padding: 14px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } th { width: 130px; } }
+      .error { color: var(--danger); }
+      .hidden { display: none !important; }
+      .actions { display: flex; gap: 8px; }
+      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } th { width: 125px; } .actions { flex-wrap: wrap; } }
     </style>
   </head>
   <body>
-    <header><h1>NewChatLearning</h1><span class="beta">BETA</span></header>
-    <main>
-      <div class="notice">当前为 Beta 开发版本，已支持受控学习、三级匹配、媒体持久化和实时共享词库；旧词库迁移、完整管理和 TTS 尚未完成。</div>
+    <header>
+      <h1>NewChatLearning</h1>
+      <div class="actions"><span class="beta">BETA</span><button id="logout" class="secondary hidden" type="button">退出</button></div>
+    </header>
+    <main id="auth" class="auth-shell">
+      <form id="auth-form" class="auth-panel">
+        <h2 id="auth-title">管理页面登录</h2>
+        <p id="auth-copy">请输入独立管理密码。</p>
+        <label for="password">管理密码</label>
+        <input id="password" name="password" type="password" minlength="12" maxlength="256" autocomplete="current-password" required>
+        <label id="confirm-label" class="hidden" for="confirm-password">确认密码</label>
+        <input id="confirm-password" class="hidden" name="confirm-password" type="password" minlength="12" maxlength="256" autocomplete="new-password">
+        <button id="submit" type="submit">登录</button>
+        <div id="auth-message" class="message" role="status"></div>
+      </form>
+    </main>
+    <main id="dashboard" class="hidden">
+      <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
       <div class="grid">
         <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
         <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
@@ -39,54 +68,84 @@
         <div class="metric"><span>媒体文件</span><strong id="media-count">-</strong></div>
         <div class="metric"><span>媒体占用</span><strong id="media-size">-</strong></div>
       </div>
-      <section>
-        <table>
-          <tbody>
-            <tr><th>插件版本</th><td id="version">-</td></tr>
-            <tr><th>数据库</th><td id="database">-</td></tr>
-            <tr><th>配置版本</th><td id="revision">-</td></tr>
-            <tr><th>词库范围</th><td id="library">-</td></tr>
-            <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
-            <tr><th>数据目录</th><td id="data-dir">-</td></tr>
-          </tbody>
-        </table>
-      </section>
+      <section><table><tbody>
+        <tr><th>插件版本</th><td id="version">-</td></tr>
+        <tr><th>数据库</th><td id="database">-</td></tr>
+        <tr><th>配置版本</th><td id="revision">-</td></tr>
+        <tr><th>词库范围</th><td id="library">-</td></tr>
+        <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
+        <tr><th>数据目录</th><td id="data-dir">-</td></tr>
+      </tbody></table></section>
     </main>
     <script>
-      const setText = (id, value) => { document.getElementById(id).textContent = String(value); };
-      const formatBytes = (bytes) => {
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-        if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-        return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-      };
-      async function loadStatus() {
-        try {
-          await window.AstrBotPluginPage.ready();
-          const response = await window.AstrBotPluginPage.apiGet("api/status");
-          const payload = response.data || response;
-          const status = payload.data || payload;
-          setText("state", status.state === "running" ? "运行中" : status.state);
-          document.getElementById("state").className = "ok";
-          setText("questions", status.statistics.questions);
-          setText("answers", status.statistics.answers);
-          setText("pending", status.statistics.pending_messages);
-          setText("media-count", status.statistics.media_assets);
-          setText("media-size", formatBytes(status.statistics.media_bytes));
-          setText("version", `${status.version} (${status.release_stage})`);
-          setText("database", `schema v${status.database.schema_version}, ${status.database.integrity}`);
-          setText("revision", status.config_revision);
-          setText("library", status.library.mode === "global"
-            ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）`
-            : "仅本群");
-          setText("data-dir", status.data_dir);
-        } catch (error) {
-          setText("state", "读取失败");
-          document.getElementById("state").className = "error";
-          setText("database", error.message || error);
-        }
+      let authState = null;
+      const bridge = window.AstrBotPluginPage;
+      const el = (id) => document.getElementById(id);
+      const setText = (id, value) => { el(id).textContent = String(value); };
+      const unwrap = (response) => response?.data || response || {};
+      const payloadData = (response) => { const value = unwrap(response); return value.data || value; };
+      const formatBytes = (bytes) => bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+
+      async function refreshAuth() {
+        authState = payloadData(await bridge.apiGet("api/auth/state"));
+        if (authState.authenticated) return showDashboard();
+        el("auth").classList.remove("hidden");
+        el("dashboard").classList.add("hidden");
+        el("logout").classList.add("hidden");
+        const setup = Boolean(authState.setup_required);
+        setText("auth-title", setup ? "首次设置管理密码" : "管理页面登录");
+        setText("auth-copy", setup ? "首次设置只能从运行 AstrBot 的本机完成，密码至少 12 个字符。" : "请输入 NewChatLearning 的独立管理密码。");
+        setText("submit", setup ? "设置密码" : "登录");
+        el("confirm-label").classList.toggle("hidden", !setup);
+        el("confirm-password").classList.toggle("hidden", !setup);
+        el("password").autocomplete = setup ? "new-password" : "current-password";
       }
-      loadStatus();
+
+      async function showDashboard() {
+        el("auth").classList.add("hidden");
+        el("dashboard").classList.remove("hidden");
+        el("logout").classList.remove("hidden");
+        const status = payloadData(await bridge.apiGet("api/status"));
+        setText("state", status.state === "running" ? "运行中" : status.state);
+        el("state").className = "ok";
+        setText("questions", status.statistics.questions);
+        setText("answers", status.statistics.answers);
+        setText("pending", status.statistics.pending_messages);
+        setText("media-count", status.statistics.media_assets);
+        setText("media-size", formatBytes(status.statistics.media_bytes));
+        setText("version", `${status.version} (${status.release_stage})`);
+        setText("database", `schema v${status.database.schema_version}, ${status.database.integrity}`);
+        setText("revision", status.config_revision);
+        setText("library", status.library.mode === "global" ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）` : "仅本群");
+        setText("data-dir", status.data_dir);
+      }
+
+      el("auth-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const password = el("password").value;
+        const setup = Boolean(authState?.setup_required);
+        if (setup && password !== el("confirm-password").value) {
+          setText("auth-message", "两次输入的密码不一致。"); return;
+        }
+        el("submit").disabled = true; setText("auth-message", "");
+        try {
+          const response = await bridge.apiPost(setup ? "api/auth/setup" : "api/auth/login", { password });
+          authState = { setup_required: false, authenticated: true, csrf_token: payloadData(response).csrf_token };
+          el("password").value = ""; el("confirm-password").value = "";
+          await showDashboard();
+        } catch (error) { setText("auth-message", error?.message || "操作失败，请稍后重试。"); }
+        finally { el("submit").disabled = false; }
+      });
+
+      el("logout").addEventListener("click", async () => {
+        try { await bridge.apiPost("api/auth/logout", { csrf_token: authState?.csrf_token || "" }); }
+        finally { authState = null; await refreshAuth(); }
+      });
+
+      (async () => {
+        try { await bridge.ready(); await refreshAuth(); }
+        catch (error) { setText("auth-message", error?.message || "页面初始化失败。"); }
+      })();
     </script>
   </body>
 </html>

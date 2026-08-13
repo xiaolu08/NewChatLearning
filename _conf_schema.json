@@ -257,7 +257,7 @@
   "webui": {
     "description": "管理页面",
     "type": "object",
-    "hint": "管理页面使用 AstrBot Dashboard 的登录态和插件页面安全通道。独立登录服务将在完整 WebUI 阶段实现。",
+    "hint": "管理页面使用独立密码和服务端会话。首次设置密码只能从运行 AstrBot 的本机访问；页面仍由 AstrBot Dashboard 承载。",
     "items": {
       "enabled": {
         "description": "启用管理页面",
