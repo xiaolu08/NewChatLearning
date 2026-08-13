@@ -67,10 +67,12 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - SQLite 分群精确匹配与原版语义的答案权重随机
 - 回复群白名单、静默学习群、概率、等待、冷却和文本长度限制
 - 本地回复成功后停止当次 LLM，并写入 AstrBot 群消息历史
+- 精确、受限正则、jieba 词频余弦三级匹配及原版默认阈值
+- 按答案权重或答案内容作为问题的频次判断消息类型发送阈值
+- SQLite schema v3 问题纯文本索引、正则标记与旧库自动回填
 
 尚未完成：
 
-- 正则匹配、jieba 余弦相似度和候选类型阈值
 - NapCat 长尾消息组件、媒体持久化与回复降级
 - 完整管理 WebUI 与独立登录安全机制
 - TTS 驱动与旧词库迁移工具
@@ -91,6 +93,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 群聊词库可能包含个人信息、攻击性内容、政治内容或已经失效的媒体引用。共享 `.cl` 样本、运行数据库、下载媒体、备份、日志和密钥均被排除在版本控制之外。
 
 云端 TTS 是默认关闭的可选功能，与无 Token 的学习和回复流程相互独立。只有管理员主动配置并启用后，才可能产生对应服务商的费用。
+
+jieba 相似度匹配同样默认关闭。启用后只消耗本机 CPU，不下载模型、不访问网络，也不会产生 LLM Token。
 
 ## 项目关系
 

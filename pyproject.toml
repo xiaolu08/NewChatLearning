@@ -4,11 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "new-chat-learning"
-version = "0.1.0b3"
+version = "0.1.0b4"
 description = "Zero-LLM-token chat learning plugin for AstrBot and NapCat"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-only" }
 authors = [{ name = "xiaolu08" }]
+dependencies = [
+    "jieba>=0.42.1,<1",
+    "regex>=2024.11.6,<2027",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

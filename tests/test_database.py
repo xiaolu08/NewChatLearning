@@ -18,7 +18,7 @@ def test_database_initializes_schema_and_statistics(tmp_path):
     health, statistics = asyncio.run(scenario())
 
     assert health["connected"] is True
-    assert health["schema_version"] == 2
+    assert health["schema_version"] == 3
     assert health["integrity"] == "ok"
     assert statistics["questions"] == 0
     assert statistics["answers"] == 0
@@ -57,7 +57,11 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO questions(group_id, normalized_key, components_json)
-        VALUES('10001', 'legacy-question', '{}');
+        VALUES(
+            '10001',
+            'legacy-question',
+            '{"schema_version":1,"components":[{"type":"Plain","data":{"text":"旧问题"}}]}'
+        );
         INSERT INTO answers(question_id, components_json, weight)
         VALUES(1, '{"components": []}', 1), (1, '{"components": []}', 2);
         CREATE TABLE contributions (
@@ -107,9 +111,11 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
         answer_columns = {row[1] for row in connection.execute("PRAGMA table_info(answers)")}
     finally:
         connection.close()
-    assert health["schema_version"] == 2
+    assert health["schema_version"] == 3
     assert statistics["pending_messages"] == 0
     assert "frequency" in question_columns
+    assert "plain_text" in question_columns
+    assert "is_regex" in question_columns
     assert "normalized_key" in answer_columns
     connection = sqlite3.connect(path)
     try:
@@ -119,3 +125,12 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
     finally:
         connection.close()
     assert legacy_keys == ["legacy:1", "legacy:2"]
+    connection = sqlite3.connect(path)
+    try:
+        plain_text, is_regex = connection.execute(
+            "SELECT plain_text, is_regex FROM questions WHERE id = 1"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert plain_text == "旧问题"
+    assert is_regex == 0

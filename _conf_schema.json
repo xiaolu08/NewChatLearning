@@ -2,7 +2,7 @@
   "general": {
     "description": "基础设置",
     "type": "object",
-    "hint": "当前 Beta 已具备受控群聊采集、相邻问答固化与精确匹配回复能力。",
+    "hint": "当前 Beta 已具备受控群聊采集、相邻问答固化与本地三级匹配回复能力。",
     "obvious_hint": true,
     "items": {
       "enabled": {
@@ -33,7 +33,7 @@
   "learning": {
     "description": "学习设置",
     "type": "object",
-    "hint": "学习默认关闭。启用后仍只采集明确列出的 QQ 群；当前阶段不会自动回复。",
+    "hint": "学习默认关闭。启用后仍只采集明确列出的 QQ 群；学习与回复开关互相独立。",
     "obvious_hint": true,
     "items": {
       "enabled": {
@@ -59,7 +59,7 @@
   "reply": {
     "description": "回复设置",
     "type": "object",
-    "hint": "本地词库回复默认关闭。当前 Beta 仅启用精确匹配；正则和相似度匹配将在后续版本接入。",
+    "hint": "本地词库回复默认关闭。按精确、正则、jieba 词频余弦的顺序检索，不调用 LLM。",
     "obvious_hint": true,
     "items": {
       "enabled": {
@@ -110,6 +110,47 @@
         "description": "被 @ 时跳过概率判定",
         "type": "bool",
         "default": true
+      },
+      "regex_enabled": {
+        "description": "启用正则问题匹配",
+        "type": "bool",
+        "default": true
+      },
+      "regex_timeout_ms": {
+        "description": "单条正则超时（毫秒）",
+        "type": "int",
+        "hint": "用于限制异常或高复杂度表达式的执行时间。",
+        "default": 50
+      },
+      "similarity_enabled": {
+        "description": "启用 jieba 余弦相似度匹配",
+        "type": "bool",
+        "hint": "会增加本机 CPU 消耗，但不会调用模型或产生 Token。",
+        "default": false
+      },
+      "similarity_threshold": {
+        "description": "余弦相似度阈值",
+        "type": "float",
+        "default": 0.5
+      },
+      "similarity_max_length": {
+        "description": "参与相似度匹配的文本最大长度",
+        "type": "int",
+        "default": 35
+      },
+      "type_frequency_thresholds": {
+        "description": "消息类型发送频次阈值",
+        "type": "object",
+        "hint": "某类型组件仅在答案权重，或该答案内容作为问题出现的频次达到阈值时允许发送；0 表示不限制。",
+        "items": {
+          "Plain": {"description": "文本", "type": "int", "default": 0},
+          "Image": {"description": "图片", "type": "int", "default": 0},
+          "Face": {"description": "表情", "type": "int", "default": 0},
+          "Record": {"description": "语音", "type": "int", "default": 0},
+          "Video": {"description": "视频", "type": "int", "default": 0},
+          "Json": {"description": "JSON 卡片", "type": "int", "default": 0},
+          "File": {"description": "文件", "type": "int", "default": 0}
+        }
       }
     }
   },

@@ -46,3 +46,23 @@ def test_reply_requires_explicit_group_and_silent_group_wins():
     assert service.reply_enabled_for("10003") is False
     assert service.reply_settings()["probability_percent"] == 100.0
     assert service.reply_settings()["cooldown_seconds"] == 0.0
+
+
+def test_matching_settings_are_bounded_and_type_thresholds_are_normalized():
+    service = ConfigService(
+        {
+            "reply": {
+                "regex_timeout_ms": 0,
+                "similarity_threshold": 2,
+                "similarity_max_length": -1,
+                "type_frequency_thresholds": {"Image": 3, "Plain": -2},
+            }
+        }
+    )
+
+    settings = service.reply_settings()
+
+    assert settings["regex_timeout_ms"] == 1
+    assert settings["similarity_threshold"] == 1.0
+    assert settings["similarity_max_length"] == 1
+    assert settings["type_frequency_thresholds"] == {"image": 3, "plain": 0}

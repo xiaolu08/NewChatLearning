@@ -75,7 +75,8 @@ class Reply:
         self.marked = []
         self.mentioned_bot = None
 
-    async def decide(self, _group_id, _key, *, mentioned_bot=False):
+    async def decide(self, _group_id, _key, *, plain_text="", mentioned_bot=False):
+        self.plain_text = plain_text
         self.mentioned_bot = mentioned_bot
         return self.decision
 
@@ -127,11 +128,12 @@ def plugin_with(main_module, decision):
 def test_successful_local_reply_stops_llm_and_persists_history(monkeypatch):
     main_module = load_main(monkeypatch)
     candidate = SimpleNamespace(
+        plain_text="hello",
         components=(
             {"type": "At", "data": {"qq": "all"}},
             {"type": "At", "data": {"qq": "9"}},
             {"type": "Plain", "data": {"text": "hello"}},
-        )
+        ),
     )
     plugin, reply, history = plugin_with(main_module, ReplyDecision(candidate, "exact"))
     event = Event()
@@ -153,7 +155,10 @@ def test_successful_local_reply_stops_llm_and_persists_history(monkeypatch):
 
 def test_render_failure_leaves_llm_flow_untouched(monkeypatch):
     main_module = load_main(monkeypatch)
-    candidate = SimpleNamespace(components=({"type": "Plain", "data": {"text": "hello"}},))
+    candidate = SimpleNamespace(
+        plain_text="hello",
+        components=({"type": "Plain", "data": {"text": "hello"}},),
+    )
     plugin, reply, history = plugin_with(main_module, ReplyDecision(candidate, "exact"))
     event = Event()
     monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)

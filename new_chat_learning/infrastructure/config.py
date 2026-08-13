@@ -22,6 +22,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "wait_jitter_seconds": 0.0,
         "max_plain_length": 100,
         "at_force_reply": True,
+        "regex_enabled": True,
+        "regex_timeout_ms": 50,
+        "similarity_enabled": False,
+        "similarity_threshold": 0.5,
+        "similarity_max_length": 35,
+        "type_frequency_thresholds": {},
     },
     "permissions": {"plugin_admin_ids": []},
     "storage": {"media_quota_gb": 10.0},
@@ -96,6 +102,28 @@ class ConfigService:
             ),
             "max_plain_length": self._bounded_int(reply.get("max_plain_length"), 100, 1, 100000),
             "at_force_reply": bool(reply.get("at_force_reply", True)),
+            "regex_enabled": bool(reply.get("regex_enabled", True)),
+            "regex_timeout_ms": self._bounded_int(reply.get("regex_timeout_ms"), 50, 1, 1000),
+            "similarity_enabled": bool(reply.get("similarity_enabled", False)),
+            "similarity_threshold": self._bounded_float(
+                reply.get("similarity_threshold"), 0.5, 0.0, 1.0
+            ),
+            "similarity_max_length": self._bounded_int(
+                reply.get("similarity_max_length"), 35, 1, 1000
+            ),
+            "type_frequency_thresholds": self._type_frequency_thresholds(
+                reply.get("type_frequency_thresholds")
+            ),
+        }
+
+    @classmethod
+    def _type_frequency_thresholds(cls, value: Any) -> dict[str, int]:
+        if not isinstance(value, dict):
+            return {}
+        return {
+            str(component_type).lower(): cls._bounded_int(threshold, 0, 0, 1000000)
+            for component_type, threshold in value.items()
+            if str(component_type).strip()
         }
 
     @staticmethod

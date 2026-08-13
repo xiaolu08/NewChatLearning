@@ -44,6 +44,17 @@ class NormalizedMessage:
     def is_empty(self) -> bool:
         return not self.components
 
+    @property
+    def plain_text(self) -> str:
+        return next(
+            (
+                str(component.get("data", {}).get("text", "")).strip()
+                for component in self.matching_components
+                if str(component.get("type", "")).lower() == "plain"
+            ),
+            "",
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class RecallNotice:

@@ -7,7 +7,7 @@ from typing import Any
 
 from new_chat_learning.constants import SCHEMA_VERSION
 from new_chat_learning.domain.message import NormalizedMessage
-from new_chat_learning.domain.reply import ReplyCandidate
+from new_chat_learning.domain.reply import QuestionCandidate, ReplyCandidate
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS questions (
     group_id TEXT NOT NULL,
     normalized_key TEXT NOT NULL,
     components_json TEXT NOT NULL,
+    plain_text TEXT NOT NULL DEFAULT '',
+    is_regex INTEGER NOT NULL DEFAULT 0 CHECK(is_regex IN (0, 1)),
     frequency INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -252,8 +254,11 @@ class SQLiteStore:
         async with self._lock:
             connection = self._require_connection()
             rows = connection.execute(
-                "SELECT a.id AS answer_id, a.question_id, a.weight, a.components_json "
+                "SELECT a.id AS answer_id, a.question_id, a.weight, "
+                "COALESCE(aq.frequency, 0) AS answer_question_frequency, a.components_json "
                 "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
+                "LEFT JOIN questions AS aq ON aq.group_id = q.group_id "
+                "AND aq.normalized_key = a.normalized_key "
                 "WHERE q.group_id = ? AND q.normalized_key = ? AND a.weight > 0 "
                 "ORDER BY a.id",
                 (str(group_id), normalized_key),
@@ -263,6 +268,48 @@ class SQLiteStore:
                     answer_id=int(row["answer_id"]),
                     question_id=int(row["question_id"]),
                     weight=int(row["weight"]),
+                    answer_question_frequency=int(row["answer_question_frequency"]),
+                    components_json=str(row["components_json"]),
+                )
+                for row in rows
+            ]
+
+    async def find_matchable_questions(self, group_id: str) -> list[QuestionCandidate]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT id, plain_text, is_regex FROM questions "
+                "WHERE group_id = ? AND plain_text != '' ORDER BY id",
+                (str(group_id),),
+            ).fetchall()
+            return [
+                QuestionCandidate(
+                    question_id=int(row["id"]),
+                    plain_text=str(row["plain_text"]),
+                    is_regex=bool(row["is_regex"]),
+                )
+                for row in rows
+            ]
+
+    async def find_answers_for_question(self, question_id: int) -> list[ReplyCandidate]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT a.id AS answer_id, a.question_id, a.weight, "
+                "COALESCE(aq.frequency, 0) AS answer_question_frequency, "
+                "a.components_json FROM answers AS a "
+                "JOIN questions AS q ON q.id = a.question_id "
+                "LEFT JOIN questions AS aq ON aq.group_id = q.group_id "
+                "AND aq.normalized_key = a.normalized_key "
+                "WHERE a.question_id = ? AND a.weight > 0 ORDER BY a.id",
+                (int(question_id),),
+            ).fetchall()
+            return [
+                ReplyCandidate(
+                    answer_id=int(row["answer_id"]),
+                    question_id=int(row["question_id"]),
+                    weight=int(row["weight"]),
+                    answer_question_frequency=int(row["answer_question_frequency"]),
                     components_json=str(row["components_json"]),
                 )
                 for row in rows
@@ -276,10 +323,18 @@ class SQLiteStore:
         components_json: str,
     ) -> int:
         connection.execute(
-            "INSERT INTO questions(group_id, normalized_key, components_json) VALUES(?, ?, ?) "
+            "INSERT INTO questions(group_id, normalized_key, components_json, plain_text) "
+            "VALUES(?, ?, ?, ?) "
             "ON CONFLICT(group_id, normalized_key) DO UPDATE SET "
-            "frequency=questions.frequency + 1, updated_at=CURRENT_TIMESTAMP",
-            (group_id, normalized_key, components_json),
+            "frequency=questions.frequency + 1, "
+            "plain_text=CASE WHEN questions.plain_text = '' THEN excluded.plain_text "
+            "ELSE questions.plain_text END, updated_at=CURRENT_TIMESTAMP",
+            (
+                group_id,
+                normalized_key,
+                components_json,
+                _plain_text_from_components(components_json),
+            ),
         )
         row = connection.execute(
             "SELECT id FROM questions WHERE group_id = ? AND normalized_key = ?",
@@ -321,8 +376,46 @@ class SQLiteStore:
         connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_answers_unique ON answers(question_id, normalized_key)"
         )
+        question_columns = {row[1] for row in connection.execute("PRAGMA table_info(questions)")}
+        if "plain_text" not in question_columns:
+            connection.execute(
+                "ALTER TABLE questions ADD COLUMN plain_text TEXT NOT NULL DEFAULT ''"
+            )
+        if "is_regex" not in question_columns:
+            connection.execute(
+                "ALTER TABLE questions ADD COLUMN is_regex INTEGER NOT NULL DEFAULT 0"
+            )
+        rows = connection.execute(
+            "SELECT id, components_json FROM questions WHERE plain_text = ''"
+        ).fetchall()
+        connection.executemany(
+            "UPDATE questions SET plain_text = ? WHERE id = ?",
+            [
+                (_plain_text_from_components(str(row["components_json"])), int(row["id"]))
+                for row in rows
+            ],
+        )
 
     def _require_connection(self) -> sqlite3.Connection:
         if self._connection is None:
             raise RuntimeError("SQLite store is not open")
         return self._connection
+
+
+def _plain_text_from_components(components_json: str) -> str:
+    import json
+
+    try:
+        payload = json.loads(components_json)
+    except (TypeError, ValueError):
+        return ""
+    components = payload.get("components", []) if isinstance(payload, dict) else []
+    if not isinstance(components, list):
+        return ""
+    for component in components:
+        if not isinstance(component, dict) or str(component.get("type", "")).lower() != "plain":
+            continue
+        data = component.get("data", {})
+        if isinstance(data, dict):
+            return str(data.get("text", "")).strip()
+    return ""

@@ -74,6 +74,7 @@ class NewChatLearningPlugin(star.Star):
         decision = await self.app.reply.decide(
             group_id,
             reply_matching_key(message, event.get_self_id()),
+            plain_text=message.plain_text,
             mentioned_bot=mentioned_bot,
         )
         if not decision.should_reply or decision.candidate is None:

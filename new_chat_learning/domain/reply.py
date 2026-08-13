@@ -10,6 +10,7 @@ class ReplyCandidate:
     answer_id: int
     question_id: int
     weight: int
+    answer_question_frequency: int
     components_json: str
 
     @property
@@ -30,3 +31,10 @@ class ReplyDecision:
     @property
     def should_reply(self) -> bool:
         return self.candidate is not None
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionCandidate:
+    question_id: int
+    plain_text: str
+    is_regex: bool
