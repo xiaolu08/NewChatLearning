@@ -327,6 +327,77 @@ class ConfigService:
                 raise
             return self.filter_settings("")
 
+    def permission_settings(self) -> dict[str, Any]:
+        permissions = self.snapshot()["permissions"]
+        return {
+            **self._validated_permission_update(permissions),
+            "revision": self.revision,
+        }
+
+    async def update_permission_settings(
+        self,
+        *,
+        values: dict[str, Any],
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            normalized = self._validated_permission_update(values)
+            original = deepcopy(self._source)
+            try:
+                self._source["permissions"] = normalized
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.permission_settings()
+
+    def _validated_permission_update(self, values: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(values, dict):
+            raise TypeError("invalid_permissions")
+        plugin_admin_ids = self._normalized_qq_ids(
+            values.get("plugin_admin_ids"), maximum=100
+        )
+        raw_groups = values.get("group_sub_admins", [])
+        if not isinstance(raw_groups, list) or len(raw_groups) > 200:
+            raise ValueError("invalid_permissions")
+        group_sub_admins = []
+        seen_groups = set()
+        for entry in raw_groups:
+            if not isinstance(entry, dict):
+                raise TypeError("invalid_permissions")
+            group_id = self._validated_qq_id(entry.get("group_id"))
+            if group_id in seen_groups:
+                raise ValueError("invalid_permissions")
+            seen_groups.add(group_id)
+            admin_ids = self._normalized_qq_ids(entry.get("admin_ids"), maximum=100)
+            if admin_ids:
+                group_sub_admins.append({"group_id": group_id, "admin_ids": admin_ids})
+        return {
+            "plugin_admin_ids": plugin_admin_ids,
+            "group_sub_admins": group_sub_admins,
+        }
+
+    @classmethod
+    def _normalized_qq_ids(cls, value: Any, *, maximum: int) -> list[str]:
+        if not isinstance(value, list) or len(value) > maximum:
+            raise ValueError("invalid_permissions")
+        result = []
+        for item in value:
+            qq_id = cls._validated_qq_id(item)
+            if qq_id not in result:
+                result.append(qq_id)
+        return result
+
+    @staticmethod
+    def _validated_qq_id(value: Any) -> str:
+        qq_id = str(value).strip()
+        if not qq_id.isdigit() or not 5 <= len(qq_id) <= 20:
+            raise ValueError("invalid_permissions")
+        return qq_id
+
     def _validated_filter_update(self, values: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(values.get("enabled"), bool):
             raise TypeError("invalid_filters")

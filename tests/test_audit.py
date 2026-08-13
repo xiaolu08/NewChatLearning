@@ -78,3 +78,34 @@ def test_audit_service_rejects_invalid_action_filter(tmp_path):
             await store.close()
 
     asyncio.run(scenario())
+
+
+def test_permission_audit_exposes_counts_without_admin_ids(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "audit.sqlite3")
+        await store.open()
+        try:
+            await store.record_audit(
+                actor_id="webui:abcdef1234567890",
+                action="update_permission_settings",
+                target="permissions",
+                details={
+                    "before_plugin_admin_count": 1,
+                    "after_plugin_admin_count": 2,
+                    "before_group_count": 1,
+                    "after_group_count": 2,
+                    "before_sub_admin_count": 1,
+                    "after_sub_admin_count": 3,
+                    "plugin_admin_ids": ["12345", "67890"],
+                    "source": "webui",
+                },
+            )
+            return await AuditService(store).list_entries(limit=10)
+        finally:
+            await store.close()
+
+    result = asyncio.run(scenario())
+    entry = result["entries"][0]
+    assert entry["action_label"] == "更新权限设置"
+    assert entry["details"]["after_sub_admin_count"] == 3
+    assert "plugin_admin_ids" not in entry["details"]

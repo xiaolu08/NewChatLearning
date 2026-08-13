@@ -73,6 +73,13 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 保存群聊设置",
             ),
+            ("permissions", self.web_permissions, ["GET"], "NewChatLearning 权限设置"),
+            (
+                "permissions/update",
+                self.web_permissions_update,
+                ["POST"],
+                "NewChatLearning 保存权限设置",
+            ),
             ("filters/settings", self.web_filter_settings, ["GET"], "NewChatLearning 过滤设置"),
             (
                 "filters/settings/update",
@@ -975,6 +982,55 @@ class NewChatLearningPlugin(star.Star):
             {"status": "ok", "data": await self.app.filter_settings(group_id)}
         )
 
+    async def web_permissions(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {"status": "ok", "data": self.app.config.permission_settings()}
+        )
+
+    async def web_permissions_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        if payload.get("confirmed") is not True:
+            return self._web_json(
+                {"status": "error", "message": "请先确认权限变更。"}, status_code=400
+            )
+        revision = str(payload.get("revision", "")).strip()
+        values = {
+            "plugin_admin_ids": payload.get("plugin_admin_ids"),
+            "group_sub_admins": payload.get("group_sub_admins"),
+        }
+        try:
+            result = await self.app.update_permission_settings(
+                values=values,
+                expected_revision=revision,
+                actor_id=self._web_actor_id(),
+            )
+        except (TypeError, ValueError) as exc:
+            if str(exc) == "revision_conflict":
+                return self._web_json(
+                    {
+                        "status": "error",
+                        "message": "配置已被其他入口修改，请刷新后重试。",
+                        "data": {"revision": self.app.config.revision},
+                    },
+                    status_code=409,
+                )
+            return self._web_json(
+                {"status": "error", "message": "权限设置无效，请检查 QQ 号、群号和数量限制。"},
+                status_code=400,
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist NewChatLearning permission settings.")
+            return self._web_json(
+                {"status": "error", "message": "AstrBot 插件配置保存失败，设置未生效。"},
+                status_code=503,
+            )
+        return self._web_json({"status": "ok", "data": result})
+
     async def web_filter_settings_update(self):
         payload, error = await self._authorized_web_payload()
         if error is not None:
@@ -1102,15 +1158,9 @@ class NewChatLearningPlugin(star.Star):
         payload, error = await self._authorized_web_payload()
         if error is not None:
             return error
-        reauthentication = await self.app.web_auth.reauthenticate(
-            session_token=self._web_session_token(),
-            csrf_token=str(payload.get("csrf_token", "")),
-            password=str(payload.get("password", "")),
-        )
-        if reauthentication != "ok":
+        if payload.get("confirmed") is not True:
             return self._web_json(
-                {"status": "error", "message": "密码确认失败，清理未执行。"},
-                status_code=403,
+                {"status": "error", "message": "请先确认执行清理。"}, status_code=400
             )
         group_id = self._web_group_id(payload.get("group_id", ""))
         plan_id = str(payload.get("plan_id", "")).lower()
@@ -1264,15 +1314,9 @@ class NewChatLearningPlugin(star.Star):
         payload, error = await self._authorized_web_payload()
         if error is not None:
             return error
-        reauthentication = await self.app.web_auth.reauthenticate(
-            session_token=self._web_session_token(),
-            csrf_token=str(payload.get("csrf_token", "")),
-            password=str(payload.get("password", "")),
-        )
-        if reauthentication != "ok":
+        if payload.get("confirmed") is not True:
             return self._web_json(
-                {"status": "error", "message": "密码确认失败，删除未执行。"},
-                status_code=403,
+                {"status": "error", "message": "请先确认删除成员贡献。"}, status_code=400
             )
         group_id = self._web_group_id(payload.get("group_id", ""))
         user_id = self._qq_id(payload.get("user_id", ""))
@@ -1312,13 +1356,10 @@ class NewChatLearningPlugin(star.Star):
         payload, error = await self._authorized_web_payload()
         if error is not None:
             return error
-        reauthentication = await self.app.web_auth.reauthenticate(
-            session_token=self._web_session_token(),
-            csrf_token=str(payload.get("csrf_token", "")),
-            password=str(payload.get("password", "")),
-        )
-        if reauthentication != "ok":
-            return self._web_json({"status": "error", "message": "密码确认失败，删除未执行。"}, status_code=403)
+        if payload.get("confirmed") is not True:
+            return self._web_json(
+                {"status": "error", "message": "请先确认删除词库记录。"}, status_code=400
+            )
         group_id = self._web_group_id(payload.get("group_id", ""))
         target_id = self._web_positive_int(payload.get(f"{target}_id", ""))
         if group_id is None or target_id is None:
@@ -1387,15 +1428,9 @@ class NewChatLearningPlugin(star.Star):
         payload, error = await self._authorized_web_payload()
         if error is not None:
             return error
-        reauthentication = await self.app.web_auth.reauthenticate(
-            session_token=self._web_session_token(),
-            csrf_token=str(payload.get("csrf_token", "")),
-            password=str(payload.get("password", "")),
-        )
-        if reauthentication != "ok":
+        if payload.get("confirmed") is not True:
             return self._web_json(
-                {"status": "error", "message": "密码确认失败，清理未执行。"},
-                status_code=403,
+                {"status": "error", "message": "请先确认执行清理。"}, status_code=400
             )
         group_id = self._web_group_id(payload.get("group_id", ""))
         plan_id = str(payload.get("plan_id", "")).lower()
@@ -1486,15 +1521,9 @@ class NewChatLearningPlugin(star.Star):
         payload, error = await self._authorized_web_payload()
         if error is not None:
             return error
-        reauthentication = await self.app.web_auth.reauthenticate(
-            session_token=self._web_session_token(),
-            csrf_token=str(payload.get("csrf_token", "")),
-            password=str(payload.get("password", "")),
-        )
-        if reauthentication != "ok":
+        if payload.get("confirmed") is not True:
             return self._web_json(
-                {"status": "error", "message": "密码确认失败，恢复未执行。"},
-                status_code=403,
+                {"status": "error", "message": "请先确认恢复数据库备份。"}, status_code=400
             )
         try:
             result = await self.app.backup.restore(

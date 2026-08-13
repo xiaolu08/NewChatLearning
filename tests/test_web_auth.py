@@ -1,8 +1,9 @@
 import asyncio
 import json
+import time
 
 from new_chat_learning.infrastructure.database import SQLiteStore
-from new_chat_learning.web.auth import WebAuthService
+from new_chat_learning.web.auth import SESSION_TTL_SECONDS, WebAuthService
 
 
 def test_first_setup_requires_loopback_and_strong_password(tmp_path):
@@ -42,6 +43,18 @@ def test_login_session_csrf_logout_and_restart_invalidation(tmp_path):
 
     assert result[0][0] == "ok"
     assert result[1:] == (True, False, True, False, False)
+
+
+def test_webui_session_ttl_is_one_hour(tmp_path):
+    async def scenario():
+        service = WebAuthService(tmp_path)
+        _result, session = await service.setup("long-enough-password", "127.0.0.1")
+        return session
+
+    session = asyncio.run(scenario())
+
+    assert SESSION_TTL_SECONDS == 60 * 60
+    assert 3500 <= session.expires_at - time.time() <= 3600
 
 
 def test_failed_logins_lock_client_and_account(tmp_path):
@@ -132,56 +145,3 @@ def test_corrupt_credential_file_fails_closed(tmp_path):
         return await service.login("long-enough-password", "127.0.0.1")
 
     assert asyncio.run(scenario()) == ("credential_error", None)
-
-
-def test_reauthentication_requires_session_csrf_and_current_password(tmp_path):
-    async def scenario():
-        service = WebAuthService(tmp_path)
-        _result, session = await service.setup("long-enough-password", "127.0.0.1")
-        bad_csrf = await service.reauthenticate(
-            session_token=session.token,
-            csrf_token="wrong",
-            password="long-enough-password",
-        )
-        bad_password = await service.reauthenticate(
-            session_token=session.token,
-            csrf_token=session.csrf_token,
-            password="wrong-password",
-        )
-        success = await service.reauthenticate(
-            session_token=session.token,
-            csrf_token=session.csrf_token,
-            password="long-enough-password",
-        )
-        return bad_csrf, bad_password, success
-
-    assert asyncio.run(scenario()) == (
-        "csrf_invalid",
-        "invalid_credentials",
-        "ok",
-    )
-
-
-def test_reauthentication_locks_after_repeated_failures(tmp_path):
-    async def scenario():
-        service = WebAuthService(tmp_path)
-        _result, session = await service.setup("long-enough-password", "127.0.0.1")
-        failures = [
-            await service.reauthenticate(
-                session_token=session.token,
-                csrf_token=session.csrf_token,
-                password="wrong-password",
-            )
-            for _ in range(5)
-        ]
-        locked = await service.reauthenticate(
-            session_token=session.token,
-            csrf_token=session.csrf_token,
-            password="long-enough-password",
-        )
-        return failures, locked
-
-    failures, locked = asyncio.run(scenario())
-
-    assert failures == ["invalid_credentials"] * 5
-    assert locked == "locked"

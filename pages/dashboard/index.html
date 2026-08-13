@@ -74,10 +74,13 @@
       .check-row label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text); }
       .check-row input { width: auto; min-height: auto; }
       .table-scroll { overflow-x: auto; }
+      .permission-row { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr) auto; gap: 10px; align-items: end; padding: 12px 0; border-bottom: 1px solid var(--line); }
+      .permission-row:last-child { border-bottom: 0; }
+      .permission-row label { margin-top: 0; }
       dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 22px; }
       dialog::backdrop { background: rgb(0 0 0 / .45); }
       dialog .actions { justify-content: flex-end; margin-top: 18px; }
-      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid, .rule-grid { grid-template-columns: minmax(0, 1fr); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } .mode-options { grid-template-columns: minmax(0, 1fr); } .mode-options label { border-right: 0; border-bottom: 1px solid var(--line); } .mode-options label:last-child { border-bottom: 0; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
+      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid, .rule-grid, .permission-row { grid-template-columns: minmax(0, 1fr); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } .mode-options { grid-template-columns: minmax(0, 1fr); } .mode-options label { border-right: 0; border-bottom: 1px solid var(--line); } .mode-options label:last-child { border-bottom: 0; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
     </style>
   </head>
   <body>
@@ -104,6 +107,7 @@
         <button id="tab-groups" type="button">群聊</button>
         <button id="tab-library" type="button">词库</button>
         <button id="tab-filters" type="button">过滤</button>
+        <button id="tab-permissions" type="button">权限</button>
         <button id="tab-media" type="button">媒体</button>
         <button id="tab-backups" type="button">备份</button>
         <button id="tab-audit" type="button">审计</button>
@@ -233,6 +237,22 @@
         <section class="settings-band"><h2>词库清理</h2><p>扫描当前群词库中命中过滤规则的答案。准备阶段只生成一小时有效的预览计划，不会删除内容。</p><div class="toolbar" style="margin-top:14px"><button id="filter-cleanup-prepare" class="secondary" type="button">生成清理计划</button><button id="filter-cleanup-apply" class="danger hidden" type="button">确认删除命中答案</button></div><div id="filter-cleanup-plan" class="result">尚未生成过滤清理计划。</div></section>
         <section class="settings-band"><h2>黑名单</h2><div class="toolbar"><div class="field"><label for="blacklist-user">用户 QQ 号</label><input id="blacklist-user" inputmode="numeric"></div><div class="field"><label for="blacklist-group">群号（按群时必填）</label><input id="blacklist-group" inputmode="numeric"></div><div class="field"><label for="manual-scope">范围</label><select id="manual-scope"><option value="global">全局</option><option value="group">按群</option></select></div><button id="blacklist-block" type="button">人工封禁</button><button id="blacklist-refresh" class="secondary" type="button">刷新</button></div><div class="table-scroll"><table><thead><tr><th>范围</th><th>群号</th><th>用户</th><th>命中</th><th>状态</th><th>操作</th></tr></thead><tbody id="blacklist-body"></tbody></table></div></section>
       </div>
+      <div id="permissions-view" class="hidden">
+        <section style="margin-top:0">
+          <h2>插件管理员</h2>
+          <p>AstrBot 全局管理员始终拥有最高权限，不会被此页面移除或覆盖。</p>
+          <label for="plugin-admin-ids">管理员 QQ 号</label>
+          <textarea id="plugin-admin-ids" placeholder="每行填写一个 QQ 号"></textarea>
+        </section>
+        <section class="settings-band">
+          <div class="toolbar"><div><h2>群子管理员</h2><p>子管理员只可管理对应 QQ 群；普通成员不会收到插件管理命令回复。</p></div><button id="permission-add-group" class="secondary" type="button">添加群聊</button></div>
+          <div id="permission-groups"></div>
+        </section>
+        <section class="settings-band">
+          <div class="actions"><button id="permissions-refresh" class="secondary" type="button">刷新设置</button><button id="permissions-save" type="button">保存权限设置</button></div>
+          <div id="permissions-message" class="result" role="status"></div>
+        </section>
+      </div>
       <div id="backups-view" class="hidden">
         <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
         <div class="split">
@@ -253,9 +273,7 @@
     <dialog id="reauth-dialog">
       <form id="reauth-form">
         <h2>确认执行媒体清理</h2>
-        <p>执行前会自动备份数据库。请输入当前管理密码确认。</p>
-        <label for="reauth-password">管理密码</label>
-        <input id="reauth-password" type="password" autocomplete="current-password" required>
+        <p>执行前会自动备份数据库，并按当前清理计划修改词库。此操作无法直接撤销。</p>
         <div id="reauth-message" class="message" role="status"></div>
         <div class="actions"><button id="reauth-cancel" class="secondary" type="button">取消</button><button type="submit">执行清理</button></div>
       </form>
@@ -263,9 +281,7 @@
     <dialog id="library-delete-dialog">
       <form id="library-delete-form">
         <h2 id="library-delete-title">确认删除词库记录</h2>
-        <p id="library-delete-copy">执行前会自动备份数据库。请输入当前管理密码确认。</p>
-        <label for="library-delete-password">管理密码</label>
-        <input id="library-delete-password" type="password" autocomplete="current-password" required>
+        <p id="library-delete-copy">执行前会自动备份数据库。</p>
         <div id="library-delete-message" class="message" role="status"></div>
         <div class="actions"><button id="library-delete-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">确认删除</button></div>
       </form>
@@ -273,9 +289,7 @@
     <dialog id="filter-cleanup-dialog">
       <form id="filter-cleanup-form">
         <h2>确认删除命中过滤规则的答案</h2>
-        <p>执行前会自动备份数据库，并重新检查词库与过滤规则。请输入当前管理密码确认。</p>
-        <label for="filter-cleanup-password">管理密码</label>
-        <input id="filter-cleanup-password" type="password" autocomplete="current-password" required>
+        <p>执行前会自动备份数据库，并重新检查词库与过滤规则。</p>
         <div id="filter-cleanup-message" class="message" role="status"></div>
         <div class="actions"><button id="filter-cleanup-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行清理</button></div>
       </form>
@@ -283,9 +297,7 @@
     <dialog id="backup-restore-dialog">
       <form id="backup-restore-form">
         <h2>确认恢复数据库备份</h2>
-        <p id="backup-restore-copy">恢复会替换当前词库数据库，并先创建当前状态的保险备份。请输入管理密码确认。</p>
-        <label for="backup-restore-password">管理密码</label>
-        <input id="backup-restore-password" type="password" autocomplete="current-password" required>
+        <p id="backup-restore-copy">恢复会替换当前词库数据库，并先创建当前状态的保险备份。</p>
         <div id="backup-restore-message" class="message" role="status"></div>
         <div class="actions"><button id="backup-restore-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行恢复</button></div>
       </form>
@@ -293,11 +305,17 @@
     <dialog id="contribution-dialog">
       <form id="contribution-form">
         <h2>确认删除成员学习贡献</h2>
-        <p id="contribution-copy">执行前会自动备份数据库，并重新检查成员贡献。请输入当前管理密码确认。</p>
-        <label for="contribution-password">管理密码</label>
-        <input id="contribution-password" type="password" autocomplete="current-password" required>
+        <p id="contribution-copy">执行前会自动备份数据库，并重新检查成员贡献。</p>
         <div id="contribution-message" class="message" role="status"></div>
         <div class="actions"><button id="contribution-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行删除</button></div>
+      </form>
+    </dialog>
+    <dialog id="permissions-dialog">
+      <form id="permissions-form">
+        <h2>确认修改管理权限</h2>
+        <p>保存后，插件管理员和群子管理员权限会立即按新配置生效。AstrBot 全局管理员不受影响。</p>
+        <div id="permissions-confirm-message" class="message" role="status"></div>
+        <div class="actions"><button id="permissions-cancel" class="secondary" type="button">取消</button><button type="submit">确认保存</button></div>
       </form>
     </dialog>
     <script>
@@ -307,6 +325,7 @@
       let pendingLibraryDelete = null;
       let groupRevision = null;
       let filterRevision = null;
+      let permissionRevision = null;
       let filterGroupRules = [];
       let filterCleanupPlan = null;
       let selectedBackup = null;
@@ -364,23 +383,27 @@
         const library = view === "library";
         const groups = view === "groups";
         const filters = view === "filters";
+        const permissions = view === "permissions";
         const backups = view === "backups";
         const audit = view === "audit";
-        el("overview-view").classList.toggle("hidden", media || library || groups || filters || backups || audit);
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || backups || audit);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
         el("filters-view").classList.toggle("hidden", !filters);
+        el("permissions-view").classList.toggle("hidden", !permissions);
         el("backups-view").classList.toggle("hidden", !backups);
         el("audit-view").classList.toggle("hidden", !audit);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !backups && !audit);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !backups && !audit);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
         el("tab-filters").classList.toggle("active", filters);
+        el("tab-permissions").classList.toggle("active", permissions);
         el("tab-backups").classList.toggle("active", backups);
         el("tab-audit").classList.toggle("active", audit);
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
+        if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
         if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
         if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。"));
       }
@@ -470,7 +493,7 @@
         pendingLibraryDelete = { target, id };
         setText("library-delete-title", target === "question" ? `删除问题 Q${id}` : `删除答案 A${id}`);
         setText("library-delete-copy", target === "question" ? "这会删除问题及其全部答案。执行前会自动备份数据库。" : "执行前会自动备份数据库；若这是最后一个答案，空问题也会被删除。");
-        el("library-delete-password").value = ""; setText("library-delete-message", ""); el("library-delete-dialog").showModal();
+        setText("library-delete-message", ""); el("library-delete-dialog").showModal();
       }
 
       function renderPreview(preview) {
@@ -523,6 +546,41 @@
         const statistics = Object.entries(data.statistics || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
         setText("filters-message", statistics ? `命中统计：${statistics}` : "尚无过滤命中记录。");
         await loadBlacklist();
+      }
+
+      function addPermissionGroup(groupId = "", adminIds = []) {
+        const row = document.createElement("div"); row.className = "permission-row";
+        const groupField = document.createElement("div");
+        const groupLabel = document.createElement("label"); groupLabel.textContent = "QQ群号";
+        const groupInput = document.createElement("input"); groupInput.inputMode = "numeric"; groupInput.value = groupId; groupInput.placeholder = "输入 QQ 群号";
+        groupField.append(groupLabel, groupInput);
+        const adminField = document.createElement("div");
+        const adminLabel = document.createElement("label"); adminLabel.textContent = "子管理员 QQ 号";
+        const adminInput = document.createElement("textarea"); adminInput.value = adminIds.join("\n"); adminInput.placeholder = "每行填写一个 QQ 号";
+        adminField.append(adminLabel, adminInput);
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary"; remove.textContent = "移除"; remove.addEventListener("click", () => row.remove());
+        row.append(groupField, adminField, remove); el("permission-groups").append(row);
+      }
+
+      async function loadPermissionSettings() {
+        const data = payloadData(await bridge.apiGet("api/permissions"));
+        permissionRevision = data.revision;
+        setLines("plugin-admin-ids", data.plugin_admin_ids);
+        el("permission-groups").replaceChildren();
+        for (const entry of data.group_sub_admins || []) addPermissionGroup(entry.group_id, entry.admin_ids || []);
+        setText("permissions-message", `已读取 ${data.plugin_admin_ids?.length || 0} 位插件管理员、${data.group_sub_admins?.length || 0} 个群的子管理员设置。`);
+      }
+
+      function permissionPayload() {
+        const pluginAdmins = lines("plugin-admin-ids");
+        const groups = [...el("permission-groups").querySelectorAll(".permission-row")].map(row => {
+          const groupId = row.querySelector("input").value.trim();
+          const adminIds = row.querySelector("textarea").value.split(/\s+/).map(value => value.trim()).filter(Boolean);
+          return { group_id: groupId, admin_ids: adminIds };
+        });
+        if (pluginAdmins.some(value => !/^\d{5,20}$/.test(value))) throw new Error("插件管理员 QQ 号无效。");
+        if (groups.some(entry => !/^\d{5,20}$/.test(entry.group_id) || entry.admin_ids.some(value => !/^\d{5,20}$/.test(value)))) throw new Error("群号或群子管理员 QQ 号无效。");
+        return { plugin_admin_ids: pluginAdmins, group_sub_admins: groups, revision: permissionRevision || "" };
       }
 
       async function loadBlacklist() {
@@ -645,6 +703,7 @@
       el("tab-groups").addEventListener("click", () => showView("groups"));
       el("tab-library").addEventListener("click", () => showView("library"));
       el("tab-filters").addEventListener("click", () => showView("filters"));
+      el("tab-permissions").addEventListener("click", () => showView("permissions"));
       el("tab-media").addEventListener("click", () => showView("media"));
       el("tab-backups").addEventListener("click", () => showView("backups"));
       el("tab-audit").addEventListener("click", () => showView("audit"));
@@ -652,15 +711,30 @@
       el("audit-refresh").addEventListener("click", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
       el("audit-action").addEventListener("change", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
       el("audit-more").addEventListener("click", () => loadAudit(false).catch(error => setText("audit-message", error?.message || "更早记录读取失败。")));
-      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; el("backup-restore-password").value = ""; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新登录。`); el("backup-restore-dialog").showModal(); });
+      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新登录。`); el("backup-restore-dialog").showModal(); });
       el("backup-restore-cancel").addEventListener("click", () => el("backup-restore-dialog").close());
       el("backup-restore-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!selectedBackup) return;
         try {
-          const data = await postSecure("api/backups/restore", { name: selectedBackup.name, password: el("backup-restore-password").value });
+          const data = await postSecure("api/backups/restore", { name: selectedBackup.name, confirmed: true });
           el("backup-restore-dialog").close(); authState = null; selectedBackup = null;
           await refreshAuth(); setText("auth-message", `恢复完成，保险备份：${data.safety_backup_name}。请重新登录。`);
-        } catch (error) { el("backup-restore-password").value = ""; setText("backup-restore-message", error?.message || "恢复未执行。"); }
+        } catch (error) { setText("backup-restore-message", error?.message || "恢复未执行。"); }
+      });
+      el("permission-add-group").addEventListener("click", () => addPermissionGroup());
+      el("permissions-refresh").addEventListener("click", () => loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。")));
+      el("permissions-save").addEventListener("click", () => {
+        try { permissionPayload(); setText("permissions-confirm-message", ""); el("permissions-dialog").showModal(); }
+        catch (error) { setText("permissions-message", error?.message || "权限设置无效。"); }
+      });
+      el("permissions-cancel").addEventListener("click", () => el("permissions-dialog").close());
+      el("permissions-form").addEventListener("submit", async event => {
+        event.preventDefault();
+        try {
+          const data = await postSecure("api/permissions/update", { ...permissionPayload(), confirmed: true });
+          permissionRevision = data.revision; el("permissions-dialog").close();
+          setText("permissions-message", "权限设置已保存到 AstrBot 插件配置。");
+        } catch (error) { setText("permissions-confirm-message", error?.message || "权限设置未保存。"); }
       });
       el("filter-group-load").addEventListener("click", () => { try { renderGroupFilterRule(selectedFilterGroup()); setText("filters-message", "已读取群聊附加规则。"); } catch (error) { setText("filters-message", error.message); } });
       el("filter-group-clear").addEventListener("click", () => { for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`group-filter-${key}`, []); renderComponentChecks("group-filter-components", []); });
@@ -687,16 +761,16 @@
           setText("filters-message", "过滤清理计划已生成，词库尚未改变。");
         } catch (error) { filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden"); setText("filter-cleanup-plan", error?.message || "无法生成清理计划。"); }
       });
-      el("filter-cleanup-apply").addEventListener("click", () => { el("filter-cleanup-password").value = ""; setText("filter-cleanup-message", ""); el("filter-cleanup-dialog").showModal(); });
+      el("filter-cleanup-apply").addEventListener("click", () => { setText("filter-cleanup-message", ""); el("filter-cleanup-dialog").showModal(); });
       el("filter-cleanup-cancel").addEventListener("click", () => el("filter-cleanup-dialog").close());
       el("filter-cleanup-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!filterCleanupPlan) return;
         try {
-          const data = await postSecure("api/filters/cleanup/apply", { group_id: selectedFilterGroup(), plan_id: filterCleanupPlan.plan_id, password: el("filter-cleanup-password").value });
-          el("filter-cleanup-dialog").close(); el("filter-cleanup-password").value = ""; filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden");
+          const data = await postSecure("api/filters/cleanup/apply", { group_id: selectedFilterGroup(), plan_id: filterCleanupPlan.plan_id, confirmed: true });
+          el("filter-cleanup-dialog").close(); filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden");
           setText("filter-cleanup-plan", `清理完成：删除答案 ${data.deleted_answers}，删除空问题 ${data.orphan_questions}。执行前备份：${data.backup_name}`);
           setText("filters-message", "过滤规则词库清理已完成。"); await showDashboard(); showView("filters");
-        } catch (error) { el("filter-cleanup-password").value = ""; setText("filter-cleanup-message", error?.message || "清理未执行。"); }
+        } catch (error) { setText("filter-cleanup-message", error?.message || "清理未执行。"); }
       });
       el("blacklist-refresh").addEventListener("click", () => loadBlacklist().catch(error => setText("filters-message", error?.message || "黑名单读取失败。")));
       el("blacklist-block").addEventListener("click", async () => {
@@ -733,7 +807,7 @@
       });
       el("contribution-apply").addEventListener("click", () => {
         if (!contributionPlan) return;
-        el("contribution-password").value = ""; setText("contribution-message", "");
+        setText("contribution-message", "");
         setText("contribution-copy", `将删除群 ${contributionPlan.group_id} 中成员 ${contributionPlan.user_id} 的可追踪贡献。执行前会自动备份数据库。`);
         el("contribution-dialog").showModal();
       });
@@ -741,11 +815,11 @@
       el("contribution-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!contributionPlan) return;
         try {
-          const data = await postSecure("api/library/contributions/apply", { group_id: contributionPlan.group_id, user_id: contributionPlan.user_id, plan_id: contributionPlan.plan_id, password: el("contribution-password").value });
-          el("contribution-dialog").close(); el("contribution-password").value = ""; contributionPlan = null; el("contribution-apply").classList.add("hidden");
+          const data = await postSecure("api/library/contributions/apply", { group_id: contributionPlan.group_id, user_id: contributionPlan.user_id, plan_id: contributionPlan.plan_id, confirmed: true });
+          el("contribution-dialog").close(); contributionPlan = null; el("contribution-apply").classList.add("hidden");
           setText("contribution-plan", `删除完成：移除贡献 ${data.removed_contributions}，降低权重答案 ${data.reduced_answers}，删除答案 ${data.deleted_answers}，删除空问题 ${data.orphan_questions}，移除待固化消息 ${data.removed_pending_messages}。执行前备份：${data.backup_name}`);
           await searchLibrary();
-        } catch (error) { el("contribution-password").value = ""; setText("contribution-message", error?.message || "删除未执行。"); }
+        } catch (error) { setText("contribution-message", error?.message || "删除未执行。"); }
       });
       el("delete-question").addEventListener("click", () => { if (currentQuestion) openLibraryDelete("question", currentQuestion.question_id); });
       el("library-delete-cancel").addEventListener("click", () => el("library-delete-dialog").close());
@@ -753,10 +827,10 @@
         event.preventDefault(); if (!pendingLibraryDelete) return;
         const target = pendingLibraryDelete.target; const id = pendingLibraryDelete.id;
         try {
-          const data = await postSecure(`api/library/delete-${target}`, { group_id: selectedLibraryGroup(), [`${target}_id`]: id, password: el("library-delete-password").value });
+          const data = await postSecure(`api/library/delete-${target}`, { group_id: selectedLibraryGroup(), [`${target}_id`]: id, confirmed: true });
           el("library-delete-dialog").close(); pendingLibraryDelete = null; currentQuestion = null; el("question-detail").classList.add("hidden");
           setText("library-message", `删除完成，执行前备份：${data.backup_name}`); await searchLibrary();
-        } catch (error) { el("library-delete-password").value = ""; setText("library-delete-message", error?.message || "删除未执行。"); }
+        } catch (error) { setText("library-delete-message", error?.message || "删除未执行。"); }
       });
       el("media-preview").addEventListener("click", async () => {
         try { setText("media-message", "读取中..."); await loadMediaPreview(); setText("media-message", "预览已更新。"); }
@@ -779,19 +853,18 @@
           setText("media-message", "计划已生成，词库尚未改变。");
         } catch (error) { setText("media-message", error?.message || "无法生成清理计划。"); }
       });
-      el("cleanup-apply").addEventListener("click", () => { el("reauth-password").value = ""; setText("reauth-message", ""); el("reauth-dialog").showModal(); });
+      el("cleanup-apply").addEventListener("click", () => { setText("reauth-message", ""); el("reauth-dialog").showModal(); });
       el("reauth-cancel").addEventListener("click", () => el("reauth-dialog").close());
       el("reauth-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!cleanupPlan) return;
         try {
-          const data = await postSecure("api/media/cleanup/apply", { group_id: selectedGroup(), plan_id: cleanupPlan.plan_id, password: el("reauth-password").value });
-          el("reauth-password").value = "";
+          const data = await postSecure("api/media/cleanup/apply", { group_id: selectedGroup(), plan_id: cleanupPlan.plan_id, confirmed: true });
           el("reauth-dialog").close(); cleanupPlan = null; el("cleanup-apply").classList.add("hidden");
           setText("cleanup-plan", `清理完成，执行前备份：${data.backup_name}`);
           setText("media-message", `移除组件 ${data.removed_components}，更新答案 ${data.updated_answers}，删除答案 ${data.deleted_answers}。`);
           await loadMediaPreview();
-        } catch (error) { el("reauth-password").value = ""; setText("reauth-message", error?.message || "清理未执行。"); }
+        } catch (error) { setText("reauth-message", error?.message || "清理未执行。"); }
       });
 
       (async () => {

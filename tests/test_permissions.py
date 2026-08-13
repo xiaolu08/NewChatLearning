@@ -1,3 +1,6 @@
+import asyncio
+
+from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.permissions import is_group_admin, is_plugin_admin
 
 
@@ -38,3 +41,52 @@ def test_group_sub_admin_is_scoped_to_configured_group():
     }
     assert is_group_admin(Event("7", group_id="10001"), config) is True
     assert is_group_admin(Event("7", group_id="10002"), config) is False
+
+
+def test_runtime_permission_update_audits_counts_without_ids(tmp_path):
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    async def scenario():
+        source = Source(
+            {
+                "permissions": {
+                    "plugin_admin_ids": ["12345"],
+                    "group_sub_admins": [
+                        {"group_id": "10001", "admin_ids": ["23456"]}
+                    ],
+                }
+            }
+        )
+        app = RuntimeApplication(tmp_path, source)
+        await app.start()
+        try:
+            result = await app.update_permission_settings(
+                values={
+                    "plugin_admin_ids": ["12345", "34567"],
+                    "group_sub_admins": [
+                        {"group_id": "10001", "admin_ids": ["23456", "45678"]},
+                        {"group_id": "10002", "admin_ids": ["56789"]},
+                    ],
+                },
+                expected_revision=app.config.revision,
+                actor_id="webui:test",
+            )
+            audit = await app.audit.list_entries(action="update_permission_settings")
+            return result, audit
+        finally:
+            await app.stop()
+
+    result, audit = asyncio.run(scenario())
+
+    assert result["revision"]
+    assert audit["entries"][0]["details"] == {
+        "before_plugin_admin_count": 1,
+        "after_plugin_admin_count": 2,
+        "before_group_count": 1,
+        "after_group_count": 2,
+        "before_sub_admin_count": 1,
+        "after_sub_admin_count": 3,
+        "source": "webui",
+    }

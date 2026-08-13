@@ -42,6 +42,11 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'id="tab-groups"' in dashboard
     assert 'id="overview-refresh"' in dashboard
     assert 'id="tab-audit"' in dashboard
+    assert 'id="tab-permissions"' in dashboard
+    assert 'id="permissions-view"' in dashboard
+    assert 'apiGet("api/permissions")' in dashboard
+    assert 'api/permissions/update' in dashboard
+    assert 'confirmed: true' in dashboard
     assert 'id="audit-view"' in dashboard
     assert 'apiGet("api/audit"' in dashboard
     assert 'await refreshOverview();' in dashboard

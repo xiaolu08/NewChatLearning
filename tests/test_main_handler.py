@@ -610,20 +610,12 @@ def test_web_media_scan_requires_csrf_and_targets_requested_group(monkeypatch):
     assert response["data"]["scanned_answers"] == 2
 
 
-def test_web_media_cleanup_reauthenticates_and_hides_backup_path(monkeypatch):
+def test_web_media_cleanup_requires_confirmation_and_hides_backup_path(monkeypatch):
     main_module = load_main(monkeypatch)
 
     class Auth:
         async def authorize(self, _token, _csrf):
             return True
-
-        async def reauthenticate(self, **kwargs):
-            assert kwargs == {
-                "session_token": "session",
-                "csrf_token": "csrf",
-                "password": "long-enough-password",
-            }
-            return "ok"
 
     class Media:
         async def apply_cleanup(self, **kwargs):
@@ -647,7 +639,7 @@ def test_web_media_cleanup_reauthenticates_and_hides_backup_path(monkeypatch):
         return (
             b'{"group_id":"10001","plan_id":"'
             + b"a" * 32
-            + b'","csrf_token":"csrf","password":"long-enough-password"}'
+            + b'","csrf_token":"csrf","confirmed":true}'
         )
 
     monkeypatch.setattr(
@@ -699,16 +691,12 @@ def test_web_library_add_requires_csrf_and_reports_invalid_regex(monkeypatch):
     assert response["message"] == "正则表达式无法编译。"
 
 
-def test_web_library_delete_reauthenticates_is_group_scoped_and_hides_path(monkeypatch):
+def test_web_library_delete_requires_confirmation_is_group_scoped_and_hides_path(monkeypatch):
     main_module = load_main(monkeypatch)
 
     class Auth:
         async def authorize(self, _token, _csrf):
             return True
-
-        async def reauthenticate(self, **kwargs):
-            assert kwargs["password"] == "long-enough-password"
-            return "ok"
 
     class Store:
         async def answer_detail(self, group_id, answer_id):
@@ -726,7 +714,7 @@ def test_web_library_delete_reauthenticates_is_group_scoped_and_hides_path(monke
             }
 
     async def body():
-        return b'{"group_id":"10001","answer_id":17,"password":"long-enough-password","csrf_token":"csrf"}'
+        return b'{"group_id":"10001","answer_id":17,"confirmed":true,"csrf_token":"csrf"}'
 
     monkeypatch.setattr(
         main_module,
@@ -752,9 +740,6 @@ def test_web_library_delete_rejects_cross_group_answer_before_backup(monkeypatch
         async def authorize(self, _token, _csrf):
             return True
 
-        async def reauthenticate(self, **_kwargs):
-            return "ok"
-
     class Store:
         async def answer_detail(self, group_id, answer_id):
             assert (group_id, answer_id) == ("10002", 17)
@@ -764,7 +749,7 @@ def test_web_library_delete_rejects_cross_group_answer_before_backup(monkeypatch
             raise AssertionError("cross-group deletion must not create a backup")
 
     async def body():
-        return b'{"group_id":"10002","answer_id":17,"password":"long-enough-password","csrf_token":"csrf"}'
+        return b'{"group_id":"10002","answer_id":17,"confirmed":true,"csrf_token":"csrf"}'
 
     monkeypatch.setattr(
         main_module,
@@ -882,6 +867,125 @@ def test_web_group_settings_update_rejects_invalid_target_user(monkeypatch):
 
     assert response["status"] == "error"
     assert response["message"] == "目标用户 QQ 号无效。"
+
+
+def test_web_permissions_requires_login(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, _csrf=None):
+            assert token == ""
+            return False
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={}, query={}),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_permissions())
+
+    assert response["status"] == "error"
+    assert response["message"] == "需要登录"
+
+
+def test_web_permissions_update_requires_confirmation_and_binds_actor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def update_permission_settings(self, **kwargs):
+            assert kwargs["values"] == {
+                "plugin_admin_ids": ["12345"],
+                "group_sub_admins": [
+                    {"group_id": "10001", "admin_ids": ["23456"]}
+                ],
+            }
+            assert kwargs["expected_revision"] == "old"
+            assert kwargs["actor_id"].startswith("webui:")
+            return {**kwargs["values"], "revision": "new"}
+
+    async def body():
+        return b'{"plugin_admin_ids":["12345"],"group_sub_admins":[{"group_id":"10001","admin_ids":["23456"]}],"revision":"old","confirmed":true,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_permissions_update())
+
+    assert response["status"] == "ok"
+    assert response["data"]["revision"] == "new"
+
+
+def test_web_permissions_update_rejects_missing_confirmation(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    async def body():
+        return b'{"plugin_admin_ids":[],"group_sub_admins":[],"revision":"old","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+
+    response = asyncio.run(plugin.web_permissions_update())
+
+    assert response["status"] == "error"
+    assert response["message"] == "请先确认权限变更。"
+
+
+def test_web_permissions_update_reports_revision_conflict(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Config:
+        revision = "current"
+
+    class App:
+        web_auth = Auth()
+        config = Config()
+
+        async def update_permission_settings(self, **_kwargs):
+            raise ValueError("revision_conflict")
+
+    async def body():
+        return b'{"plugin_admin_ids":[],"group_sub_admins":[],"revision":"old","confirmed":true,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_permissions_update())
+
+    assert response["status"] == "error"
+    assert response["data"]["revision"] == "current"
 
 
 def test_web_filter_settings_update_requires_csrf_and_binds_actor(monkeypatch):
@@ -1027,20 +1131,12 @@ def test_web_filter_cleanup_prepare_requires_csrf_and_hides_operations(monkeypat
     assert "operations" not in response["data"]
 
 
-def test_web_filter_cleanup_apply_reauthenticates_and_hides_backup_path(monkeypatch):
+def test_web_filter_cleanup_apply_requires_confirmation_and_hides_backup_path(monkeypatch):
     main_module = load_main(monkeypatch)
 
     class Auth:
         async def authorize(self, _token, _csrf):
             return True
-
-        async def reauthenticate(self, **kwargs):
-            assert kwargs == {
-                "session_token": "session",
-                "csrf_token": "csrf",
-                "password": "long-enough-password",
-            }
-            return "ok"
 
     class Cleanup:
         async def apply_cleanup(self, **kwargs):
@@ -1058,7 +1154,7 @@ def test_web_filter_cleanup_apply_reauthenticates_and_hides_backup_path(monkeypa
         return (
             b'{"group_id":"10001","plan_id":"'
             + b"a" * 32
-            + b'","password":"long-enough-password","csrf_token":"csrf"}'
+            + b'","confirmed":true,"csrf_token":"csrf"}'
         )
 
     monkeypatch.setattr(
@@ -1083,9 +1179,6 @@ def test_web_filter_cleanup_apply_reports_stale_plan(monkeypatch):
         async def authorize(self, _token, _csrf):
             return True
 
-        async def reauthenticate(self, **_kwargs):
-            return "ok"
-
     class Cleanup:
         async def apply_cleanup(self, **_kwargs):
             return {"applied": False, "reason": "plan_stale"}
@@ -1094,7 +1187,7 @@ def test_web_filter_cleanup_apply_reports_stale_plan(monkeypatch):
         return (
             b'{"group_id":"10001","plan_id":"'
             + b"a" * 32
-            + b'","password":"long-enough-password","csrf_token":"csrf"}'
+            + b'","confirmed":true,"csrf_token":"csrf"}'
         )
 
     monkeypatch.setattr(
@@ -1156,20 +1249,12 @@ def test_web_contribution_cleanup_prepare_hides_operations(monkeypatch):
     assert "operations" not in response["data"]
 
 
-def test_web_contribution_cleanup_apply_reauthenticates_and_hides_path(monkeypatch):
+def test_web_contribution_cleanup_apply_requires_confirmation_and_hides_path(monkeypatch):
     main_module = load_main(monkeypatch)
 
     class Auth:
         async def authorize(self, _token, _csrf):
             return True
-
-        async def reauthenticate(self, **kwargs):
-            assert kwargs == {
-                "session_token": "session",
-                "csrf_token": "csrf",
-                "password": "long-enough-password",
-            }
-            return "ok"
 
     class Cleanup:
         async def apply(self, **kwargs):
@@ -1188,7 +1273,7 @@ def test_web_contribution_cleanup_apply_reauthenticates_and_hides_path(monkeypat
         return (
             b'{"group_id":"10001","user_id":"12345","plan_id":"'
             + b"a" * 32
-            + b'","password":"long-enough-password","csrf_token":"csrf"}'
+            + b'","confirmed":true,"csrf_token":"csrf"}'
         )
 
     monkeypatch.setattr(
@@ -1352,7 +1437,7 @@ def test_web_backup_inspect_rejects_invalid_name(monkeypatch):
     assert response["message"] == "备份文件不存在或名称无效。"
 
 
-def test_web_backup_restore_reauthenticates_invalidates_sessions_and_cookie(monkeypatch):
+def test_web_backup_restore_requires_confirmation_invalidates_sessions_and_cookie(monkeypatch):
     main_module = load_main(monkeypatch)
 
     class Auth:
@@ -1360,14 +1445,6 @@ def test_web_backup_restore_reauthenticates_invalidates_sessions_and_cookie(monk
 
         async def authorize(self, _token, _csrf):
             return True
-
-        async def reauthenticate(self, **kwargs):
-            assert kwargs == {
-                "session_token": "session",
-                "csrf_token": "csrf",
-                "password": "long-enough-password",
-            }
-            return "ok"
 
         async def invalidate_all_sessions(self):
             self.invalidated = True
@@ -1394,7 +1471,7 @@ def test_web_backup_restore_reauthenticates_invalidates_sessions_and_cookie(monk
             self.deleted_cookie = (key, kwargs)
 
     async def body():
-        return b'{"name":"before-test.sqlite3","password":"long-enough-password","csrf_token":"csrf"}'
+        return b'{"name":"before-test.sqlite3","confirmed":true,"csrf_token":"csrf"}'
 
     monkeypatch.setattr(
         main_module,

@@ -295,3 +295,80 @@ def test_filter_settings_roll_back_on_save_failure():
             )
         )
     assert source == before
+
+
+def test_permission_settings_normalize_persist_and_reject_stale_revision():
+    class Source(dict):
+        saves = 0
+
+        async def save_config_async(self):
+            self.saves += 1
+            return True
+
+    source = Source()
+    service = ConfigService(source)
+    revision = service.revision
+    result = asyncio.run(
+        service.update_permission_settings(
+            values={
+                "plugin_admin_ids": ["12345", "12345", "67890"],
+                "group_sub_admins": [
+                    {
+                        "group_id": "10001",
+                        "admin_ids": ["23456", "23456", "34567"],
+                    },
+                    {"group_id": "10002", "admin_ids": []},
+                ],
+            },
+            expected_revision=revision,
+        )
+    )
+
+    assert result["plugin_admin_ids"] == ["12345", "67890"]
+    assert result["group_sub_admins"] == [
+        {"group_id": "10001", "admin_ids": ["23456", "34567"]}
+    ]
+    assert source.saves == 1
+    with pytest.raises(ValueError, match="revision_conflict"):
+        asyncio.run(
+            service.update_permission_settings(
+                values={"plugin_admin_ids": [], "group_sub_admins": []},
+                expected_revision=revision,
+            )
+        )
+
+
+def test_permission_settings_validate_ids_counts_and_duplicate_groups():
+    service = ConfigService({})
+
+    for values in (
+        {"plugin_admin_ids": ["bad"], "group_sub_admins": []},
+        {
+            "plugin_admin_ids": [],
+            "group_sub_admins": [
+                {"group_id": "10001", "admin_ids": ["12345"]},
+                {"group_id": "10001", "admin_ids": ["23456"]},
+            ],
+        },
+        {"plugin_admin_ids": [str(10000 + index) for index in range(101)], "group_sub_admins": []},
+    ):
+        with pytest.raises(ValueError, match="invalid_permissions"):
+            service._validated_permission_update(values)
+
+
+def test_permission_settings_roll_back_on_save_failure():
+    class Source(dict):
+        async def save_config_async(self):
+            raise OSError("disk full")
+
+    source = Source({"permissions": {"plugin_admin_ids": ["12345"], "group_sub_admins": []}})
+    service = ConfigService(source)
+    before = dict(source)
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_permission_settings(
+                values={"plugin_admin_ids": ["67890"], "group_sub_admins": []},
+                expected_revision=service.revision,
+            )
+        )
+    assert source == before

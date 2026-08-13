@@ -144,6 +144,37 @@ class RuntimeApplication:
             logger.exception("Filter settings were saved but audit recording failed.")
         return await self.filter_settings()
 
+    async def update_permission_settings(
+        self,
+        *,
+        values: dict[str, Any],
+        expected_revision: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        before = self.config.permission_settings()
+        result = await self.config.update_permission_settings(
+            values=values,
+            expected_revision=expected_revision,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_permission_settings",
+                target="permissions",
+                details={
+                    "before_plugin_admin_count": len(before["plugin_admin_ids"]),
+                    "after_plugin_admin_count": len(result["plugin_admin_ids"]),
+                    "before_group_count": len(before["group_sub_admins"]),
+                    "after_group_count": len(result["group_sub_admins"]),
+                    "before_sub_admin_count": self._sub_admin_count(before),
+                    "after_sub_admin_count": self._sub_admin_count(result),
+                    "source": "webui",
+                },
+            )
+        except Exception:
+            logger.exception("Permission settings were saved but audit recording failed.")
+        return result
+
     def test_filter_rules(
         self,
         *,
@@ -189,6 +220,14 @@ class RuntimeApplication:
             key: len(settings.get(key, []))
             for key in ("contains", "exact", "regex", "component_types", "sensitive", "group_rules")
         }
+
+    @staticmethod
+    def _sub_admin_count(settings: dict[str, Any]) -> int:
+        return sum(
+            len(entry.get("admin_ids", []))
+            for entry in settings.get("group_sub_admins", [])
+            if isinstance(entry, dict)
+        )
 
     async def recall(self, notice: RecallNotice) -> LearningResult:
         return await self.learning.recall(notice)
