@@ -135,6 +135,26 @@ CREATE TABLE IF NOT EXISTS legacy_imports (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS blacklist_state (
+    scope TEXT NOT NULL,
+    group_id TEXT NOT NULL DEFAULT '',
+    user_id TEXT NOT NULL,
+    hit_count INTEGER NOT NULL DEFAULT 0,
+    blocked INTEGER NOT NULL DEFAULT 0 CHECK(blocked IN (0, 1)),
+    manual INTEGER NOT NULL DEFAULT 0 CHECK(manual IN (0, 1)),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(scope, group_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS filter_hits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id TEXT NOT NULL,
+    user_id TEXT NOT NULL DEFAULT '',
+    rule_type TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_group ON questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(group_id, user_id);
@@ -143,6 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_answer_media_state ON answer_media(state);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_reply_records_recent
 ON reply_records(platform, group_id, state, id DESC);
+CREATE INDEX IF NOT EXISTS idx_filter_hits_recent ON filter_hits(created_at);
 """
 
 
@@ -203,6 +224,8 @@ class SQLiteStore:
                 "audit_log",
                 "reply_records",
                 "legacy_imports",
+                "blacklist_state",
+                "filter_hits",
             )
             result: dict[str, int] = {}
             for table in tables:
@@ -213,6 +236,127 @@ class SQLiteStore:
             ).fetchone()
             result["media_bytes"] = int(media_bytes[0])
             return result
+
+    async def is_blacklisted(self, *, group_id: str, user_id: str, scope: str) -> bool:
+        scope_group = str(group_id) if scope == "group" else ""
+        async with self._lock:
+            row = self._require_connection().execute(
+                "SELECT blocked FROM blacklist_state WHERE scope = ? AND group_id = ? "
+                "AND user_id = ?",
+                (scope, scope_group, str(user_id)),
+            ).fetchone()
+            return bool(row and row["blocked"])
+
+    async def record_sensitive_hit(
+        self,
+        *,
+        group_id: str,
+        user_id: str,
+        scope: str,
+        threshold: int,
+    ) -> dict[str, Any]:
+        scope_group = str(group_id) if scope == "group" else ""
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "INSERT INTO blacklist_state(scope, group_id, user_id, hit_count) "
+                    "VALUES(?, ?, ?, 1) ON CONFLICT(scope, group_id, user_id) DO UPDATE SET "
+                    "hit_count=blacklist_state.hit_count + 1, updated_at=CURRENT_TIMESTAMP",
+                    (scope, scope_group, str(user_id)),
+                )
+                row = connection.execute(
+                    "SELECT hit_count, blocked, manual FROM blacklist_state "
+                    "WHERE scope = ? AND group_id = ? AND user_id = ?",
+                    (scope, scope_group, str(user_id)),
+                ).fetchone()
+                blocked = bool(row["blocked"]) or int(row["hit_count"]) >= int(threshold)
+                if blocked and not row["blocked"]:
+                    connection.execute(
+                        "UPDATE blacklist_state SET blocked = 1, updated_at=CURRENT_TIMESTAMP "
+                        "WHERE scope = ? AND group_id = ? AND user_id = ?",
+                        (scope, scope_group, str(user_id)),
+                    )
+                connection.execute(
+                    "INSERT INTO filter_hits(group_id, user_id, rule_type, direction) "
+                    "VALUES(?, ?, 'sensitive', 'learning')",
+                    (str(group_id), str(user_id)),
+                )
+                connection.commit()
+                return {
+                    "hit_count": int(row["hit_count"]),
+                    "blocked": blocked,
+                    "manual": bool(row["manual"]),
+                }
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def record_filter_hit(
+        self, *, group_id: str, user_id: str, rule_type: str, direction: str
+    ) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            connection.execute(
+                "INSERT INTO filter_hits(group_id, user_id, rule_type, direction) "
+                "VALUES(?, ?, ?, ?)",
+                (str(group_id), str(user_id), str(rule_type), str(direction)),
+            )
+            connection.commit()
+
+    async def blacklist_entries(self) -> list[dict[str, Any]]:
+        async with self._lock:
+            rows = self._require_connection().execute(
+                "SELECT scope, group_id, user_id, hit_count, blocked, manual, updated_at "
+                "FROM blacklist_state ORDER BY blocked DESC, updated_at DESC, user_id"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    async def filter_hit_statistics(self) -> dict[str, int]:
+        async with self._lock:
+            rows = self._require_connection().execute(
+                "SELECT direction || ':' || rule_type AS key, COUNT(*) AS count "
+                "FROM filter_hits GROUP BY direction, rule_type ORDER BY direction, rule_type"
+            ).fetchall()
+            return {str(row["key"]): int(row["count"]) for row in rows}
+
+    async def set_blacklist_entry(
+        self,
+        *,
+        group_id: str,
+        user_id: str,
+        scope: str,
+        blocked: bool,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        if scope not in {"global", "group"}:
+            raise ValueError("invalid_scope")
+        scope_group = str(group_id) if scope == "group" else ""
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "INSERT INTO blacklist_state(scope, group_id, user_id, hit_count, blocked, manual) "
+                    "VALUES(?, ?, ?, 0, ?, ?) ON CONFLICT(scope, group_id, user_id) DO UPDATE SET "
+                    "blocked=excluded.blocked, manual=excluded.manual, "
+                    "hit_count=CASE WHEN excluded.blocked = 0 THEN 0 ELSE blacklist_state.hit_count END, "
+                    "updated_at=CURRENT_TIMESTAMP",
+                    (scope, scope_group, str(user_id), int(blocked), int(blocked)),
+                )
+                self._insert_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="blacklist_block" if blocked else "blacklist_unblock",
+                    target=f"user:{user_id}",
+                    details={"scope": scope, "group_id": scope_group},
+                )
+                connection.commit()
+                return {"scope": scope, "group_id": scope_group, "user_id": str(user_id), "blocked": blocked}
+            except Exception:
+                connection.rollback()
+                raise
 
     async def record_audit(
         self,
@@ -1390,6 +1534,22 @@ class SQLiteStore:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_answer_media_state ON answer_media(state)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS blacklist_state (scope TEXT NOT NULL, "
+            "group_id TEXT NOT NULL DEFAULT '', user_id TEXT NOT NULL, "
+            "hit_count INTEGER NOT NULL DEFAULT 0, blocked INTEGER NOT NULL DEFAULT 0 "
+            "CHECK(blocked IN (0, 1)), manual INTEGER NOT NULL DEFAULT 0 "
+            "CHECK(manual IN (0, 1)), updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+            "PRIMARY KEY(scope, group_id, user_id))"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS filter_hits (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "group_id TEXT NOT NULL, user_id TEXT NOT NULL DEFAULT '', rule_type TEXT NOT NULL, "
+            "direction TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_filter_hits_recent ON filter_hits(created_at)"
         )
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"

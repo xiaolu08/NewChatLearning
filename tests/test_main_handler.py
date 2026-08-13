@@ -819,3 +819,104 @@ def test_web_group_settings_update_rejects_invalid_target_user(monkeypatch):
 
     assert response["status"] == "error"
     assert response["message"] == "目标用户 QQ 号无效。"
+
+
+def test_web_filter_settings_update_requires_csrf_and_binds_actor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def update_filter_settings(self, **kwargs):
+            assert kwargs["expected_revision"] == "old"
+            assert kwargs["values"]["contains"] == ["bad"]
+            assert "csrf_token" not in kwargs["values"]
+            assert kwargs["actor_id"].startswith("webui:")
+            return {"revision": "new"}
+
+    async def body():
+        return b'{"enabled":true,"contains":["bad"],"revision":"old","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_filter_settings_update())
+    assert response["status"] == "ok"
+    assert response["data"]["revision"] == "new"
+
+
+def test_web_filter_test_requires_csrf_and_does_not_mutate(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, csrf):
+            assert csrf == "csrf"
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        def test_filter_rules(self, **kwargs):
+            assert kwargs == {
+                "group_id": "10001",
+                "text": "candidate",
+                "component_type": "Plain",
+            }
+            return {"reply": {"matched": True}, "sensitive": {"matched": False}}
+
+    async def body():
+        return b'{"group_id":"10001","text":"candidate","component_type":"Plain","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_filter_test())
+    assert response["data"]["reply"]["matched"] is True
+
+
+def test_web_manual_blacklist_update_is_validated_and_audited_by_runtime(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def update_blacklist(self, **kwargs):
+            assert kwargs["scope"] == "group"
+            assert kwargs["group_id"] == "10001"
+            assert kwargs["user_id"] == "12345"
+            assert kwargs["blocked"] is True
+            assert kwargs["actor_id"].startswith("webui:")
+            return {"blocked": True}
+
+    async def body():
+        return b'{"scope":"group","group_id":"10001","user_id":"12345","blocked":true,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_filter_blacklist_update())
+    assert response["data"]["blocked"] is True

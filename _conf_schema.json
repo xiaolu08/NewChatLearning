@@ -202,6 +202,50 @@
       }
     }
   },
+  "filters": {
+    "description": "内容过滤与黑名单",
+    "type": "object",
+    "hint": "普通规则只在回复前生效，不改写已学习内容。敏感关键词会累计发送者命中次数，达到阈值后停止学习该用户。",
+    "obvious_hint": true,
+    "items": {
+      "enabled": {"description": "启用过滤与黑名单", "type": "bool", "default": true},
+      "contains": {"description": "包含关键词", "type": "list", "items": {"type": "string"}, "default": []},
+      "exact": {"description": "完全匹配文本", "type": "list", "items": {"type": "string"}, "default": []},
+      "regex": {"description": "回复过滤正则", "type": "list", "items": {"type": "string"}, "default": []},
+      "component_types": {
+        "description": "屏蔽的消息组件类型",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "默认保持原版规则，屏蔽 At、AtAll、Quote 和 Poke。",
+        "default": ["At", "AtAll", "Quote", "Poke"]
+      },
+      "sensitive": {"description": "敏感关键词", "type": "list", "items": {"type": "string"}, "default": []},
+      "blacklist_threshold": {"description": "自动拉黑命中阈值", "type": "int", "default": 5},
+      "blacklist_scope": {"description": "黑名单范围", "type": "string", "options": ["global", "group"], "default": "global"},
+      "regex_timeout_ms": {"description": "单条过滤正则超时（毫秒）", "type": "int", "default": 50},
+      "group_rules": {
+        "description": "群聊附加规则",
+        "type": "template_list",
+        "hint": "群聊规则与全局规则叠加，不会覆盖全局规则。",
+        "templates": {
+          "group_rules": {
+            "name": "群聊附加过滤规则",
+            "display_item": "group_id",
+            "hide_hint_in_list": true,
+            "items": {
+              "group_id": {"description": "群号", "type": "string", "default": ""},
+              "contains": {"description": "包含关键词", "type": "list", "items": {"type": "string"}, "default": []},
+              "exact": {"description": "完全匹配文本", "type": "list", "items": {"type": "string"}, "default": []},
+              "regex": {"description": "正则表达式", "type": "list", "items": {"type": "string"}, "default": []},
+              "component_types": {"description": "组件类型", "type": "list", "items": {"type": "string"}, "default": []},
+              "sensitive": {"description": "敏感关键词", "type": "list", "items": {"type": "string"}, "default": []}
+            }
+          }
+        },
+        "default": []
+      }
+    }
+  },
   "storage": {
     "description": "本地存储",
     "type": "object",

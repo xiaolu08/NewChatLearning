@@ -69,10 +69,15 @@
       .mode-options label:last-child { border-right: 0; }
       .mode-options input { width: auto; min-height: auto; margin-right: 6px; }
       .settings-band { border-top: 1px solid var(--line); padding-top: 18px; }
+      .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .check-row { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 0; }
+      .check-row label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text); }
+      .check-row input { width: auto; min-height: auto; }
+      .table-scroll { overflow-x: auto; }
       dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 22px; }
       dialog::backdrop { background: rgb(0 0 0 / .45); }
       dialog .actions { justify-content: flex-end; margin-top: 18px; }
-      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } .mode-options { grid-template-columns: minmax(0, 1fr); } .mode-options label { border-right: 0; border-bottom: 1px solid var(--line); } .mode-options label:last-child { border-bottom: 0; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
+      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid, .rule-grid { grid-template-columns: minmax(0, 1fr); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } .mode-options { grid-template-columns: minmax(0, 1fr); } .mode-options label { border-right: 0; border-bottom: 1px solid var(--line); } .mode-options label:last-child { border-bottom: 0; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
     </style>
   </head>
   <body>
@@ -98,6 +103,7 @@
         <button id="tab-overview" class="active" type="button">概览</button>
         <button id="tab-groups" type="button">群聊</button>
         <button id="tab-library" type="button">词库</button>
+        <button id="tab-filters" type="button">过滤</button>
         <button id="tab-media" type="button">媒体</button>
       </nav>
       <div id="overview-view"><div class="grid">
@@ -182,6 +188,36 @@
           <div id="media-message" class="result" role="status"></div>
         </section>
       </div>
+      <div id="filters-view" class="hidden">
+        <div class="toolbar">
+          <label class="inline-check"><input id="filters-enabled" type="checkbox"> 启用回复过滤与敏感词黑名单</label>
+          <div class="field"><label for="blacklist-threshold">拉黑阈值</label><input id="blacklist-threshold" type="number" min="1" max="1000000"></div>
+          <div class="field"><label for="blacklist-scope">黑名单范围</label><select id="blacklist-scope"><option value="global">全局</option><option value="group">按群隔离</option></select></div>
+          <div class="field"><label for="filter-timeout">正则超时（毫秒）</label><input id="filter-timeout" type="number" min="1" max="1000"></div>
+        </div>
+        <section class="settings-band"><h2>全局规则</h2>
+          <div class="rule-grid">
+            <div><label for="filter-contains">包含关键词</label><textarea id="filter-contains" placeholder="每行一条"></textarea></div>
+            <div><label for="filter-exact">完全匹配文本</label><textarea id="filter-exact" placeholder="每行一条"></textarea></div>
+            <div><label for="filter-regex">正则表达式</label><textarea id="filter-regex" placeholder="每行一条"></textarea></div>
+            <div><label for="filter-sensitive">敏感关键词</label><textarea id="filter-sensitive" placeholder="命中达到阈值后停止学习该用户"></textarea></div>
+          </div>
+          <label>屏蔽的消息组件</label><div id="filter-components" class="check-row"></div>
+        </section>
+        <section class="settings-band"><h2>群聊附加规则</h2>
+          <div class="toolbar"><div class="field"><label for="filter-group">群聊</label><input id="filter-group" list="filter-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="filter-groups"></datalist></div><button id="filter-group-load" class="secondary" type="button">读取群规则</button><button id="filter-group-clear" class="secondary" type="button">清空群规则</button></div>
+          <div class="rule-grid">
+            <div><label for="group-filter-contains">包含关键词</label><textarea id="group-filter-contains" placeholder="每行一条"></textarea></div>
+            <div><label for="group-filter-exact">完全匹配文本</label><textarea id="group-filter-exact" placeholder="每行一条"></textarea></div>
+            <div><label for="group-filter-regex">正则表达式</label><textarea id="group-filter-regex" placeholder="每行一条"></textarea></div>
+            <div><label for="group-filter-sensitive">敏感关键词</label><textarea id="group-filter-sensitive" placeholder="每行一条"></textarea></div>
+          </div>
+          <label>附加屏蔽组件</label><div id="group-filter-components" class="check-row"></div>
+        </section>
+        <section class="settings-band"><div class="actions"><button id="filters-save" type="button">保存过滤设置</button></div><div id="filters-message" class="result" role="status"></div></section>
+        <section class="settings-band"><h2>规则测试</h2><div class="toolbar"><div class="field"><label for="filter-test-text">测试内容</label><input id="filter-test-text" maxlength="4000"></div><div class="field"><label for="filter-test-type">组件类型</label><select id="filter-test-type"><option>Plain</option><option>Image</option><option>At</option><option>AtAll</option><option>Quote</option><option>Poke</option><option>Record</option><option>Video</option><option>File</option></select></div><button id="filters-test" class="secondary" type="button">测试</button></div><div id="filter-test-result" class="result"></div></section>
+        <section class="settings-band"><h2>黑名单</h2><div class="toolbar"><div class="field"><label for="blacklist-user">用户 QQ 号</label><input id="blacklist-user" inputmode="numeric"></div><div class="field"><label for="blacklist-group">群号（按群时必填）</label><input id="blacklist-group" inputmode="numeric"></div><div class="field"><label for="manual-scope">范围</label><select id="manual-scope"><option value="global">全局</option><option value="group">按群</option></select></div><button id="blacklist-block" type="button">人工封禁</button><button id="blacklist-refresh" class="secondary" type="button">刷新</button></div><div class="table-scroll"><table><thead><tr><th>范围</th><th>群号</th><th>用户</th><th>命中</th><th>状态</th><th>操作</th></tr></thead><tbody id="blacklist-body"></tbody></table></div></section>
+      </div>
     </main>
     <dialog id="reauth-dialog">
       <form id="reauth-form">
@@ -209,6 +245,9 @@
       let currentQuestion = null;
       let pendingLibraryDelete = null;
       let groupRevision = null;
+      let filterRevision = null;
+      let filterGroupRules = [];
+      const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
       const setText = (id, value) => { el(id).textContent = String(value); };
@@ -255,21 +294,25 @@
         const media = view === "media";
         const library = view === "library";
         const groups = view === "groups";
-        el("overview-view").classList.toggle("hidden", media || library || groups);
+        const filters = view === "filters";
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups);
+        el("filters-view").classList.toggle("hidden", !filters);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
+        el("tab-filters").classList.toggle("active", filters);
+        if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
       }
 
       async function loadGroups() {
         try {
           const data = payloadData(await bridge.apiGet("api/groups"));
           groupRevision = data.revision;
-          for (const prefix of ["media", "library", "settings"]) {
+          for (const prefix of ["media", "library", "settings", "filter"]) {
             el(`${prefix}-groups`).replaceChildren(...(data.group_ids || []).map(groupId => {
               const option = document.createElement("option"); option.value = groupId; return option;
             }));
@@ -366,6 +409,66 @@
         return payloadData(await bridge.apiPost(path, { ...body, csrf_token: authState?.csrf_token || "" }));
       }
 
+      const lines = id => el(id).value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+      const setLines = (id, values) => { el(id).value = (values || []).join("\n"); };
+      function renderComponentChecks(containerId, selected) {
+        const chosen = new Set((selected || []).map(value => String(value).toLowerCase()));
+        el(containerId).replaceChildren(...componentTypes.map(type => {
+          const label = document.createElement("label"); const input = document.createElement("input");
+          input.type = "checkbox"; input.value = type; input.checked = chosen.has(type.toLowerCase());
+          label.append(input, document.createTextNode(type)); return label;
+        }));
+      }
+      const checkedComponents = id => [...el(id).querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value);
+
+      function selectedFilterGroup() {
+        const groupId = el("filter-group").value.trim();
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
+        return groupId;
+      }
+
+      function renderGroupFilterRule(groupId) {
+        const rule = filterGroupRules.find(item => String(item.group_id) === String(groupId)) || {};
+        for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`group-filter-${key}`, rule[key]);
+        renderComponentChecks("group-filter-components", rule.component_types);
+      }
+
+      async function loadFilterSettings() {
+        const data = payloadData(await bridge.apiGet("api/filters/settings"));
+        filterRevision = data.revision; filterGroupRules = data.group_rules || [];
+        el("filters-enabled").checked = Boolean(data.enabled);
+        el("blacklist-threshold").value = data.blacklist_threshold;
+        el("blacklist-scope").value = data.blacklist_scope;
+        el("filter-timeout").value = data.regex_timeout_ms;
+        for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`filter-${key}`, data[key]);
+        renderComponentChecks("filter-components", data.component_types);
+        if (el("filter-group").value) renderGroupFilterRule(el("filter-group").value.trim());
+        const statistics = Object.entries(data.statistics || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
+        setText("filters-message", statistics ? `命中统计：${statistics}` : "尚无过滤命中记录。");
+        await loadBlacklist();
+      }
+
+      async function loadBlacklist() {
+        const data = payloadData(await bridge.apiGet("api/filters/blacklist"));
+        const rows = (data.entries || []).map(entry => {
+          const row = document.createElement("tr");
+          for (const value of [entry.scope === "global" ? "全局" : "按群", entry.group_id || "-", entry.user_id, entry.hit_count, entry.blocked ? (entry.manual ? "人工封禁" : "自动封禁") : "未封禁"]) {
+            const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+          }
+          const actionCell = document.createElement("td"); const button = document.createElement("button");
+          button.type = "button"; button.className = entry.blocked ? "secondary" : "danger"; button.textContent = entry.blocked ? "解封" : "封禁";
+          button.addEventListener("click", async () => { await updateBlacklist(entry.scope, entry.group_id, entry.user_id, !entry.blocked); });
+          actionCell.append(button); row.append(actionCell); return row;
+        });
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6; cell.textContent = "暂无记录。"; row.append(cell); rows.push(row); }
+        el("blacklist-body").replaceChildren(...rows);
+      }
+
+      async function updateBlacklist(scope, groupId, userId, blocked) {
+        await postSecure("api/filters/blacklist/update", { scope, group_id: groupId || "", user_id: userId, blocked });
+        await loadBlacklist(); setText("filters-message", blocked ? `已封禁用户 ${userId}。` : `已解除用户 ${userId} 的封禁并清零命中次数。`);
+      }
+
       async function loadMediaPreview() {
         const groupId = selectedGroup();
         const data = payloadData(await bridge.apiGet("api/media/preview", { group_id: groupId }));
@@ -396,7 +499,29 @@
       el("tab-overview").addEventListener("click", () => showView("overview"));
       el("tab-groups").addEventListener("click", () => showView("groups"));
       el("tab-library").addEventListener("click", () => showView("library"));
+      el("tab-filters").addEventListener("click", () => showView("filters"));
       el("tab-media").addEventListener("click", () => showView("media"));
+      el("filter-group-load").addEventListener("click", () => { try { renderGroupFilterRule(selectedFilterGroup()); setText("filters-message", "已读取群聊附加规则。"); } catch (error) { setText("filters-message", error.message); } });
+      el("filter-group-clear").addEventListener("click", () => { for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`group-filter-${key}`, []); renderComponentChecks("group-filter-components", []); });
+      el("filters-save").addEventListener("click", async () => {
+        try {
+          const groupId = el("filter-group").value.trim();
+          const groupRule = groupId ? { group_id: selectedFilterGroup(), contains: lines("group-filter-contains"), exact: lines("group-filter-exact"), regex: lines("group-filter-regex"), sensitive: lines("group-filter-sensitive"), component_types: checkedComponents("group-filter-components") } : null;
+          if (groupRule) filterGroupRules = filterGroupRules.filter(item => String(item.group_id) !== groupId);
+          if (groupRule && ["contains", "exact", "regex", "sensitive", "component_types"].some(key => groupRule[key].length)) filterGroupRules.push(groupRule);
+          const data = await postSecure("api/filters/settings/update", { enabled: el("filters-enabled").checked, contains: lines("filter-contains"), exact: lines("filter-exact"), regex: lines("filter-regex"), sensitive: lines("filter-sensitive"), component_types: checkedComponents("filter-components"), blacklist_threshold: Number(el("blacklist-threshold").value), blacklist_scope: el("blacklist-scope").value, regex_timeout_ms: Number(el("filter-timeout").value), group_rules: filterGroupRules, revision: filterRevision || "" });
+          filterRevision = data.revision; filterGroupRules = data.group_rules || filterGroupRules; setText("filters-message", "过滤设置已保存到 AstrBot 插件配置。"); await loadGroups();
+        } catch (error) { setText("filters-message", error?.message || "过滤设置保存失败。"); }
+      });
+      el("filters-test").addEventListener("click", async () => {
+        try { const data = await postSecure("api/filters/test", { group_id: selectedFilterGroup(), text: el("filter-test-text").value, component_type: el("filter-test-type").value }); setText("filter-test-result", `回复过滤：${data.reply.matched ? data.reply.rule_type : "未命中"}；敏感词：${data.sensitive.matched ? "命中" : "未命中"}。`); }
+        catch (error) { setText("filter-test-result", error?.message || "测试失败。"); }
+      });
+      el("blacklist-refresh").addEventListener("click", () => loadBlacklist().catch(error => setText("filters-message", error?.message || "黑名单读取失败。")));
+      el("blacklist-block").addEventListener("click", async () => {
+        try { const scope = el("manual-scope").value; const userId = el("blacklist-user").value.trim(); const groupId = scope === "group" ? el("blacklist-group").value.trim() : ""; if (!/^\d{5,20}$/.test(userId) || (scope === "group" && !/^\d{5,20}$/.test(groupId))) throw new Error("请输入有效的用户 QQ 号和群号。"); await updateBlacklist(scope, groupId, userId, true); }
+        catch (error) { setText("filters-message", error?.message || "人工封禁失败。"); }
+      });
       document.querySelectorAll('input[name="group-mode"]').forEach(input => input.addEventListener("change", updateTargetState));
       el("group-load").addEventListener("click", async () => { try { await loadGroupSettings(); } catch (error) { setText("group-message", error?.message || "设置读取失败。"); } });
       el("group-save").addEventListener("click", async () => {

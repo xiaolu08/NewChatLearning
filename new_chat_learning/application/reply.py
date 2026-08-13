@@ -9,6 +9,7 @@ from collections.abc import Callable
 import jieba
 import regex
 
+from new_chat_learning.application.content_filter import ContentFilterService
 from new_chat_learning.domain.reply import QuestionCandidate, ReplyCandidate, ReplyDecision
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
@@ -21,12 +22,14 @@ class ReplyService:
         self,
         store: SQLiteStore,
         config: ConfigService,
+        content_filter: ContentFilterService | None = None,
         *,
         random_source: random.Random | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.store = store
         self.config = config
+        self.content_filter = content_filter or ContentFilterService(config)
         self.random = random_source or random.Random()
         self.clock = clock
         self._last_reply_at: dict[str, float] = {}
@@ -52,15 +55,16 @@ class ReplyService:
         available_groups = await self.store.list_question_group_ids()
         scopes = self.config.reply_library_scopes(group_id, available_groups)
         selections: list[tuple[ReplyCandidate, str]] = []
+        filtered_any = False
         for scope in scopes:
             exact_candidates = await self.store.find_exact_answers(scope, normalized_key)
             if exact_candidates:
-                selections.extend(
-                    (candidate, "exact")
-                    for candidate in self._eligible_candidates(
-                        exact_candidates, settings["type_frequency_thresholds"]
-                    )
+                eligible = self._eligible_candidates(
+                    exact_candidates, settings["type_frequency_thresholds"]
                 )
+                allowed, filtered = await self._filter_candidates(group_id, eligible)
+                filtered_any = filtered_any or filtered
+                selections.extend((candidate, "exact") for candidate in allowed)
                 continue
             if not plain_text:
                 continue
@@ -71,18 +75,18 @@ class ReplyService:
             )
             if question is None:
                 continue
-            selections.extend(
-                (candidate, reason)
-                for candidate in self._eligible_candidates(
-                    await self.store.find_answers_for_question(
-                        scope,
-                        question.normalized_key,
-                    ),
-                    settings["type_frequency_thresholds"],
-                )
+            eligible = self._eligible_candidates(
+                await self.store.find_answers_for_question(
+                    scope,
+                    question.normalized_key,
+                ),
+                settings["type_frequency_thresholds"],
             )
+            allowed, filtered = await self._filter_candidates(group_id, eligible)
+            filtered_any = filtered_any or filtered
+            selections.extend((candidate, reason) for candidate in allowed)
         if not selections:
-            return ReplyDecision(None, "no_match")
+            return ReplyDecision(None, "filtered" if filtered_any else "no_match")
 
         force_reply = mentioned_bot and bool(settings["at_force_reply"])
         probability = float(settings["probability_percent"]) / 100.0
@@ -101,6 +105,27 @@ class ReplyService:
 
     def mark_sent(self, group_id: str) -> None:
         self._last_reply_at[str(group_id)] = self.clock()
+
+    async def _filter_candidates(
+        self,
+        group_id: str,
+        candidates: list[ReplyCandidate],
+    ) -> tuple[list[ReplyCandidate], bool]:
+        allowed = []
+        filtered = False
+        for candidate in candidates:
+            match = self.content_filter.reply_match(group_id, candidate.components)
+            if not match.matched:
+                allowed.append(candidate)
+                continue
+            filtered = True
+            await self.store.record_filter_hit(
+                group_id=group_id,
+                user_id="",
+                rule_type=match.rule_type,
+                direction="reply",
+            )
+        return allowed, filtered
 
     async def _find_fallback_question(
         self,

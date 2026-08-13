@@ -6,6 +6,8 @@ import json
 from copy import deepcopy
 from typing import Any
 
+import regex
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "general": {"enabled": True, "legacy_command_aliases": True},
     "learning": {
@@ -35,6 +37,18 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "mode": "group",
         "excluded_group_ids": [],
         "group_tags": [],
+    },
+    "filters": {
+        "enabled": True,
+        "contains": [],
+        "exact": [],
+        "regex": [],
+        "component_types": ["At", "AtAll", "Quote", "Poke"],
+        "sensitive": [],
+        "blacklist_threshold": 5,
+        "blacklist_scope": "global",
+        "regex_timeout_ms": 50,
+        "group_rules": [],
     },
     "permissions": {"plugin_admin_ids": [], "group_sub_admins": []},
     "storage": {
@@ -231,7 +245,144 @@ class ConfigService:
             for entry in snapshot["learning"].get("target_users", [])
             if isinstance(entry, dict) and str(entry.get("group_id", "")).strip()
         )
+        values.update(
+            str(entry.get("group_id", "")).strip()
+            for entry in snapshot["filters"].get("group_rules", [])
+            if isinstance(entry, dict) and str(entry.get("group_id", "")).strip()
+        )
         return sorted(values)
+
+    def filter_settings(self, group_id: str) -> dict[str, Any]:
+        filters = self.snapshot()["filters"]
+        result = {
+            "enabled": bool(filters.get("enabled", True)),
+            "contains": self._normalized_text_rules(filters.get("contains"), 200),
+            "exact": self._normalized_text_rules(filters.get("exact"), 200),
+            "regex": self._normalized_text_rules(filters.get("regex"), 100),
+            "component_types": [
+                str(value).strip().lower()
+                for value in filters.get("component_types", [])
+                if str(value).strip()
+            ],
+            "sensitive": self._normalized_text_rules(filters.get("sensitive"), 200),
+            "blacklist_threshold": self._bounded_int(
+                filters.get("blacklist_threshold"), 5, 1, 1000000
+            ),
+            "blacklist_scope": (
+                "group" if str(filters.get("blacklist_scope", "global")) == "group" else "global"
+            ),
+            "regex_timeout_ms": self._bounded_int(
+                filters.get("regex_timeout_ms"), 50, 1, 1000
+            ),
+            "revision": self.revision,
+        }
+        for entry in filters.get("group_rules", []):
+            if not isinstance(entry, dict) or str(entry.get("group_id", "")).strip() != str(
+                group_id
+            ):
+                continue
+            for key, limit in (("contains", 200), ("exact", 200), ("regex", 100), ("sensitive", 200)):
+                result[key] = list(
+                    dict.fromkeys(result[key] + self._normalized_text_rules(entry.get(key), limit))
+                )
+            result["component_types"] = list(
+                dict.fromkeys(
+                    result["component_types"]
+                    + [
+                        str(value).strip().lower()
+                        for value in entry.get("component_types", [])
+                        if str(value).strip()
+                    ]
+                )
+            )
+            break
+        return result
+
+    async def update_filter_settings(
+        self,
+        *,
+        values: dict[str, Any],
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            normalized = self._validated_filter_update(values)
+            original = deepcopy(self._source)
+            try:
+                self._source["filters"] = normalized
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.filter_settings("")
+
+    def _validated_filter_update(self, values: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(values.get("enabled"), bool):
+            raise TypeError("invalid_filters")
+        result = {
+            "enabled": values["enabled"],
+            "contains": self._normalized_text_rules(values.get("contains"), 200),
+            "exact": self._normalized_text_rules(values.get("exact"), 200),
+            "regex": self._normalized_text_rules(values.get("regex"), 100),
+            "component_types": self._normalized_text_rules(values.get("component_types"), 50),
+            "sensitive": self._normalized_text_rules(values.get("sensitive"), 200),
+            "blacklist_threshold": self._bounded_int(
+                values.get("blacklist_threshold"), 5, 1, 1000000
+            ),
+            "blacklist_scope": (
+                "group" if values.get("blacklist_scope") == "group" else "global"
+            ),
+            "regex_timeout_ms": self._bounded_int(values.get("regex_timeout_ms"), 50, 1, 1000),
+            "group_rules": [],
+        }
+        raw_group_rules = values.get("group_rules", [])
+        if not isinstance(raw_group_rules, list) or len(raw_group_rules) > 200:
+            raise ValueError("invalid_filters")
+        for pattern in result["regex"]:
+            try:
+                regex.compile(pattern)
+            except regex.error as exc:
+                raise ValueError("invalid_regex") from exc
+        seen_groups = set()
+        for entry in raw_group_rules:
+            if not isinstance(entry, dict):
+                raise TypeError("invalid_filters")
+            group_id = str(entry.get("group_id", "")).strip()
+            if not group_id.isdigit() or not 5 <= len(group_id) <= 20 or group_id in seen_groups:
+                raise ValueError("invalid_filters")
+            seen_groups.add(group_id)
+            group_rule = {
+                "group_id": group_id,
+                "contains": self._normalized_text_rules(entry.get("contains"), 200),
+                "exact": self._normalized_text_rules(entry.get("exact"), 200),
+                "regex": self._normalized_text_rules(entry.get("regex"), 100),
+                "component_types": self._normalized_text_rules(
+                    entry.get("component_types"), 50
+                ),
+                "sensitive": self._normalized_text_rules(entry.get("sensitive"), 200),
+            }
+            for pattern in group_rule["regex"]:
+                try:
+                    regex.compile(pattern)
+                except regex.error as exc:
+                    raise ValueError("invalid_regex") from exc
+            result["group_rules"].append(group_rule)
+        return result
+
+    @staticmethod
+    def _normalized_text_rules(value: Any, maximum: int) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        result = []
+        for item in value:
+            text = str(item).strip()
+            if text and len(text) <= 1000 and text not in result:
+                result.append(text)
+            if len(result) >= maximum:
+                break
+        return result
 
     def group_settings(self, group_id: str) -> dict[str, Any]:
         snapshot = self.snapshot()

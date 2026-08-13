@@ -149,6 +149,61 @@ def test_weighted_selection_prefers_only_positive_candidates(tmp_path):
     assert missing.reason == "no_match"
 
 
+def test_reply_filters_candidates_before_weighted_selection(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "filtered-weight.sqlite3")
+        await store.open()
+        question = await seed_group_pair(
+            store, "10001", "filter question", "blocked answer", 1000
+        )
+        connection = store._require_connection()
+        question_id = connection.execute(
+            "SELECT id FROM questions WHERE normalized_key = ?",
+            (question.normalized_key,),
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE answers SET weight = 100 WHERE question_id = ?",
+            (question_id,),
+        )
+        connection.execute(
+            "INSERT INTO answers(question_id, normalized_key, components_json, weight) "
+            "VALUES(?, 'safe-answer', ?, 1)",
+            (
+                question_id,
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "components": [{"type": "Plain", "data": {"text": "safe answer"}}],
+                    },
+                    separators=(",", ":"),
+                ),
+            ),
+        )
+        connection.commit()
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                },
+                "filters": {"contains": ["blocked answer"]},
+            }
+        )
+        try:
+            decision = await ReplyService(store, config, random_source=random.Random(1)).decide(
+                "10001", question.normalized_key
+            )
+            stats = await store.filter_hit_statistics()
+            return decision, stats
+        finally:
+            await store.close()
+
+    decision, stats = asyncio.run(scenario())
+    assert decision.candidate.components[0]["data"]["text"] == "safe answer"
+    assert stats == {"reply:contains": 1}
+
+
 def mark_question_as_regex(path, pattern):
     connection = sqlite3.connect(path)
     try:

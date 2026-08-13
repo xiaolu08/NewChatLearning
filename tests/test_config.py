@@ -233,3 +233,65 @@ def test_group_settings_refuse_memory_only_configuration():
         )
 
     assert source == {"learning": {"enabled": False, "group_ids": []}}
+
+
+def test_filter_settings_merge_group_rules_and_persist_with_revision():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    source = Source(
+        {
+            "filters": {
+                "contains": ["global"],
+                "group_rules": [{"group_id": "10001", "contains": ["local"]}],
+            }
+        }
+    )
+    service = ConfigService(source)
+    assert service.filter_settings("10001")["contains"] == ["global", "local"]
+
+    result = asyncio.run(
+        service.update_filter_settings(
+            values={
+                "enabled": True,
+                "contains": ["new"],
+                "exact": [],
+                "regex": ["^ok$"],
+                "component_types": ["At"],
+                "sensitive": ["secret"],
+                "blacklist_threshold": 3,
+                "blacklist_scope": "group",
+                "regex_timeout_ms": 20,
+                "group_rules": [],
+            },
+            expected_revision=service.revision,
+        )
+    )
+    assert result["contains"] == ["new"]
+    assert result["blacklist_scope"] == "group"
+    with pytest.raises(ValueError, match="revision_conflict"):
+        asyncio.run(
+            service.update_filter_settings(
+                values=source["filters"],
+                expected_revision="stale",
+            )
+        )
+
+
+def test_filter_settings_roll_back_on_save_failure():
+    class Source(dict):
+        async def save_config_async(self):
+            raise OSError("disk full")
+
+    source = Source({"filters": {"enabled": True, "contains": ["old"]}})
+    service = ConfigService(source)
+    before = dict(source)
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_filter_settings(
+                values={"enabled": True, "contains": ["new"], "group_rules": []},
+                expected_revision=service.revision,
+            )
+        )
+    assert source == before

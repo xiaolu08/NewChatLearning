@@ -18,7 +18,7 @@ def test_database_initializes_schema_and_statistics(tmp_path):
     health, statistics = asyncio.run(scenario())
 
     assert health["connected"] is True
-    assert health["schema_version"] == 7
+    assert health["schema_version"] == 8
     assert health["integrity"] == "ok"
     assert statistics["questions"] == 0
     assert statistics["answers"] == 0
@@ -111,7 +111,7 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
         answer_columns = {row[1] for row in connection.execute("PRAGMA table_info(answers)")}
     finally:
         connection.close()
-    assert health["schema_version"] == 7
+    assert health["schema_version"] == 8
     assert statistics["pending_messages"] == 0
     assert "frequency" in question_columns
     assert "plain_text" in question_columns
@@ -146,6 +146,48 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
         connection.close()
     assert plain_text == "旧问题"
     assert is_regex == 0
+
+
+def test_manual_blacklist_block_and_unblock_are_audited(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "blacklist.sqlite3")
+        await store.open()
+        try:
+            blocked = await store.set_blacklist_entry(
+                group_id="10001",
+                user_id="12345",
+                scope="group",
+                blocked=True,
+                actor_id="webui:test",
+            )
+            unblocked = await store.set_blacklist_entry(
+                group_id="10001",
+                user_id="12345",
+                scope="group",
+                blocked=False,
+                actor_id="webui:test",
+            )
+            return blocked, unblocked
+        finally:
+            await store.close()
+
+    blocked, unblocked = asyncio.run(scenario())
+    assert blocked["blocked"] is True
+    assert unblocked["blocked"] is False
+
+    connection = sqlite3.connect(tmp_path / "blacklist.sqlite3")
+    try:
+        state = connection.execute(
+            "SELECT hit_count, blocked, manual FROM blacklist_state"
+        ).fetchone()
+        actions = [
+            row[0]
+            for row in connection.execute("SELECT action FROM audit_log ORDER BY id")
+        ]
+    finally:
+        connection.close()
+    assert state == (0, 0, 0)
+    assert actions == ["blacklist_block", "blacklist_unblock"]
 
 
 def test_fast_delete_removes_exact_answer_or_orphan_question_and_audits(tmp_path):

@@ -72,6 +72,26 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 保存群聊设置",
             ),
+            ("filters/settings", self.web_filter_settings, ["GET"], "NewChatLearning 过滤设置"),
+            (
+                "filters/settings/update",
+                self.web_filter_settings_update,
+                ["POST"],
+                "NewChatLearning 保存过滤设置",
+            ),
+            ("filters/test", self.web_filter_test, ["POST"], "NewChatLearning 测试过滤规则"),
+            (
+                "filters/blacklist",
+                self.web_filter_blacklist,
+                ["GET"],
+                "NewChatLearning 黑名单",
+            ),
+            (
+                "filters/blacklist/update",
+                self.web_filter_blacklist_update,
+                ["POST"],
+                "NewChatLearning 更新黑名单",
+            ),
             ("library/search", self.web_library_search, ["GET"], "NewChatLearning 词库搜索"),
             ("library/question", self.web_library_question, ["GET"], "NewChatLearning 问题详情"),
             ("library/add", self.web_library_add, ["POST"], "NewChatLearning 添加问答"),
@@ -823,6 +843,109 @@ class NewChatLearningPlugin(star.Star):
                 {"status": "error", "message": "AstrBot 插件配置保存失败，设置未生效。"},
                 status_code=503,
             )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_filter_settings(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        group_id = str(request.query.get("group_id", "")).strip()
+        if group_id and self._web_group_id(group_id) is None:
+            return self._web_json(
+                {"status": "error", "message": "群号无效。"}, status_code=400
+            )
+        return self._web_json(
+            {"status": "ok", "data": await self.app.filter_settings(group_id)}
+        )
+
+    async def web_filter_settings_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        revision = str(payload.pop("revision", "")).strip()
+        payload.pop("csrf_token", None)
+        try:
+            result = await self.app.update_filter_settings(
+                values=payload,
+                expected_revision=revision,
+                actor_id=self._web_actor_id(),
+            )
+        except ValueError as exc:
+            if str(exc) == "revision_conflict":
+                return self._web_json(
+                    {
+                        "status": "error",
+                        "message": "配置已被其他入口修改，请刷新后重试。",
+                        "data": {"revision": self.app.config.revision},
+                    },
+                    status_code=409,
+                )
+            message = "正则表达式无法编译。" if str(exc) == "invalid_regex" else "过滤设置无效。"
+            return self._web_json({"status": "error", "message": message}, status_code=400)
+        except TypeError:
+            return self._web_json(
+                {"status": "error", "message": "过滤设置无效。"}, status_code=400
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist NewChatLearning filter settings.")
+            return self._web_json(
+                {"status": "error", "message": "AstrBot 插件配置保存失败，设置未生效。"},
+                status_code=503,
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_filter_test(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_id = self._web_group_id(payload.get("group_id", ""))
+        text = str(payload.get("text", ""))
+        component_type = str(payload.get("component_type", "Plain")).strip()
+        if group_id is None or not text or len(text) > 4000 or not component_type:
+            return self._web_json(
+                {"status": "error", "message": "测试参数无效。"}, status_code=400
+            )
+        result = self.app.test_filter_rules(
+            group_id=group_id,
+            text=text,
+            component_type=component_type,
+        )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_filter_blacklist(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {"status": "ok", "data": {"entries": await self.app.blacklist_entries()}}
+        )
+
+    async def web_filter_blacklist_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        scope = str(payload.get("scope", "")).strip()
+        raw_group_id = str(payload.get("group_id", "")).strip()
+        group_id = self._web_group_id(raw_group_id) if scope == "group" else ""
+        user_id = str(payload.get("user_id", "")).strip()
+        blocked = payload.get("blocked")
+        if (
+            scope not in {"global", "group"}
+            or (scope == "group" and group_id is None)
+            or not user_id.isdigit()
+            or not 5 <= len(user_id) <= 20
+            or not isinstance(blocked, bool)
+        ):
+            return self._web_json(
+                {"status": "error", "message": "黑名单参数无效。"}, status_code=400
+            )
+        result = await self.app.update_blacklist(
+            group_id=group_id or "",
+            user_id=user_id,
+            scope=scope,
+            blocked=blocked,
+            actor_id=self._web_actor_id(),
+        )
         return self._web_json({"status": "ok", "data": result})
 
     async def web_library_search(self):
