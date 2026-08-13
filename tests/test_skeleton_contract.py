@@ -46,6 +46,11 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert schema["tts"]["items"]["enabled"]["default"] is False
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
+    bridge_script = '<script src="/api/plugin/page/bridge-sdk.js"></script>'
+    assert dashboard.count(bridge_script) == 1
+    assert dashboard.index(bridge_script) < dashboard.index(
+        "const bridge = window.AstrBotPluginPage;"
+    )
     assert 'id="library"' in dashboard
     assert 'id="tab-groups"' in dashboard
     assert 'id="overview-refresh"' in dashboard

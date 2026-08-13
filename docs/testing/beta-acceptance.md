@@ -1,6 +1,6 @@
 ---
 title: NewChatLearning 首个 Beta 验收标准
-version: 0.6
+version: 0.7
 date: 2026-08-13
 status: 当前有效
 ---
@@ -98,6 +98,8 @@ Beta 27 旧词库迁移页已离线验证 `.cl` 扩展名与 128 MB 上限、短
 
 Beta 27 热修复 1 修复 AstrBot 以 `data.plugins.<插件>.main` 命名空间加载 ZIP 安装插件时无法解析内部 `new_chat_learning` 包的问题，并让迁移扫描与转换子进程显式继承插件根目录。兼容下限按已核对的上传、页面和 Web API 接口调整为 AstrBot 4.27.2；完整初始化与 NapCat 消息链仍待实机继续验收。
 
+Beta 27 热修复 2 修复 AstrBot 4.27.2 在页面业务脚本之后自动追加 bridge SDK，导致登录页读取未定义 `AstrBotPluginPage` 的初始化顺序问题。Dashboard 页面现在显式在业务脚本之前加载官方 bridge；AstrBot 会为该地址补充页面认证参数，并不会重复追加 SDK。
+
 ### 发布
 
 - [ ] README、metadata、版本和仓库描述均显示 Beta / 非正式。
@@ -116,6 +118,7 @@ Beta 27 热修复 1 修复 AstrBot 以 `data.plugins.<插件>.main` 命名空间
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
+| 2026-08-13 | 0.7 | 修复 AstrBot 4.27.2 插件页 bridge SDK 晚于业务脚本加载导致的 WebUI 初始化失败。 |
 | 2026-08-13 | 0.6 | 修复 AstrBot ZIP 安装命名空间与迁移子进程导入路径，兼容下限调整为 AstrBot 4.27.2。 |
 | 2026-08-13 | 0.5 | 增加旧 `.cl` WebUI 受限上传、隔离扫描、会话/群绑定计划和二次确认导入的离线验收记录。 |
 | 2026-08-13 | 0.4 | 增加当前群 ZIP/XLSX/JSONL 导出、安全下载票据和公式注入防护的离线验收记录。 |
