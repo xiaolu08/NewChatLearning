@@ -266,3 +266,27 @@ def test_authorized_search_formats_stable_question_ids(monkeypatch):
 
     assert event.stopped is False
     assert "Q12 [文本] hello world" in event.result.text
+
+
+def test_migrate_scan_returns_report_without_importing(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.config = {"permissions": {"group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]}}
+    event = Event()
+    event.message_str = f'/ncl migrate-scan "{tmp_path}"'
+    monkeypatch.setattr(
+        main_module,
+        "scan_directory",
+        lambda _path, timeout_seconds=60.0: [
+            {
+                "status": "compatible",
+                "path": str(tmp_path / "sample.cl"),
+                "structure": {"question_count": 2, "answer_count": 3, "malformed_questions": 0},
+            }
+        ],
+    )
+
+    asyncio.run(plugin.ncl_migrate_scan(event))
+
+    assert "仅扫描，不导入" in event.result.text
+    assert "sample.cl：compatible，问题 2，答案 3" in event.result.text

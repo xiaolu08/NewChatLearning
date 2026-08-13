@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from sys import maxsize
 
 from astrbot.api import star
@@ -12,6 +13,7 @@ from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.fast_delete import FastDeleteRequest, parse_fast_delete
 from new_chat_learning.commands.permissions import is_group_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
+from new_chat_learning.migration.scanner import scan_directory, scan_file
 from new_chat_learning.platform.astrbot.renderer import render_message_chain
 from new_chat_learning.platform.napcat.actions import (
     recall_message,
@@ -178,7 +180,8 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl add-regex <表达式> => <答案> - 添加正则问答\n"
                 "/ncl weight <答案ID> <权重> - 修改答案权重\n"
                 "/ncl delete-answer <答案ID> - 删除答案\n"
-                "/ncl delete-question <问题ID> - 删除问题及全部答案"
+                "/ncl delete-question <问题ID> - 删除问题及全部答案\n"
+                "/ncl migrate-scan <文件或目录> - 安全扫描旧 .cl 词库"
             )
         )
 
@@ -318,6 +321,40 @@ class NewChatLearningPlugin(star.Star):
         )
         text = f"已删除问题 Q{question_id} 及其全部答案。" if deleted else "本群不存在该问题。"
         event.set_result(MessageEventResult().message(text))
+
+    @ncl.command("migrate-scan")
+    async def ncl_migrate_scan(self, event: AstrMessageEvent) -> None:
+        if not self._allow_group_library_command(event):
+            return
+        raw_path = self._command_tail(event, "migrate-scan")
+        if not raw_path:
+            event.set_result(MessageEventResult().message("用法：/ncl migrate-scan <.cl 文件或目录>"))
+            return
+        path = Path(raw_path.strip().strip('"'))
+        if path.is_dir():
+            reports = await asyncio.to_thread(scan_directory, path, timeout_seconds=60.0)
+        elif path.is_file():
+            reports = [await asyncio.to_thread(scan_file, path, timeout_seconds=60.0)]
+        else:
+            event.set_result(MessageEventResult().message("找不到指定文件或目录。"))
+            return
+        if not reports:
+            event.set_result(MessageEventResult().message("目录中没有 .cl 文件。"))
+            return
+        lines = ["旧词库安全扫描报告（仅扫描，不导入）"]
+        for report in reports[:10]:
+            name = Path(str(report.get("path", "未知文件"))).name
+            structure = report.get("structure", {})
+            if isinstance(structure, dict):
+                lines.append(
+                    f"{name}：{report.get('status', 'error')}，问题 {structure.get('question_count', 0)}，"
+                    f"答案 {structure.get('answer_count', 0)}，异常问题 {structure.get('malformed_questions', 0)}"
+                )
+            else:
+                lines.append(f"{name}：{report.get('status', 'error')}（{report.get('reason', '未知原因')}）")
+        if len(reports) > 10:
+            lines.append(f"其余 {len(reports) - 10} 个文件请在本地日志或 WebUI 查看。")
+        event.set_result(MessageEventResult().message("\n".join(lines)))
 
     async def _add_library_pair(
         self,
