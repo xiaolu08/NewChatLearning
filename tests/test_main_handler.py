@@ -118,7 +118,7 @@ class Event:
 def plugin_with(main_module, decision):
     plugin = object.__new__(main_module.NewChatLearningPlugin)
     reply = Reply(decision)
-    plugin.app = SimpleNamespace(config=Config(), reply=reply)
+    plugin.app = SimpleNamespace(config=Config(), reply=reply, data_dir=None)
     history = History()
     plugin.context = SimpleNamespace(message_history_manager=history)
     plugin.logger = SimpleNamespace(exception=lambda *_args: None)

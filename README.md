@@ -70,10 +70,15 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 精确、受限正则、jieba 词频余弦三级匹配及原版默认阈值
 - 按答案权重或答案内容作为问题的频次判断消息类型发送阈值
 - SQLite schema v3 问题纯文本索引、正则标记与旧库自动回填
+- 图片、闪照、语音、视频和文件的本地持久化、SHA-256 去重与配额保护
+- 媒体使用相对路径保存，本地缺失时回退远程 URL；拒绝私网媒体下载
+- 分享、音乐和骰子组件原生重建，闪照按普通图片安全降级
+- SQLite schema v4 媒体来源元数据与健康状态迁移
 
 尚未完成：
 
-- NapCat 长尾消息组件、媒体持久化与回复降级
+- 转发、商城表情、XML 等长尾消息的完整重建
+- 媒体健康扫描、失效标记预览与 WebUI 清理工具
 - 完整管理 WebUI 与独立登录安全机制
 - TTS 驱动与旧词库迁移工具
 - Windows + AstrBot + NapCat 实机验收
@@ -95,6 +100,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 云端 TTS 是默认关闭的可选功能，与无 Token 的学习和回复流程相互独立。只有管理员主动配置并启用后，才可能产生对应服务商的费用。
 
 jieba 相似度匹配同样默认关闭。启用后只消耗本机 CPU，不下载模型、不访问网络，也不会产生 LLM Token。
+
+新媒体本地保存默认启用，单文件默认限制为 50 MB，总配额默认 10 GB。达到配额后仍继续学习文本和消息结构，不删除已有媒体，也不会主动扩容。
 
 ## 项目关系
 

@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS media_assets (
     content_hash TEXT NOT NULL UNIQUE,
     relative_path TEXT,
     media_type TEXT NOT NULL,
+    original_name TEXT NOT NULL DEFAULT '',
+    source_url TEXT NOT NULL DEFAULT '',
     size_bytes INTEGER NOT NULL DEFAULT 0,
     state TEXT NOT NULL DEFAULT 'available',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -157,7 +159,63 @@ class SQLiteStore:
             for table in tables:
                 row = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
                 result[table] = int(row[0])
+            media_bytes = connection.execute(
+                "SELECT COALESCE(SUM(size_bytes), 0) FROM media_assets WHERE state = 'healthy'"
+            ).fetchone()
+            result["media_bytes"] = int(media_bytes[0])
             return result
+
+    async def media_usage_bytes(self) -> int:
+        async with self._lock:
+            connection = self._require_connection()
+            row = connection.execute(
+                "SELECT COALESCE(SUM(size_bytes), 0) FROM media_assets WHERE state = 'healthy'"
+            ).fetchone()
+            return int(row[0])
+
+    async def find_media_asset(self, content_hash: str) -> dict[str, Any] | None:
+        async with self._lock:
+            connection = self._require_connection()
+            row = connection.execute(
+                "SELECT content_hash, relative_path, media_type, size_bytes, state "
+                "FROM media_assets WHERE content_hash = ?",
+                (content_hash,),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    async def register_media_asset(
+        self,
+        *,
+        content_hash: str,
+        relative_path: str,
+        media_type: str,
+        size_bytes: int,
+        original_name: str = "",
+        source_url: str = "",
+    ) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            connection.execute(
+                "INSERT INTO media_assets(content_hash, relative_path, media_type, "
+                "original_name, source_url, size_bytes, state, checked_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, 'healthy', CURRENT_TIMESTAMP) "
+                "ON CONFLICT(content_hash) DO UPDATE SET "
+                "relative_path=excluded.relative_path, media_type=excluded.media_type, "
+                "original_name=CASE WHEN excluded.original_name != '' THEN excluded.original_name "
+                "ELSE media_assets.original_name END, "
+                "source_url=CASE WHEN excluded.source_url != '' THEN excluded.source_url "
+                "ELSE media_assets.source_url END, size_bytes=excluded.size_bytes, "
+                "state='healthy', checked_at=CURRENT_TIMESTAMP",
+                (
+                    content_hash,
+                    relative_path,
+                    media_type,
+                    original_name,
+                    source_url,
+                    int(size_bytes),
+                ),
+            )
+            connection.commit()
 
     async def observe_message(
         self, message: NormalizedMessage, interval_seconds: int
@@ -385,6 +443,16 @@ class SQLiteStore:
             connection.execute(
                 "ALTER TABLE questions ADD COLUMN is_regex INTEGER NOT NULL DEFAULT 0"
             )
+        media_columns = {row[1] for row in connection.execute("PRAGMA table_info(media_assets)")}
+        if "original_name" not in media_columns:
+            connection.execute(
+                "ALTER TABLE media_assets ADD COLUMN original_name TEXT NOT NULL DEFAULT ''"
+            )
+        if "source_url" not in media_columns:
+            connection.execute(
+                "ALTER TABLE media_assets ADD COLUMN source_url TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute("UPDATE media_assets SET state = 'healthy' WHERE state = 'available'")
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"
         ).fetchall()

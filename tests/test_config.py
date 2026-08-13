@@ -66,3 +66,23 @@ def test_matching_settings_are_bounded_and_type_thresholds_are_normalized():
     assert settings["similarity_threshold"] == 1.0
     assert settings["similarity_max_length"] == 1
     assert settings["type_frequency_thresholds"] == {"image": 3, "plain": 0}
+
+
+def test_media_settings_convert_units_and_enforce_bounds():
+    service = ConfigService(
+        {
+            "storage": {
+                "media_persistence_enabled": True,
+                "media_quota_gb": 1,
+                "media_max_file_mb": 2,
+                "media_download_timeout_seconds": 0,
+            }
+        }
+    )
+
+    settings = service.media_settings()
+
+    assert settings["enabled"] is True
+    assert settings["quota_bytes"] == 1024**3
+    assert settings["max_file_bytes"] == 2 * 1024**2
+    assert settings["timeout_seconds"] == 1.0

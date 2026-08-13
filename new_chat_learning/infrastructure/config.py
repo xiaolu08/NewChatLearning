@@ -30,7 +30,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "type_frequency_thresholds": {},
     },
     "permissions": {"plugin_admin_ids": []},
-    "storage": {"media_quota_gb": 10.0},
+    "storage": {
+        "media_persistence_enabled": True,
+        "media_quota_gb": 10.0,
+        "media_max_file_mb": 50.0,
+        "media_download_timeout_seconds": 15.0,
+    },
     "webui": {"enabled": True},
     "tts": {"enabled": False, "driver": "windows"},
 }
@@ -113,6 +118,21 @@ class ConfigService:
             ),
             "type_frequency_thresholds": self._type_frequency_thresholds(
                 reply.get("type_frequency_thresholds")
+            ),
+        }
+
+    def media_settings(self) -> dict[str, Any]:
+        storage = self.snapshot()["storage"]
+        return {
+            "enabled": bool(storage.get("media_persistence_enabled", True)),
+            "quota_bytes": int(
+                self._bounded_float(storage.get("media_quota_gb"), 10.0, 0.0, 1024.0) * 1024**3
+            ),
+            "max_file_bytes": int(
+                self._bounded_float(storage.get("media_max_file_mb"), 50.0, 0.1, 4096.0) * 1024**2
+            ),
+            "timeout_seconds": self._bounded_float(
+                storage.get("media_download_timeout_seconds"), 15.0, 1.0, 300.0
             ),
         }
 

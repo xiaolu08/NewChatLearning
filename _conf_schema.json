@@ -158,11 +158,27 @@
     "description": "本地存储",
     "type": "object",
     "items": {
+      "media_persistence_enabled": {
+        "description": "保存新媒体到本地",
+        "type": "bool",
+        "hint": "学习图片、语音、视频和文件时保存内容哈希副本，避免临时 URL 过期。",
+        "default": true
+      },
       "media_quota_gb": {
         "description": "媒体空间上限（GB）",
         "type": "float",
         "hint": "达到上限后停止保存新媒体，但继续文本学习，不自动删除有效旧媒体。",
         "default": 10.0
+      },
+      "media_max_file_mb": {
+        "description": "单个媒体文件上限（MB）",
+        "type": "float",
+        "default": 50.0
+      },
+      "media_download_timeout_seconds": {
+        "description": "媒体下载超时（秒）",
+        "type": "float",
+        "default": 15.0
       }
     }
   },

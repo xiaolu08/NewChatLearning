@@ -83,6 +83,7 @@ class NewChatLearningPlugin(star.Star):
         chain = render_message_chain(
             decision.candidate.components,
             max_plain_length=int(settings["max_plain_length"]),
+            data_dir=self.app.data_dir,
         )
         if chain is None:
             return
