@@ -107,7 +107,12 @@
         <button id="tab-media" type="button">媒体</button>
         <button id="tab-backups" type="button">备份</button>
       </nav>
-      <div id="overview-view"><div class="grid">
+      <div id="overview-view">
+      <div class="toolbar">
+        <button id="overview-refresh" class="secondary" type="button">刷新统计</button>
+        <div id="overview-message" class="result" role="status"></div>
+      </div>
+      <div class="grid">
         <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
         <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
         <div class="metric"><span>答案数</span><strong id="answers">-</strong></div>
@@ -323,6 +328,11 @@
         el("auth").classList.add("hidden");
         el("dashboard").classList.remove("hidden");
         el("logout").classList.remove("hidden");
+        await refreshOverview();
+        await loadGroups();
+      }
+
+      async function refreshOverview() {
         const status = payloadData(await bridge.apiGet("api/status"));
         setText("state", status.state === "running" ? "运行中" : status.state);
         el("state").className = "ok";
@@ -336,7 +346,6 @@
         setText("revision", status.config_revision);
         setText("library", status.library.mode === "global" ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）` : "仅本群");
         setText("data-dir", status.data_dir);
-        await loadGroups();
       }
 
       function showView(view) {
@@ -575,6 +584,13 @@
         finally { authState = null; await refreshAuth(); }
       });
       el("tab-overview").addEventListener("click", () => showView("overview"));
+      el("overview-refresh").addEventListener("click", async () => {
+        const button = el("overview-refresh");
+        button.disabled = true; setText("overview-message", "正在刷新统计...");
+        try { await refreshOverview(); setText("overview-message", "概览统计已更新。"); }
+        catch (error) { setText("overview-message", error?.message || "概览统计刷新失败。"); }
+        finally { button.disabled = false; }
+      });
       el("tab-groups").addEventListener("click", () => showView("groups"));
       el("tab-library").addEventListener("click", () => showView("library"));
       el("tab-filters").addEventListener("click", () => showView("filters"));

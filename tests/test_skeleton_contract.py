@@ -40,3 +40,10 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
     assert 'id="library"' in dashboard
     assert 'id="tab-groups"' in dashboard
+    assert 'id="overview-refresh"' in dashboard
+    assert 'await refreshOverview();' in dashboard
+    refresh_handler = dashboard.split(
+        'el("overview-refresh").addEventListener', 1
+    )[1].split('el("tab-groups")', 1)[0]
+    assert 'refreshAuth()' not in refresh_handler
+    assert 'location.reload' not in refresh_handler
