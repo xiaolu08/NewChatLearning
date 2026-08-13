@@ -1175,7 +1175,20 @@ def test_web_migration_upload_authorization_is_session_bound(monkeypatch):
     plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
     plugin.app.web_auth = Auth()
     plugin.app.migration = SimpleNamespace(cleanup_expired=lambda: None)
-    plugin._migration_upload_tickets = {}
+    plugin._migration_upload_tickets = {
+        "old-current-session": {
+            "session": plugin._web_actor_id(),
+            "file_name": "old.cl",
+            "size_bytes": 1,
+            "expires_at": main_module.time.monotonic() + 60,
+        },
+        "other-session": {
+            "session": "webui:other",
+            "file_name": "other.cl",
+            "size_bytes": 1,
+            "expires_at": main_module.time.monotonic() + 60,
+        },
+    }
     plugin._migration_uploads = {}
 
     response = asyncio.run(plugin.web_migration_upload_authorize())
@@ -1184,6 +1197,86 @@ def test_web_migration_upload_authorization_is_session_bound(monkeypatch):
     ticket = response["data"]["ticket"]
     assert plugin._migration_upload_tickets[ticket]["file_name"] == "legacy.cl"
     assert plugin._migration_upload_tickets[ticket]["session"].startswith("webui:")
+    assert "old-current-session" not in plugin._migration_upload_tickets
+    assert "other-session" in plugin._migration_upload_tickets
+
+
+def test_web_migration_upload_uses_query_free_session_authorization(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    content = b"legacy-library"
+
+    class Auth:
+        async def authorize(self, token, csrf=None):
+            assert token == "session"
+            assert csrf is None
+            return True
+
+    class Upload(main_module.PluginUploadFile):
+        filename = "legacy.cl"
+        content_length = len(content)
+
+        def __init__(self):
+            self.offset = 0
+            self.closed = False
+
+        async def seek(self, offset):
+            self.offset = offset
+
+        async def read(self, size):
+            chunk = content[self.offset : self.offset + size]
+            self.offset += len(chunk)
+            return chunk
+
+        async def close(self):
+            self.closed = True
+
+    upload = Upload()
+
+    async def files():
+        return {"file": upload}
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, files=files),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "scan_file",
+        lambda path, **_kwargs: {
+            "status": "compatible",
+            "reason": "ok",
+            "size_bytes": path.stat().st_size,
+            "structure": {
+                "question_count": 1,
+                "answer_count": 1,
+                "malformed_questions": 0,
+                "component_types": {"Plain": 1},
+            },
+        },
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.data_dir = tmp_path
+    plugin.app.migration = SimpleNamespace(cleanup_expired=lambda: None)
+    plugin._migration_uploads = {}
+    plugin._migration_upload_tickets = {
+        "one-time-ticket": {
+            "session": plugin._web_actor_id(),
+            "file_name": "legacy.cl",
+            "size_bytes": len(content),
+            "expires_at": main_module.time.monotonic() + 60,
+        }
+    }
+
+    response = asyncio.run(plugin.web_migration_upload())
+
+    assert response["status"] == "ok"
+    assert response["data"]["scan"]["question_count"] == 1
+    assert "one-time-ticket" not in plugin._migration_upload_tickets
+    assert upload.closed is True
+    stored = plugin._migration_uploads[response["data"]["upload_id"]]
+    assert stored["path"].read_bytes() == content
 
 
 def test_web_migration_prepare_binds_group_actor_and_hides_path(monkeypatch, tmp_path):

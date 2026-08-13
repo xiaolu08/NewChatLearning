@@ -1707,9 +1707,13 @@ class NewChatLearningPlugin(star.Star):
                 status_code=400,
             )
         self._prune_migration_uploads()
+        actor_id = self._web_actor_id()
+        for existing_ticket, authorization in list(self._migration_upload_tickets.items()):
+            if authorization.get("session") == actor_id:
+                self._migration_upload_tickets.pop(existing_ticket, None)
         ticket = secrets.token_urlsafe(24)
         self._migration_upload_tickets[ticket] = {
-            "session": self._web_actor_id(),
+            "session": actor_id,
             "file_name": file_name[:255],
             "size_bytes": size_bytes,
             "expires_at": time.monotonic() + MIGRATION_UPLOAD_TICKET_TTL_SECONDS,
@@ -1729,12 +1733,6 @@ class NewChatLearningPlugin(star.Star):
         if error is not None:
             return error
         self._prune_migration_uploads()
-        ticket = str(request.query.get("ticket", ""))
-        authorization = self._migration_upload_tickets.get(ticket)
-        if authorization is None or authorization.get("session") != self._web_actor_id():
-            return self._web_json(
-                {"status": "error", "message": "上传授权无效或已过期。"}, status_code=403
-            )
         files = await request.files()
         upload = files.get("file")
         if not isinstance(upload, PluginUploadFile):
@@ -1742,14 +1740,31 @@ class NewChatLearningPlugin(star.Star):
                 {"status": "error", "message": "没有收到词库文件。"}, status_code=400
             )
         upload_name = Path(str(upload.filename or "")).name
+        actor_id = self._web_actor_id()
+        matching_authorizations = [
+            (candidate_ticket, candidate)
+            for candidate_ticket, candidate in self._migration_upload_tickets.items()
+            if candidate.get("session") == actor_id
+            and candidate.get("file_name") == upload_name
+        ]
+        if not matching_authorizations:
+            await upload.close()
+            return self._web_json(
+                {"status": "error", "message": "上传授权无效或已过期。"}, status_code=403
+            )
+        ticket, authorization = max(
+            matching_authorizations,
+            key=lambda item: float(item[1].get("expires_at", 0)),
+        )
+        self._migration_upload_tickets.pop(ticket, None)
         if (
-            upload_name != authorization["file_name"]
-            or Path(upload_name).suffix.lower() != ".cl"
+            Path(upload_name).suffix.lower() != ".cl"
             or (
                 upload.content_length is not None
                 and upload.content_length > MIGRATION_UPLOAD_MAX_BYTES
             )
         ):
+            await upload.close()
             return self._web_json(
                 {"status": "error", "message": "上传文件与授权信息不一致。"}, status_code=400
             )
@@ -1791,7 +1806,6 @@ class NewChatLearningPlugin(star.Star):
             )
         finally:
             await upload.close()
-        self._migration_upload_tickets.pop(ticket, None)
         if report.get("status") != "compatible":
             target.unlink(missing_ok=True)
             return self._web_json(

@@ -1,6 +1,6 @@
 ---
 title: NewChatLearning 首个 Beta 验收标准
-version: 0.7
+version: 0.8
 date: 2026-08-13
 status: 当前有效
 ---
@@ -100,6 +100,8 @@ Beta 27 热修复 1 修复 AstrBot 以 `data.plugins.<插件>.main` 命名空间
 
 Beta 27 热修复 2 修复 AstrBot 4.27.2 在页面业务脚本之后自动追加 bridge SDK，导致登录页读取未定义 `AstrBotPluginPage` 的初始化顺序问题。Dashboard 页面现在显式在业务脚本之前加载官方 bridge；AstrBot 会为该地址补充页面认证参数，并不会重复追加 SDK。
 
+Beta 27 热修复 3 修复旧词库上传把一次性授权票据放入 bridge endpoint 查询串，触发 AstrBot 4.27.2 的 endpoint 校验并显示 `Plugin bridge endpoint is invalid.` 的问题。上传改用无查询串 endpoint，服务端按当前 WebUI 会话、文件名和大小消费短期一次性授权；迁移转换按钮也会在请求结束后退出忙碌状态。
+
 ### 发布
 
 - [ ] README、metadata、版本和仓库描述均显示 Beta / 非正式。
@@ -118,6 +120,7 @@ Beta 27 热修复 2 修复 AstrBot 4.27.2 在页面业务脚本之后自动追�
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
+| 2026-08-13 | 0.8 | 修复旧词库上传 endpoint 校验失败，并补充会话绑定的一次性上传授权与按钮状态恢复。 |
 | 2026-08-13 | 0.7 | 修复 AstrBot 4.27.2 插件页 bridge SDK 晚于业务脚本加载导致的 WebUI 初始化失败。 |
 | 2026-08-13 | 0.6 | 修复 AstrBot ZIP 安装命名空间与迁移子进程导入路径，兼容下限调整为 AstrBot 4.27.2。 |
 | 2026-08-13 | 0.5 | 增加旧 `.cl` WebUI 受限上传、隔离扫描、会话/群绑定计划和二次确认导入的离线验收记录。 |

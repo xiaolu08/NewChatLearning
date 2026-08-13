@@ -877,8 +877,8 @@
         if (!file || !file.name.toLowerCase().endsWith(".cl")) { setText("migration-message", "请选择 .cl 词库文件。"); return; }
         const button = el("migration-upload"); button.disabled = true; migrationUpload = null; migrationPlan = null; el("migration-prepare").disabled = true; el("migration-apply").classList.add("hidden"); setText("migration-message", "正在上传并执行隔离扫描...");
         try {
-          const authorization = await postSecure("api/migration/upload/authorize", { file_name: file.name, size_bytes: file.size });
-          const data = payloadData(await bridge.upload(`api/migration/upload?ticket=${encodeURIComponent(authorization.ticket)}`, file));
+          await postSecure("api/migration/upload/authorize", { file_name: file.name, size_bytes: file.size });
+          const data = payloadData(await bridge.upload("api/migration/upload", file));
           migrationUpload = data; renderMigrationScan(data.scan); el("migration-prepare").disabled = false; setText("migration-message", "安全与兼容性扫描通过，可选择目标群生成导入计划。");
         } catch (error) { setText("migration-message", error?.message || "词库上传或扫描失败。"); }
         finally { button.disabled = false; }
@@ -891,7 +891,8 @@
           migrationPlan = data; migrationUpload = null; el("migration-file").value = ""; el("migration-apply").classList.remove("hidden");
           setText("migration-plan", `计划 ${data.import_id}：目标群 ${data.group_id}，可导入问题 ${data.question_count}，答案 ${data.answer_count}；跳过问题 ${data.skipped_questions}，答案 ${data.skipped_answers}，未知组件 ${data.unknown_components}。计划一小时内有效。`);
           setText("migration-message", "导入计划已生成，当前词库尚未改变。"); await loadMigrationStatus();
-        } catch (error) { setText("migration-message", error?.message || "旧词库转换失败。"); button.disabled = false; }
+        } catch (error) { setText("migration-message", error?.message || "旧词库转换失败。"); }
+        finally { button.disabled = migrationUpload === null; }
       });
       el("migration-apply").addEventListener("click", () => { if (!migrationPlan) return; setText("migration-confirm-message", ""); setText("migration-copy", `将把 ${migrationPlan.source_name} 合并到群 ${migrationPlan.group_id}。导入前会自动备份数据库，且不会自动开启学习或回复。`); el("migration-dialog").showModal(); });
       el("migration-cancel").addEventListener("click", () => el("migration-dialog").close());

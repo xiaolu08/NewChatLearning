@@ -66,7 +66,8 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'api/tts/test' in dashboard
     assert 'id="tab-migration"' in dashboard
     assert 'id="migration-view"' in dashboard
-    assert 'bridge.upload(`api/migration/upload?ticket=' in dashboard
+    assert 'bridge.upload("api/migration/upload", file)' in dashboard
+    assert "api/migration/upload?ticket=" not in dashboard
     assert 'postSecure("api/migration/prepare"' in dashboard
     assert 'postSecure("api/migration/apply"' in dashboard
     assert 'id="library-export"' in dashboard
