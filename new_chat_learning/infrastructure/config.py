@@ -60,7 +60,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "media_download_timeout_seconds": 15.0,
     },
     "webui": {"enabled": True},
-    "tts": {"enabled": False, "driver": "windows"},
+    "tts": {
+        "enabled": False,
+        "driver": "windows",
+        "probability_percent": 0.0,
+        "max_text_length": 100,
+        "voice": "",
+        "rate": 0,
+        "volume": 100,
+        "endpoint_url": "http://127.0.0.1:9880/tts",
+        "timeout_seconds": 30.0,
+        "text_lang": "zh",
+        "reference_audio_path": "",
+        "prompt_text": "",
+        "prompt_lang": "zh",
+    },
 }
 
 
@@ -354,6 +368,76 @@ class ConfigService:
                 raise
             return self.permission_settings()
 
+    def tts_settings(self) -> dict[str, Any]:
+        tts = self.snapshot()["tts"]
+        result = self._validated_tts_update(tts, allow_unavailable_driver=True)
+        result["revision"] = self.revision
+        return result
+
+    async def update_tts_settings(
+        self,
+        *,
+        values: dict[str, Any],
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            normalized = self._validated_tts_update(values)
+            original = deepcopy(self._source)
+            try:
+                self._source["tts"] = normalized
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.tts_settings()
+
+    def _validated_tts_update(
+        self, values: dict[str, Any], *, allow_unavailable_driver: bool = False
+    ) -> dict[str, Any]:
+        if not isinstance(values, dict) or not isinstance(values.get("enabled"), bool):
+            raise TypeError("invalid_tts")
+        driver = str(values.get("driver", "windows")).strip()
+        if driver not in {"windows", "gpt_sovits", "local_http"} and not allow_unavailable_driver:
+            raise ValueError("tts_driver_unavailable")
+        endpoint_url = str(values.get("endpoint_url", "")).strip()
+        if driver in {"gpt_sovits", "local_http"}:
+            from new_chat_learning.tts.service import _is_loopback_http_url
+
+            if not _is_loopback_http_url(endpoint_url):
+                raise ValueError("tts_endpoint_must_be_loopback")
+        result = {
+            "enabled": values["enabled"],
+            "driver": driver,
+            "probability_percent": self._bounded_float(
+                values.get("probability_percent"), 0.0, 0.0, 100.0
+            ),
+            "max_text_length": self._bounded_int(
+                values.get("max_text_length"), 100, 1, 1000
+            ),
+            "voice": self._bounded_text(values.get("voice"), 200),
+            "rate": self._bounded_int(values.get("rate"), 0, -10, 10),
+            "volume": self._bounded_int(values.get("volume"), 100, 0, 100),
+            "endpoint_url": endpoint_url,
+            "timeout_seconds": self._bounded_float(
+                values.get("timeout_seconds"), 30.0, 1.0, 120.0
+            ),
+            "text_lang": self._bounded_text(values.get("text_lang", "zh"), 20) or "zh",
+            "reference_audio_path": self._bounded_text(
+                values.get("reference_audio_path"), 1000
+            ),
+            "prompt_text": self._bounded_text(values.get("prompt_text"), 1000),
+            "prompt_lang": self._bounded_text(values.get("prompt_lang", "zh"), 20)
+            or "zh",
+        }
+        if result["enabled"] and result["probability_percent"] <= 0:
+            raise ValueError("invalid_tts_probability")
+        if driver == "gpt_sovits" and result["enabled"] and not result["reference_audio_path"]:
+            raise ValueError("gpt_sovits_reference_required")
+        return result
+
     def _validated_permission_update(self, values: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(values, dict):
             raise TypeError("invalid_permissions")
@@ -397,6 +481,13 @@ class ConfigService:
         if not qq_id.isdigit() or not 5 <= len(qq_id) <= 20:
             raise ValueError("invalid_permissions")
         return qq_id
+
+    @staticmethod
+    def _bounded_text(value: Any, maximum: int) -> str:
+        text = str(value or "").strip()
+        if len(text) > maximum or "\x00" in text:
+            raise ValueError("invalid_text")
+        return text
 
     def _validated_filter_update(self, values: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(values.get("enabled"), bool):

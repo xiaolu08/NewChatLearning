@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import sqlite3
+import urllib.error
 from pathlib import Path
 from sys import maxsize
 
@@ -80,6 +81,14 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 保存权限设置",
             ),
+            ("tts/settings", self.web_tts_settings, ["GET"], "NewChatLearning 语音设置"),
+            (
+                "tts/settings/update",
+                self.web_tts_settings_update,
+                ["POST"],
+                "NewChatLearning 保存语音设置",
+            ),
+            ("tts/test", self.web_tts_test, ["POST"], "NewChatLearning 测试语音合成"),
             ("filters/settings", self.web_filter_settings, ["GET"], "NewChatLearning 过滤设置"),
             (
                 "filters/settings/update",
@@ -223,13 +232,25 @@ class NewChatLearningPlugin(star.Star):
         if not decision.should_reply or decision.candidate is None:
             return
         settings = self.app.config.reply_settings()
-        chain = render_message_chain(
+        text_chain = render_message_chain(
             decision.candidate.components,
             max_plain_length=int(settings["max_plain_length"]),
             data_dir=self.app.data_dir,
         )
-        if chain is None:
+        if text_chain is None:
             return
+        chain = text_chain
+        tts = getattr(self.app, "tts", None)
+        if tts is not None:
+            audio_path = await tts.synthesize_reply(decision.candidate.components)
+            if audio_path is not None:
+                voice_chain = render_message_chain(
+                    ({"type": "Record", "data": {"path": str(audio_path)}},),
+                    max_plain_length=int(settings["max_plain_length"]),
+                    data_dir=self.app.data_dir,
+                )
+                if voice_chain is not None:
+                    chain = voice_chain
         if decision.wait_seconds > 0:
             await asyncio.sleep(decision.wait_seconds)
         sent_message_id = await send_group_message_with_id(event, chain)
@@ -246,7 +267,7 @@ class NewChatLearningPlugin(star.Star):
             await self.context.message_history_manager.insert_message_chain(
                 platform_id=event.get_platform_id(),
                 user_id=event.unified_msg_origin,
-                message_chain=chain,
+                message_chain=text_chain,
                 role="bot",
                 sender_id=event.get_self_id() or "bot",
                 sender_name="NewChatLearning",
@@ -1066,6 +1087,127 @@ class NewChatLearningPlugin(star.Star):
                 status_code=503,
             )
         return self._web_json({"status": "ok", "data": result})
+
+    async def web_tts_settings(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        settings = self.app.config.tts_settings()
+        reference_path = Path(str(settings.pop("reference_audio_path", "")))
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    **settings,
+                    "reference_audio_configured": bool(reference_path.name),
+                    "reference_audio_name": reference_path.name,
+                    "runtime": self.app.tts.status(),
+                },
+            }
+        )
+
+    async def web_tts_settings_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        revision = str(payload.get("revision", "")).strip()
+        current = self.app.config.tts_settings()
+        reference_audio_path = current["reference_audio_path"]
+        if payload.get("clear_reference_audio") is True:
+            reference_audio_path = ""
+        elif str(payload.get("reference_audio_path", "")).strip():
+            reference_audio_path = str(payload["reference_audio_path"]).strip()
+        values = {
+            key: payload.get(key, current[key])
+            for key in (
+                "enabled",
+                "driver",
+                "probability_percent",
+                "max_text_length",
+                "voice",
+                "rate",
+                "volume",
+                "endpoint_url",
+                "timeout_seconds",
+                "text_lang",
+                "prompt_text",
+                "prompt_lang",
+            )
+        }
+        values["reference_audio_path"] = reference_audio_path
+        try:
+            result = await self.app.update_tts_settings(
+                values=values,
+                expected_revision=revision,
+                actor_id=self._web_actor_id(),
+            )
+        except (TypeError, ValueError) as exc:
+            if str(exc) == "revision_conflict":
+                return self._web_json(
+                    {
+                        "status": "error",
+                        "message": "配置已被其他入口修改，请刷新后重试。",
+                        "data": {"revision": self.app.config.revision},
+                    },
+                    status_code=409,
+                )
+            messages = {
+                "tts_driver_unavailable": "当前 Beta 只允许 Windows、本地 HTTP 和 GPT-SoVITS 驱动。",
+                "tts_endpoint_must_be_loopback": "本地 HTTP 地址必须使用带端口的环回地址。",
+                "invalid_tts_probability": "启用语音回复时，触发概率必须大于 0。",
+                "gpt_sovits_reference_required": "启用 GPT-SoVITS 前必须配置参考音频。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(str(exc), "语音设置无效。")},
+                status_code=400,
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist NewChatLearning TTS settings.")
+            return self._web_json(
+                {"status": "error", "message": "AstrBot 插件配置保存失败，设置未生效。"},
+                status_code=503,
+            )
+        public_result = dict(result)
+        reference_path = Path(str(public_result.pop("reference_audio_path", "")))
+        public_result["reference_audio_configured"] = bool(reference_path.name)
+        public_result["reference_audio_name"] = reference_path.name
+        public_result["runtime"] = self.app.tts.status()
+        return self._web_json({"status": "ok", "data": public_result})
+
+    async def web_tts_test(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        text = str(payload.get("text", "")).strip()
+        try:
+            output_path = await self.app.tts.synthesize(text)
+        except ValueError as exc:
+            messages = {
+                "invalid_tts_text": "测试文本为空或超过当前长度限制。",
+                "tts_endpoint_must_be_loopback": "本地 HTTP 地址必须使用环回地址。",
+                "gpt_sovits_reference_required": "GPT-SoVITS 尚未配置参考音频。",
+                "invalid_tts_audio": "TTS 服务返回的内容不是受支持的音频。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(str(exc), "语音测试失败。")},
+                status_code=400,
+            )
+        except (OSError, RuntimeError, TimeoutError, urllib.error.URLError):
+            return self._web_json(
+                {"status": "error", "message": "语音驱动不可用、超时或合成失败。"},
+                status_code=503,
+            )
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "generated": True,
+                    "file_name": output_path.name,
+                    "size_bytes": output_path.stat().st_size,
+                    "driver": self.app.config.tts_settings()["driver"],
+                },
+            }
+        )
 
     async def web_filter_test(self):
         payload, error = await self._authorized_web_payload()

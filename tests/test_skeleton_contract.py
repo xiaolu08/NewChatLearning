@@ -46,6 +46,11 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'id="permissions-view"' in dashboard
     assert 'apiGet("api/permissions")' in dashboard
     assert 'api/permissions/update' in dashboard
+    assert 'id="tab-tts"' in dashboard
+    assert 'id="tts-view"' in dashboard
+    assert 'apiGet("api/tts/settings")' in dashboard
+    assert 'api/tts/settings/update' in dashboard
+    assert 'api/tts/test' in dashboard
     assert 'confirmed: true' in dashboard
     assert 'id="audit-view"' in dashboard
     assert 'apiGet("api/audit"' in dashboard

@@ -372,3 +372,69 @@ def test_permission_settings_roll_back_on_save_failure():
             )
         )
     assert source == before
+
+
+def test_tts_settings_persist_validate_local_endpoint_and_reject_stale_revision():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    source = Source()
+    service = ConfigService(source)
+    revision = service.revision
+    result = asyncio.run(
+        service.update_tts_settings(
+            values={
+                "enabled": True,
+                "driver": "local_http",
+                "probability_percent": 35,
+                "max_text_length": 120,
+                "voice": "local-voice",
+                "endpoint_url": "http://127.0.0.1:9000/tts",
+                "timeout_seconds": 8,
+            },
+            expected_revision=revision,
+        )
+    )
+
+    assert result["probability_percent"] == 35
+    assert source["tts"]["endpoint_url"] == "http://127.0.0.1:9000/tts"
+    with pytest.raises(ValueError, match="revision_conflict"):
+        asyncio.run(
+            service.update_tts_settings(
+                values=source["tts"], expected_revision=revision
+            )
+        )
+    with pytest.raises(ValueError, match="tts_endpoint_must_be_loopback"):
+        service._validated_tts_update(
+            {
+                "enabled": True,
+                "driver": "local_http",
+                "probability_percent": 10,
+                "endpoint_url": "http://192.168.1.2:9000/tts",
+            }
+        )
+
+
+def test_tts_settings_reject_cloud_driver_and_roll_back_on_save_failure():
+    service = ConfigService({})
+    with pytest.raises(ValueError, match="tts_driver_unavailable"):
+        service._validated_tts_update(
+            {"enabled": False, "driver": "openai", "probability_percent": 0}
+        )
+
+    class Source(dict):
+        async def save_config_async(self):
+            raise OSError("disk full")
+
+    source = Source({"tts": {"enabled": False, "driver": "windows"}})
+    service = ConfigService(source)
+    before = dict(source)
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_tts_settings(
+                values={"enabled": False, "driver": "windows"},
+                expected_revision=service.revision,
+            )
+        )
+    assert source == before

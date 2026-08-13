@@ -345,8 +345,65 @@
       "driver": {
         "description": "TTS 驱动",
         "type": "string",
-        "options": ["windows", "gpt_sovits", "local_http", "volcengine", "aliyun", "tencent", "azure", "openai", "openai_compatible", "custom_http"],
+        "options": ["windows", "gpt_sovits", "local_http"],
         "default": "windows"
+      },
+      "probability_percent": {
+        "description": "语音回复概率（%）",
+        "type": "float",
+        "hint": "仅对纯文本词库答案生效；合成失败时自动回退文本。",
+        "default": 0.0
+      },
+      "max_text_length": {
+        "description": "最大合成文本长度",
+        "type": "int",
+        "default": 100
+      },
+      "voice": {
+        "description": "音色或声音名称",
+        "type": "string",
+        "default": ""
+      },
+      "rate": {
+        "description": "Windows 语速（-10 至 10）",
+        "type": "int",
+        "default": 0
+      },
+      "volume": {
+        "description": "Windows 音量（0 至 100）",
+        "type": "int",
+        "default": 100
+      },
+      "endpoint_url": {
+        "description": "本地 TTS 地址",
+        "type": "string",
+        "hint": "只接受带端口的 127.0.0.1、::1 或 localhost 地址。",
+        "default": "http://127.0.0.1:9880/tts"
+      },
+      "timeout_seconds": {
+        "description": "合成超时（秒）",
+        "type": "float",
+        "default": 30.0
+      },
+      "text_lang": {
+        "description": "GPT-SoVITS 文本语言",
+        "type": "string",
+        "default": "zh"
+      },
+      "reference_audio_path": {
+        "description": "GPT-SoVITS 参考音频路径",
+        "type": "string",
+        "default": ""
+      },
+      "prompt_text": {
+        "description": "GPT-SoVITS 参考文本",
+        "type": "string",
+        "default": ""
+      },
+      "prompt_lang": {
+        "description": "GPT-SoVITS 参考语言",
+        "type": "string",
+        "default": "zh"
       }
     }
   }

@@ -90,6 +90,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 概览页可原地刷新运行状态与统计，不重载页面或重新进入登录流程
 - WebUI 审计页支持动作筛选和游标分页，只展示白名单摘要并隐藏客户端地址、路径及未知字段
 - WebUI 权限页管理插件管理员和按群子管理员，使用 revision 冲突保护、二次确认和最小化审计
+- Windows 系统语音、GPT-SoVITS 与通用本地 HTTP TTS；仅转换纯文本词库答案，失败时自动回退文本
+- WebUI 语音页支持概率、长度、音色、超时、GPT-SoVITS 参考信息、驱动状态和测试合成
 - 分享、音乐和骰子组件原生重建，闪照按普通图片安全降级
 - SQLite schema v4 媒体来源元数据与健康状态迁移
 - 分群词库默认隔离，以及实时全局联合查询
@@ -108,8 +110,9 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 转发、商城表情、XML 等长尾消息的完整重建
 - 无人值守的定时词库清理（当前只支持管理员主动预览并确认执行，不会后台自动删除）
 - 词库管理的媒体问答编辑与批量操作
-- WebUI 的 TTS、任务、导入导出与诊断完整管理页面
-- TTS 驱动与旧词库迁移工具
+- WebUI 的任务、导入导出与诊断完整管理页面
+- 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 云端 TTS，以及 DPAPI 密钥保护与调用额度
+- 旧词库导出工具与迁移 WebUI
 - Windows + AstrBot + NapCat 实机验收
 
 ## 技术文档

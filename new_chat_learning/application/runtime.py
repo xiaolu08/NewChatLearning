@@ -19,6 +19,7 @@ from new_chat_learning.constants import PLUGIN_VERSION
 from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
+from new_chat_learning.tts import TTSService
 from new_chat_learning.web.auth import WebAuthService
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class RuntimeApplication:
             self.content_filter,
         )
         self.reply = ReplyService(self.store, self.config, self.content_filter)
+        self.tts = TTSService(self.data_dir, self.config)
         self.web_auth = WebAuthService(self.data_dir, self.store)
         self.started_at: datetime | None = None
 
@@ -173,6 +175,35 @@ class RuntimeApplication:
             )
         except Exception:
             logger.exception("Permission settings were saved but audit recording failed.")
+        return result
+
+    async def update_tts_settings(
+        self,
+        *,
+        values: dict[str, Any],
+        expected_revision: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        before = self.config.tts_settings()
+        result = await self.config.update_tts_settings(
+            values=values,
+            expected_revision=expected_revision,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_tts_settings",
+                target="tts",
+                details={
+                    "before_enabled": before["enabled"],
+                    "after_enabled": result["enabled"],
+                    "before_driver": before["driver"],
+                    "after_driver": result["driver"],
+                    "source": "webui",
+                },
+            )
+        except Exception:
+            logger.exception("TTS settings were saved but audit recording failed.")
         return result
 
     def test_filter_rules(

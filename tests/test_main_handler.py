@@ -190,6 +190,83 @@ def test_successful_local_reply_stops_llm_and_persists_history(monkeypatch):
     assert event.stopped is True
 
 
+def test_successful_tts_reply_sends_voice_but_persists_text_history(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    candidate = SimpleNamespace(
+        answer_id=1,
+        question_id=2,
+        plain_text="hello",
+        components=({"type": "Plain", "data": {"text": "hello"}},),
+    )
+    plugin, reply, history = plugin_with(main_module, ReplyDecision(candidate, "exact"))
+    audio_path = tmp_path / "reply.wav"
+    audio_path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEdata")
+
+    class TTS:
+        async def synthesize_reply(self, components):
+            assert components == candidate.components
+            return audio_path
+
+    class Store:
+        async def register_reply(self, **_kwargs):
+            return None
+
+    plugin.app.tts = TTS()
+    plugin.app.store = Store()
+    event = Event()
+    text_chain = SimpleNamespace(chain=["text"])
+    voice_chain = SimpleNamespace(chain=["voice"])
+    rendered = []
+
+    def render(components, **_kwargs):
+        rendered.append(components)
+        return text_chain if len(rendered) == 1 else voice_chain
+
+    async def send(_event, chain):
+        assert chain is voice_chain
+        return "sent-1"
+
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+    monkeypatch.setattr(main_module, "normalize_group_message", lambda _event: candidate)
+    monkeypatch.setattr(main_module, "reply_matching_key", lambda *_args: "key")
+    monkeypatch.setattr(main_module, "render_message_chain", render)
+    monkeypatch.setattr(main_module, "send_group_message_with_id", send)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert rendered[1][0]["type"] == "Record"
+    assert history.calls[0]["message_chain"] is text_chain
+    assert reply.marked == ["10001"]
+    assert event.stopped is True
+
+
+def test_tts_unavailable_falls_back_to_text_reply(monkeypatch):
+    main_module = load_main(monkeypatch)
+    candidate = SimpleNamespace(
+        plain_text="hello",
+        components=({"type": "Plain", "data": {"text": "hello"}},),
+    )
+    plugin, _reply, history = plugin_with(main_module, ReplyDecision(candidate, "exact"))
+
+    class TTS:
+        async def synthesize_reply(self, _components):
+            return None
+
+    plugin.app.tts = TTS()
+    event = Event()
+    text_chain = SimpleNamespace(chain=["text"])
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+    monkeypatch.setattr(main_module, "normalize_group_message", lambda _event: candidate)
+    monkeypatch.setattr(main_module, "reply_matching_key", lambda *_args: "key")
+    monkeypatch.setattr(main_module, "render_message_chain", lambda *_args, **_kwargs: text_chain)
+    monkeypatch.setattr(main_module, "send_group_message_with_id", _send_without_id)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert event.sent == [text_chain]
+    assert history.calls[0]["message_chain"] is text_chain
+
+
 def test_render_failure_leaves_llm_flow_untouched(monkeypatch):
     main_module = load_main(monkeypatch)
     candidate = SimpleNamespace(
@@ -986,6 +1063,148 @@ def test_web_permissions_update_reports_revision_conflict(monkeypatch):
 
     assert response["status"] == "error"
     assert response["data"]["revision"] == "current"
+
+
+def test_web_tts_settings_requires_login_and_hides_reference_path(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, _csrf=None):
+            assert token == "session"
+            return True
+
+    class Config:
+        def tts_settings(self):
+            return {
+                "enabled": True,
+                "driver": "gpt_sovits",
+                "probability_percent": 20,
+                "max_text_length": 100,
+                "reference_audio_path": "C:/private/voices/reference.wav",
+                "revision": "revision",
+            }
+
+    class TTS:
+        def status(self):
+            return {"available": True}
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, query={}),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.config = Config()
+    plugin.app.tts = TTS()
+
+    response = asyncio.run(plugin.web_tts_settings())
+
+    assert response["status"] == "ok"
+    assert response["data"]["reference_audio_name"] == "reference.wav"
+    assert "reference_audio_path" not in response["data"]
+    assert "C:/private" not in str(response)
+
+
+def test_web_tts_settings_update_uses_csrf_revision_and_preserves_reference(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class Config:
+        revision = "new"
+
+        def tts_settings(self):
+            return {
+                "enabled": False,
+                "driver": "windows",
+                "probability_percent": 0,
+                "max_text_length": 100,
+                "voice": "",
+                "rate": 0,
+                "volume": 100,
+                "endpoint_url": "http://127.0.0.1:9880/tts",
+                "timeout_seconds": 30,
+                "text_lang": "zh",
+                "reference_audio_path": "C:/private/reference.wav",
+                "prompt_text": "",
+                "prompt_lang": "zh",
+                "revision": "old",
+            }
+
+    class TTS:
+        def status(self):
+            return {"available": True}
+
+    class App:
+        web_auth = Auth()
+        config = Config()
+        tts = TTS()
+
+        async def update_tts_settings(self, **kwargs):
+            assert kwargs["expected_revision"] == "old"
+            assert kwargs["values"]["reference_audio_path"] == "C:/private/reference.wav"
+            assert kwargs["values"]["probability_percent"] == 50
+            assert kwargs["actor_id"].startswith("webui:")
+            return {**kwargs["values"], "revision": "new"}
+
+    async def body():
+        return b'{"enabled":true,"driver":"windows","probability_percent":50,"revision":"old","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_tts_settings_update())
+
+    assert response["status"] == "ok"
+    assert response["data"]["reference_audio_name"] == "reference.wav"
+    assert "reference_audio_path" not in response["data"]
+
+
+def test_web_tts_test_returns_only_safe_file_metadata(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    output = tmp_path / "private" / "test.wav"
+    output.parent.mkdir()
+    output.write_bytes(b"RIFF\x24\x00\x00\x00WAVEdata")
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Config:
+        def tts_settings(self):
+            return {"driver": "windows"}
+
+    class TTS:
+        async def synthesize(self, text):
+            assert text == "hello"
+            return output
+
+    async def body():
+        return b'{"text":"hello","csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.config = Config()
+    plugin.app.tts = TTS()
+
+    response = asyncio.run(plugin.web_tts_test())
+
+    assert response["data"]["file_name"] == "test.wav"
+    assert "private" not in str(response)
 
 
 def test_web_filter_settings_update_requires_csrf_and_binds_actor(monkeypatch):

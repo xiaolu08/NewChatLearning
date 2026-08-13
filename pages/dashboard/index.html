@@ -109,6 +109,7 @@
         <button id="tab-filters" type="button">过滤</button>
         <button id="tab-permissions" type="button">权限</button>
         <button id="tab-media" type="button">媒体</button>
+        <button id="tab-tts" type="button">语音</button>
         <button id="tab-backups" type="button">备份</button>
         <button id="tab-audit" type="button">审计</button>
       </nav>
@@ -253,6 +254,37 @@
           <div id="permissions-message" class="result" role="status"></div>
         </section>
       </div>
+      <div id="tts-view" class="hidden">
+        <div class="notice">语音是可选本地增强。核心学习和文本回复不调用 LLM；本轮只开放 Windows、本地 HTTP 与 GPT-SoVITS，云端付费驱动将在 DPAPI 密钥保护完成后开放。</div>
+        <section style="margin-top:0">
+          <div class="toolbar">
+            <label class="inline-check"><input id="tts-enabled" type="checkbox"> 启用纯文本词库语音回复</label>
+            <div class="field"><label for="tts-driver">驱动</label><select id="tts-driver"><option value="windows">Windows 系统语音</option><option value="gpt_sovits">GPT-SoVITS</option><option value="local_http">通用本地 HTTP</option></select></div>
+            <div class="field"><label for="tts-probability">触发概率（%）</label><input id="tts-probability" type="number" min="0" max="100" step="0.1"></div>
+            <div class="field"><label for="tts-max-length">最大文本长度</label><input id="tts-max-length" type="number" min="1" max="1000"></div>
+          </div>
+          <div class="rule-grid">
+            <div><label for="tts-voice">音色或声音名称</label><input id="tts-voice" maxlength="200" placeholder="留空使用驱动默认音色"></div>
+            <div><label for="tts-endpoint">本地服务地址</label><input id="tts-endpoint" maxlength="1000" placeholder="http://127.0.0.1:9880/tts"></div>
+            <div><label for="tts-timeout">合成超时（秒）</label><input id="tts-timeout" type="number" min="1" max="120" step="0.1"></div>
+            <div><label for="tts-reference">GPT-SoVITS 参考音频路径</label><input id="tts-reference" maxlength="1000" placeholder="留空保留当前配置"></div>
+            <div><label for="tts-text-lang">文本语言</label><input id="tts-text-lang" maxlength="20"></div>
+            <div><label for="tts-prompt-lang">参考语言</label><input id="tts-prompt-lang" maxlength="20"></div>
+            <div><label for="tts-rate">Windows 语速</label><input id="tts-rate" type="number" min="-10" max="10"></div>
+            <div><label for="tts-volume">Windows 音量</label><input id="tts-volume" type="number" min="0" max="100"></div>
+          </div>
+          <label for="tts-prompt-text">GPT-SoVITS 参考文本</label><textarea id="tts-prompt-text" maxlength="1000"></textarea>
+          <label class="inline-check"><input id="tts-clear-reference" type="checkbox"> 清除已保存的参考音频路径</label>
+          <p id="tts-reference-state">尚未读取参考音频状态。</p>
+          <div class="actions" style="margin-top:16px"><button id="tts-refresh" class="secondary" type="button">刷新设置</button><button id="tts-save" type="button">保存语音设置</button></div>
+          <div id="tts-message" class="result" role="status"></div>
+        </section>
+        <section class="settings-band">
+          <h2>测试合成</h2>
+          <div class="toolbar"><div class="field"><label for="tts-test-text">测试文本</label><input id="tts-test-text" maxlength="1000" value="NewChatLearning 语音测试"></div><button id="tts-test" class="secondary" type="button">执行测试</button></div>
+          <div id="tts-test-result" class="result" role="status"></div>
+        </section>
+      </div>
       <div id="backups-view" class="hidden">
         <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
         <div class="split">
@@ -326,6 +358,7 @@
       let groupRevision = null;
       let filterRevision = null;
       let permissionRevision = null;
+      let ttsRevision = null;
       let filterGroupRules = [];
       let filterCleanupPlan = null;
       let selectedBackup = null;
@@ -384,26 +417,30 @@
         const groups = view === "groups";
         const filters = view === "filters";
         const permissions = view === "permissions";
+        const tts = view === "tts";
         const backups = view === "backups";
         const audit = view === "audit";
-        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || backups || audit);
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || tts || backups || audit);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
         el("filters-view").classList.toggle("hidden", !filters);
         el("permissions-view").classList.toggle("hidden", !permissions);
+        el("tts-view").classList.toggle("hidden", !tts);
         el("backups-view").classList.toggle("hidden", !backups);
         el("audit-view").classList.toggle("hidden", !audit);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !backups && !audit);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !tts && !backups && !audit);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
         el("tab-filters").classList.toggle("active", filters);
         el("tab-permissions").classList.toggle("active", permissions);
+        el("tab-tts").classList.toggle("active", tts);
         el("tab-backups").classList.toggle("active", backups);
         el("tab-audit").classList.toggle("active", audit);
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
         if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
+        if (tts) loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。"));
         if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
         if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。"));
       }
@@ -583,6 +620,48 @@
         return { plugin_admin_ids: pluginAdmins, group_sub_admins: groups, revision: permissionRevision || "" };
       }
 
+      async function loadTtsSettings() {
+        const data = payloadData(await bridge.apiGet("api/tts/settings"));
+        ttsRevision = data.revision;
+        el("tts-enabled").checked = Boolean(data.enabled);
+        el("tts-driver").value = data.driver;
+        el("tts-probability").value = data.probability_percent;
+        el("tts-max-length").value = data.max_text_length;
+        el("tts-voice").value = data.voice || "";
+        el("tts-rate").value = data.rate;
+        el("tts-volume").value = data.volume;
+        el("tts-endpoint").value = data.endpoint_url || "";
+        el("tts-timeout").value = data.timeout_seconds;
+        el("tts-reference").value = "";
+        el("tts-clear-reference").checked = false;
+        el("tts-text-lang").value = data.text_lang || "zh";
+        el("tts-prompt-text").value = data.prompt_text || "";
+        el("tts-prompt-lang").value = data.prompt_lang || "zh";
+        setText("tts-reference-state", data.reference_audio_configured ? `已配置参考音频：${data.reference_audio_name}` : "未配置参考音频。");
+        const runtime = data.runtime || {};
+        setText("tts-message", `驱动状态：${runtime.available ? "当前环境可用" : "当前环境未就绪"}；语音回复：${data.enabled ? "已启用" : "已关闭"}。`);
+      }
+
+      function ttsPayload() {
+        return {
+          enabled: el("tts-enabled").checked,
+          driver: el("tts-driver").value,
+          probability_percent: Number(el("tts-probability").value),
+          max_text_length: Number(el("tts-max-length").value),
+          voice: el("tts-voice").value.trim(),
+          rate: Number(el("tts-rate").value),
+          volume: Number(el("tts-volume").value),
+          endpoint_url: el("tts-endpoint").value.trim(),
+          timeout_seconds: Number(el("tts-timeout").value),
+          reference_audio_path: el("tts-reference").value.trim(),
+          clear_reference_audio: el("tts-clear-reference").checked,
+          text_lang: el("tts-text-lang").value.trim(),
+          prompt_text: el("tts-prompt-text").value.trim(),
+          prompt_lang: el("tts-prompt-lang").value.trim(),
+          revision: ttsRevision || "",
+        };
+      }
+
       async function loadBlacklist() {
         const data = payloadData(await bridge.apiGet("api/filters/blacklist"));
         const rows = (data.entries || []).map(entry => {
@@ -705,6 +784,7 @@
       el("tab-filters").addEventListener("click", () => showView("filters"));
       el("tab-permissions").addEventListener("click", () => showView("permissions"));
       el("tab-media").addEventListener("click", () => showView("media"));
+      el("tab-tts").addEventListener("click", () => showView("tts"));
       el("tab-backups").addEventListener("click", () => showView("backups"));
       el("tab-audit").addEventListener("click", () => showView("audit"));
       el("backups-refresh").addEventListener("click", () => loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。")));
@@ -735,6 +815,26 @@
           permissionRevision = data.revision; el("permissions-dialog").close();
           setText("permissions-message", "权限设置已保存到 AstrBot 插件配置。");
         } catch (error) { setText("permissions-confirm-message", error?.message || "权限设置未保存。"); }
+      });
+      el("tts-refresh").addEventListener("click", () => loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。")));
+      el("tts-save").addEventListener("click", async () => {
+        const button = el("tts-save"); button.disabled = true;
+        try {
+          const data = await postSecure("api/tts/settings/update", ttsPayload());
+          ttsRevision = data.revision;
+          el("tts-reference").value = ""; el("tts-clear-reference").checked = false;
+          setText("tts-reference-state", data.reference_audio_configured ? `已配置参考音频：${data.reference_audio_name}` : "未配置参考音频。");
+          setText("tts-message", `语音设置已保存；驱动${data.runtime?.available ? "当前可用" : "当前未就绪"}。`);
+        } catch (error) { setText("tts-message", error?.message || "语音设置保存失败。"); }
+        finally { button.disabled = false; }
+      });
+      el("tts-test").addEventListener("click", async () => {
+        const button = el("tts-test"); button.disabled = true; setText("tts-test-result", "正在合成...");
+        try {
+          const data = await postSecure("api/tts/test", { text: el("tts-test-text").value.trim() });
+          setText("tts-test-result", `合成成功：${data.file_name}，${formatBytes(data.size_bytes)}，驱动 ${data.driver}。`);
+        } catch (error) { setText("tts-test-result", error?.message || "语音测试失败。"); }
+        finally { button.disabled = false; }
       });
       el("filter-group-load").addEventListener("click", () => { try { renderGroupFilterRule(selectedFilterGroup()); setText("filters-message", "已读取群聊附加规则。"); } catch (error) { setText("filters-message", error.message); } });
       el("filter-group-clear").addEventListener("click", () => { for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`group-filter-${key}`, []); renderComponentChecks("group-filter-components", []); });
