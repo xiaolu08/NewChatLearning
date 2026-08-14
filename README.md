@@ -10,7 +10,7 @@
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 
-这是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面向 AstrBot 生态的独立移植与现代化项目，适用于 **Windows + AstrBot + NapCat + OneBot v11 + QQ 群**。当前版本用于社区测试，不是稳定版，也不建议直接用于无人值守的生产群聊。
+这是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面向 AstrBot 生态的独立移植与现代化项目，适用于 **Windows + AstrBot + NapCat + OneBot v11**。当前版本用于社区测试，不是稳定版，也不建议直接用于无人值守的生产群聊。
 
 ## 你可以用它做什么
 
