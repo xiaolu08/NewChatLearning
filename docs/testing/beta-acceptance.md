@@ -66,6 +66,8 @@ status: 当前有效
 - 默认额度为每分钟 10 次、每日 200 次、每日 50,000 字符；请求发出前预留额度，超限拒绝。
 - 自定义 HTTP 仅允许受限 JSON 映射和 Base64 音频字段；禁止明文 HTTP、代理、重定向及非音频响应。
 
+Beta 31.post1 修复 AstrBot 4.27.2 配置 schema 兼容性：自定义 HTTP 的请求头与请求体映射使用平台原生 `dict` 类型，避免插件加载时把无子项的 `object` 递归解析并触发 `KeyError: 'items'`。
+
 - [x] Windows 本地、GPT-SoVITS、通用本地 HTTP（离线测试通过；Windows `System.Speech` 已完成本机真实 WAV 冒烟测试，NapCat 语音发送待实机验收）。
 - [ ] 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 映射。
 - [ ] 云端默认关闭、费用警示、频率/每日额度、超时和错误脱敏。
