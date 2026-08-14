@@ -164,6 +164,35 @@ class RuntimeApplication:
             logger.exception("Cross-group settings were saved but audit recording failed.")
         return result
 
+    async def update_global_switch(
+        self,
+        *,
+        capability: str,
+        enabled: bool,
+        expected_revision: str,
+        actor_id: str,
+        source: str = "legacy_private_command",
+    ) -> dict[str, Any]:
+        result = await self.config.update_global_switch(
+            capability=capability,
+            enabled=enabled,
+            expected_revision=expected_revision,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_global_switch",
+                target=f"global:{capability}",
+                details={
+                    "capability": capability,
+                    "enabled": enabled,
+                    "source": source,
+                },
+            )
+        except Exception:
+            logger.exception("Global switch was saved but audit recording failed.")
+        return result
+
     async def filter_settings(self, group_id: str = "") -> dict[str, Any]:
         result = self.config.filter_settings(group_id)
         result["group_rules"] = self.config.snapshot()["filters"].get("group_rules", [])

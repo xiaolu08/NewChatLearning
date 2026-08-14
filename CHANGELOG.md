@@ -3,6 +3,7 @@
 ## 未发布
 
 - 恢复原版 `!grouplist` 与 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 跨群控制语义。
+- 按消息场景恢复 `!learning`/`!reply`：管理员私聊控制全局主开关，群聊控制当前群能力。
 - 跨群命令仅允许 AstrBot 全局管理员或插件管理员执行，配置整批原子保存并写入审计。
 - `!add subadmin` 通过 NapCat/AstrBot 读取目标群当前群主和群管理员名单；读取失败时不保存部分修改。
 

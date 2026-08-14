@@ -20,6 +20,12 @@ class CrossGroupCommand:
     tag: str | None = None
 
 
+@dataclass(frozen=True)
+class LegacyGlobalCommand:
+    capability: str
+    arguments: tuple[str, ...] = ()
+
+
 def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCommand | None:
     parts = text.strip().split()
     if not parts:

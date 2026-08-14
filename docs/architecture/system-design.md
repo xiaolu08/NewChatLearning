@@ -70,7 +70,7 @@ NewChatLearning/
 
 - 主入口：`/ncl help`、`/ncl status`、`/ncl learning`、`/ncl reply`、`/ncl silent`、`/ncl target`、`/ncl library`、`/ncl media`、`/ncl tts`、`/ncl task`、`/ncl admin`。
 - Beta 25 已实现当前群 `/ncl mode [disabled|learning|reply|learning_reply|silent]`、`/ncl learning on|off`、`/ncl reply on|off`、`/ncl silent on|off` 和 `/ncl target list|add|remove|clear`。开关命令只改变对应能力并保留另一项；定向用户只有在学习模式下才能新增。
-- 当前已兼容的原版入口包括无参数 `!learning`、`!reply` 当前群切换，以及 `!grouplist`、`!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 跨群管理语法。跨群命令只允许 AstrBot 全局管理员或插件管理员执行；群聊子管理员和普通成员被静默截断，命令消息不进入学习链。
+- 当前已兼容的原版入口包括 `!learning`、`!reply`、`!grouplist` 和 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge`。`!learning` 与 `!reply` 在管理员私聊中切换全局主开关，在群聊中切换当前群能力；带群号的跨群命令可从任意管理群或管理员私聊发出，不需要进入目标群。跨群命令只允许 AstrBot 全局管理员或插件管理员执行；群聊子管理员和普通成员被静默截断，命令消息不进入学习链。
 - 跨群写入在一次配置 revision 校验和一次持久化中原子更新学习群、回复群、静默群、共享标签、全局词库排除群及子管理员。`remove tag` 清除目标群全部标签。`add subadmin` 通过 AstrBot 的 NapCat 群资料接口读取目标群当前群主和群管理员，读取任一目标失败则整批不保存；再次执行可刷新授权名单。
 - 当前词库管理命令：`/ncl search <关键词>`、`/ncl show <问题ID>`、`/ncl add <问题> => <答案>`、`/ncl add-regex <表达式> => <答案>`、`/ncl weight <答案ID> <权重>`、`/ncl delete-answer <答案ID>`、`/ncl delete-question <问题ID>`。
 - 词库管理命令始终限定当前群作用域。全局管理员和插件管理员仍按当前群操作；群子管理员不能借助问题或答案 ID 访问其他群。

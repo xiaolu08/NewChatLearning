@@ -17,9 +17,9 @@ NewChatLearning 已完整恢复上游群管理命令的主要语义，但尚未�
 
 | 上游命令 | 状态 | NewChatLearning 入口或说明 |
 | --- | --- | --- |
-| `learning` | 命令兼容 | `!learning` 切换当前群学习；`/ncl learning on\|off` |
+| `learning` | 命令兼容 | 管理员私聊 `!learning` 切换全局学习主开关；群聊 `!learning` 切换当前群学习；`/ncl learning on\|off` |
 | `learning <秒>` | 功能等价 | WebUI/插件配置中的 `learning.interval_seconds`；未保留旧参数命令 |
-| `reply` | 命令兼容 | `!reply` 切换当前群回复；`/ncl reply on\|off` |
+| `reply` | 命令兼容 | 管理员私聊 `!reply` 切换全局回复主开关；群聊 `!reply` 切换当前群回复；`/ncl reply on\|off` |
 | `reply <百分比>` | 功能等价 | WebUI/插件配置中的 `reply.probability_percent`；旧参数命令未保留 |
 | `reply -s <百分比> <群号>` | 尚未复现 | 当前没有按群独立回复概率配置 |
 | `reply -d <群号>` | 尚未复现 | 同上，当前没有按群独立回复概率配置 |
@@ -42,7 +42,7 @@ NewChatLearning 已完整恢复上游群管理命令的主要语义，但尚未�
 | `autotaskcommand` | 功能等价 | WebUI 任务页面说明；原版任意特殊命令机制不开放 |
 | `fastdelete` | 功能等价 | `!d`/`!delete` 引用 Bot 回复或按最近序号删除；权限由插件管理员和群子管理员控制 |
 | `check` | 功能等价 | `/ncl status` 与 WebUI 概览/诊断页面 |
-| `grouplist` | 命令兼容 | `!grouplist` 显示学习、回复、自主管理和全局排除群 |
+| `grouplist` | 命令兼容 | `!grouplist` 显示学习、回复、自主管理和全局排除群；可从管理群或管理员私聊发送 |
 | `globe` | 功能等价 | WebUI/插件配置中的 `library.mode` |
 | `setadmin <QQ号>` | 功能等价 | WebUI 权限页中的插件管理员 QQ 号 |
 | `setbotname <昵称>` | 尚未复现 | Bot 身份由 AstrBot 平台配置管理，插件没有独立昵称配置 |

@@ -404,6 +404,36 @@ class ConfigService:
             "revision": self.revision,
         }
 
+    def global_switch_settings(self) -> dict[str, Any]:
+        snapshot = self.snapshot()
+        return {
+            "learning_enabled": bool(snapshot["learning"].get("enabled", False)),
+            "reply_enabled": bool(snapshot["reply"].get("enabled", False)),
+            "revision": self.revision,
+        }
+
+    async def update_global_switch(
+        self,
+        *,
+        capability: str,
+        enabled: bool,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        if capability not in {"learning", "reply"} or not isinstance(enabled, bool):
+            raise ValueError("invalid_global_switch")
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            original = deepcopy(self._source)
+            try:
+                self._source.setdefault(capability, {})["enabled"] = enabled
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.global_switch_settings()
+
     async def update_cross_group_settings(
         self,
         *,

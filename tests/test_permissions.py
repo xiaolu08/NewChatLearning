@@ -125,3 +125,33 @@ def test_runtime_cross_group_update_audits_operation_without_group_ids(tmp_path)
         "group_count": 2,
         "source": "legacy_command",
     }
+
+
+def test_runtime_global_switch_update_is_audited(tmp_path):
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    async def scenario():
+        app = RuntimeApplication(tmp_path, Source())
+        await app.start()
+        try:
+            result = await app.update_global_switch(
+                capability="reply",
+                enabled=True,
+                expected_revision=app.config.revision,
+                actor_id="12345",
+            )
+            audit = await app.audit.list_entries(action="update_global_switch")
+            return result, audit
+        finally:
+            await app.stop()
+
+    result, audit = asyncio.run(scenario())
+
+    assert result["reply_enabled"] is True
+    assert audit["entries"][0]["details"] == {
+        "capability": "reply",
+        "enabled": True,
+        "source": "legacy_private_command",
+    }

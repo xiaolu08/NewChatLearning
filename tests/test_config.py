@@ -366,6 +366,61 @@ def test_cross_group_settings_update_all_legacy_categories_atomically():
     assert source.saves == 4
 
 
+def test_global_switch_settings_persist_and_roll_back():
+    class Source(dict):
+        fail = False
+
+        async def save_config_async(self):
+            if self.fail:
+                raise OSError("disk full")
+            return True
+
+    source = Source()
+    service = ConfigService(source)
+    result = asyncio.run(
+        service.update_global_switch(
+            capability="learning",
+            enabled=True,
+            expected_revision=service.revision,
+        )
+    )
+    assert result["learning_enabled"] is True
+    assert result["reply_enabled"] is False
+    assert source["learning"]["enabled"] is True
+
+    before = deepcopy(source)
+    source.fail = True
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_global_switch(
+                capability="reply",
+                enabled=True,
+                expected_revision=service.revision,
+            )
+        )
+    assert source == before
+
+
+def test_global_switch_rejects_invalid_capability_and_stale_revision():
+    service = ConfigService({})
+    with pytest.raises(ValueError, match="invalid_global_switch"):
+        asyncio.run(
+            service.update_global_switch(
+                capability="silent",
+                enabled=True,
+                expected_revision=service.revision,
+            )
+        )
+    with pytest.raises(ValueError, match="revision_conflict"):
+        asyncio.run(
+            service.update_global_switch(
+                capability="learning",
+                enabled=True,
+                expected_revision="stale",
+            )
+        )
+
+
 def test_cross_group_settings_remove_tag_and_roll_back_on_save_failure():
     class Source(dict):
         fail = False

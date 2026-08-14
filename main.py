@@ -46,6 +46,7 @@ from new_chat_learning.commands.group_settings import (
     LEARNING_MODES,
     CrossGroupCommand,
     GroupSettingsCommand,
+    LegacyGlobalCommand,
     parse_legacy_group_command,
     parse_on_off,
     transition_toggle,
@@ -407,6 +408,25 @@ class NewChatLearningPlugin(star.Star):
             )
         except Exception:
             self.logger.exception("Failed to persist NewChatLearning local reply.")
+        event.stop_event()
+
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
+    @filter.event_message_type(
+        filter.EventMessageType.FRIEND_MESSAGE,
+        priority=maxsize - 100,
+    )
+    async def capture_private_message(self, event: AstrMessageEvent) -> None:
+        if self.app is None or not self._legacy_command_aliases_enabled():
+            return
+        parsed = parse_legacy_group_command(event.get_message_str())
+        if isinstance(parsed, GroupSettingsCommand) and parsed.name in {"learning", "reply"}:
+            parsed = LegacyGlobalCommand(parsed.name, parsed.arguments)
+        if not isinstance(parsed, (LegacyGlobalCommand, CrossGroupCommand)):
+            return
+        if isinstance(parsed, LegacyGlobalCommand):
+            await self._handle_global_legacy_command(event, parsed)
+        else:
+            await self._handle_cross_group_command(event, parsed)
         event.stop_event()
 
     def _record_diagnostic(self, group_id: str, event: str, *, reason: str = "") -> None:
@@ -1156,6 +1176,49 @@ class NewChatLearningPlugin(star.Star):
                 f"{self._format_cross_group_settings(result)}"
             )
         )
+
+    async def _handle_global_legacy_command(
+        self,
+        event: AstrMessageEvent,
+        command: LegacyGlobalCommand,
+    ) -> None:
+        if self.app is None or not is_plugin_admin(event, getattr(self, "config", {})):
+            event.stop_event()
+            return
+        settings = self.app.config.global_switch_settings()
+        current = settings[f"{command.capability}_enabled"]
+        enabled = parse_on_off(command.arguments)
+        if command.arguments and enabled is None:
+            event.set_result(
+                MessageEventResult().message(
+                    f"用法：!{command.capability} [on|off]（私聊控制全局开关）"
+                )
+            )
+            return
+        if enabled is None:
+            enabled = not current
+        try:
+            result = await self.app.update_global_switch(
+                capability=command.capability,
+                enabled=enabled,
+                expected_revision=settings["revision"],
+                actor_id=event.get_sender_id(),
+            )
+        except ValueError as exc:
+            text = (
+                "配置已被其他入口修改，请重试。"
+                if str(exc) == "revision_conflict"
+                else f"用法：!{command.capability} [on|off]（私聊控制全局开关）"
+            )
+            event.set_result(MessageEventResult().message(text))
+            return
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist global switch from private command.")
+            event.set_result(MessageEventResult().message("全局开关保存失败，原配置已保留。"))
+            return
+        state = "已开启" if result[f"{command.capability}_enabled"] else "已关闭"
+        label = "学习" if command.capability == "learning" else "回复"
+        event.set_result(MessageEventResult().message(f"全局{label}{state}。"))
 
     @staticmethod
     def _group_manager_ids(group) -> list[str]:

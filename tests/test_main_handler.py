@@ -22,6 +22,7 @@ def load_main(monkeypatch):
 
         class EventMessageType:
             GROUP_MESSAGE = "group"
+            FRIEND_MESSAGE = "friend"
 
         platform_adapter_type = staticmethod(lambda _kind: lambda function: function)
         event_message_type = staticmethod(lambda _kind, **_kwargs: lambda function: function)
@@ -560,6 +561,95 @@ def test_parameterless_legacy_alias_toggles_current_group(monkeypatch):
     )
 
     assert plugin.app.calls[0]["mode"] == "reply"
+
+
+def test_private_legacy_learning_toggles_global_switch(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GlobalConfig(Config):
+        def snapshot(self):
+            return {"general": {"legacy_command_aliases": True}}
+
+        def global_switch_settings(self):
+            return {
+                "learning_enabled": False,
+                "reply_enabled": True,
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = GlobalConfig()
+            self.calls = []
+
+        async def update_global_switch(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"learning_enabled": True, "reply_enabled": True}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+    event.message_str = "!learning"
+
+    asyncio.run(plugin.capture_private_message(event))
+
+    assert plugin.app.calls == [
+        {
+            "capability": "learning",
+            "enabled": True,
+            "expected_revision": "revision-1",
+            "actor_id": "7",
+        }
+    ]
+    assert event.stopped is True
+    assert event.result.text == "全局学习已开启。"
+
+
+def test_private_legacy_reply_supports_explicit_state_and_rejects_members(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class GlobalConfig(Config):
+        def global_switch_settings(self):
+            return {
+                "learning_enabled": True,
+                "reply_enabled": True,
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = GlobalConfig()
+            self.calls = []
+
+        async def update_global_switch(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"learning_enabled": True, "reply_enabled": False}
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_global_legacy_command(
+            event,
+            main_module.LegacyGlobalCommand("reply", ("off",)),
+        )
+    )
+    assert plugin.app.calls[0]["enabled"] is False
+    assert event.result.text == "全局回复已关闭。"
+
+    plugin.config = {}
+    event = Event()
+    asyncio.run(
+        plugin._handle_global_legacy_command(
+            event,
+            main_module.LegacyGlobalCommand("reply"),
+        )
+    )
+    assert event.stopped is True
+    assert event.result is None
 
 
 def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(monkeypatch):
