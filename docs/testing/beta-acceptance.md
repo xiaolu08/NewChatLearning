@@ -58,6 +58,14 @@ status: 当前有效
 
 ### TTS
 
+#### Beta 31 云端 TTS
+
+- 云端驱动默认关闭；启用后才会发起付费请求，核心学习与回复路径不调用 LLM。
+- 支持火山引擎、阿里云、腾讯云、Azure、OpenAI、OpenAI 风格接口及自定义 HTTPS HTTP 映射。
+- 云端密钥使用 Windows 当前用户 DPAPI 保存，WebUI 仅显示已配置状态与掩码，不回显明文。
+- 默认额度为每分钟 10 次、每日 200 次、每日 50,000 字符；请求发出前预留额度，超限拒绝。
+- 自定义 HTTP 仅允许受限 JSON 映射和 Base64 音频字段；禁止明文 HTTP、代理、重定向及非音频响应。
+
 - [x] Windows 本地、GPT-SoVITS、通用本地 HTTP（离线测试通过；Windows `System.Speech` 已完成本机真实 WAV 冒烟测试，NapCat 语音发送待实机验收）。
 - [ ] 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 映射。
 - [ ] 云端默认关闭、费用警示、频率/每日额度、超时和错误脱敏。

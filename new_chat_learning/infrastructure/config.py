@@ -74,6 +74,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "reference_audio_path": "",
         "prompt_text": "",
         "prompt_lang": "zh",
+        "model": "",
+        "region": "",
+        "app_id": "",
+        "app_key": "",
+        "response_mode": "audio",
+        "custom_headers": {},
+        "custom_body": {"text": "${text}", "voice": "${voice}", "model": "${model}"},
+        "custom_response_field": "audio_base64",
+        "per_minute_requests": 10,
+        "daily_requests": 200,
+        "daily_characters": 50000,
     },
 }
 
@@ -400,7 +411,19 @@ class ConfigService:
         if not isinstance(values, dict) or not isinstance(values.get("enabled"), bool):
             raise TypeError("invalid_tts")
         driver = str(values.get("driver", "windows")).strip()
-        if driver not in {"windows", "gpt_sovits", "local_http"} and not allow_unavailable_driver:
+        available_drivers = {
+            "windows",
+            "gpt_sovits",
+            "local_http",
+            "volcengine",
+            "aliyun",
+            "tencent",
+            "azure",
+            "openai",
+            "openai_compatible",
+            "custom_http",
+        }
+        if driver not in available_drivers and not allow_unavailable_driver:
             raise ValueError("tts_driver_unavailable")
         endpoint_url = str(values.get("endpoint_url", "")).strip()
         if driver in {"gpt_sovits", "local_http"}:
@@ -408,6 +431,14 @@ class ConfigService:
 
             if not _is_loopback_http_url(endpoint_url):
                 raise ValueError("tts_endpoint_must_be_loopback")
+        if (
+            driver in {"openai_compatible", "custom_http", "volcengine", "aliyun", "tencent", "azure"}
+            and endpoint_url
+            and not endpoint_url.startswith("https://")
+        ):
+            raise ValueError("tts_cloud_endpoint_must_be_https")
+        if driver in {"openai_compatible", "custom_http"} and not endpoint_url:
+            raise ValueError("tts_cloud_endpoint_required")
         result = {
             "enabled": values["enabled"],
             "driver": driver,
@@ -431,11 +462,53 @@ class ConfigService:
             "prompt_text": self._bounded_text(values.get("prompt_text"), 1000),
             "prompt_lang": self._bounded_text(values.get("prompt_lang", "zh"), 20)
             or "zh",
+            "model": self._bounded_text(values.get("model"), 200),
+            "region": self._bounded_text(values.get("region"), 100),
+            "app_id": self._bounded_text(values.get("app_id"), 200),
+            "app_key": self._bounded_text(values.get("app_key"), 200),
+            "response_mode": self._bounded_text(values.get("response_mode", "audio"), 30)
+            or "audio",
+            "custom_headers": self._validated_mapping(values.get("custom_headers", {})),
+            "custom_body": self._validated_mapping(
+                values.get("custom_body", {"text": "${text}"})
+            ),
+            "custom_response_field": self._bounded_text(
+                values.get("custom_response_field", "audio_base64"), 100
+            )
+            or "audio_base64",
+            "per_minute_requests": self._bounded_int(
+                values.get("per_minute_requests"), 10, 1, 10000
+            ),
+            "daily_requests": self._bounded_int(values.get("daily_requests"), 200, 1, 1000000),
+            "daily_characters": self._bounded_int(
+                values.get("daily_characters"), 50000, 1, 10000000
+            ),
         }
         if result["enabled"] and result["probability_percent"] <= 0:
             raise ValueError("invalid_tts_probability")
         if driver == "gpt_sovits" and result["enabled"] and not result["reference_audio_path"]:
             raise ValueError("gpt_sovits_reference_required")
+        return result
+
+    @classmethod
+    def _validated_mapping(cls, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict) or len(value) > 50:
+            raise ValueError("invalid_tts_mapping")
+        result = {}
+        for key, item in value.items():
+            name = str(key).strip()
+            if not name or len(name) > 100:
+                raise ValueError("invalid_tts_mapping")
+            if isinstance(item, dict):
+                result[name] = cls._validated_mapping(item)
+            elif isinstance(item, list):
+                if len(item) > 50:
+                    raise ValueError("invalid_tts_mapping")
+                result[name] = [cls._bounded_text(entry, 1000) for entry in item]
+            elif isinstance(item, (str, int, float, bool)) or item is None:
+                result[name] = item
+            else:
+                raise ValueError("invalid_tts_mapping")
         return result
 
     def _validated_permission_update(self, values: dict[str, Any]) -> dict[str, Any]:

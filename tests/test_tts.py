@@ -119,13 +119,14 @@ def test_tts_status_marks_cloud_driver_unavailable_without_exposing_secrets(tmp_
         ),
     )
 
-    assert service.status() == {
-        "enabled": False,
-        "driver": "openai",
-        "available": False,
-        "probability_percent": 0,
-        "max_text_length": 100,
-    }
+    status = service.status()
+    assert status["enabled"] is False
+    assert status["driver"] == "openai"
+    assert status["available"] is False
+    assert status["probability_percent"] == 0
+    assert status["max_text_length"] == 100
+    assert status["secret_configured"] is False
+    assert status["quota"]["daily_requests"] == 200
 
 
 def test_invalid_audio_response_is_rejected_and_not_left_on_disk(tmp_path, monkeypatch):

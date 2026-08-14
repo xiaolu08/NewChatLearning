@@ -110,6 +110,9 @@ class NewChatLearningPlugin(star.Star):
                 "NewChatLearning 保存权限设置",
             ),
             ("tts/settings", self.web_tts_settings, ["GET"], "NewChatLearning 语音设置"),
+            ("tts/secrets", self.web_tts_secrets, ["GET"], "NewChatLearning 语音密钥状态"),
+            ("tts/secrets/update", self.web_tts_secrets_update, ["POST"], "NewChatLearning 保存语音密钥"),
+            ("tts/secrets/clear", self.web_tts_secrets_clear, ["POST"], "NewChatLearning 清除语音密钥"),
             (
                 "tts/settings/update",
                 self.web_tts_settings_update,
@@ -1400,7 +1403,7 @@ class NewChatLearningPlugin(star.Star):
         elif str(payload.get("reference_audio_path", "")).strip():
             reference_audio_path = str(payload["reference_audio_path"]).strip()
         values = {
-            key: payload.get(key, current[key])
+            key: payload.get(key, current.get(key))
             for key in (
                 "enabled",
                 "driver",
@@ -1414,6 +1417,17 @@ class NewChatLearningPlugin(star.Star):
                 "text_lang",
                 "prompt_text",
                 "prompt_lang",
+                "model",
+                "region",
+                "app_id",
+                "app_key",
+                "response_mode",
+                "custom_headers",
+                "custom_body",
+                "custom_response_field",
+                "per_minute_requests",
+                "daily_requests",
+                "daily_characters",
             )
         }
         values["reference_audio_path"] = reference_audio_path
@@ -1455,6 +1469,49 @@ class NewChatLearningPlugin(star.Star):
         public_result["reference_audio_name"] = reference_path.name
         public_result["runtime"] = self.app.tts.status()
         return self._web_json({"status": "ok", "data": public_result})
+
+    async def web_tts_secrets(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json({"status": "ok", "data": self.app.tts.secret_status()})
+
+    async def web_tts_secrets_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        values = payload.get("values", payload.get("secrets", {}))
+        if not isinstance(values, dict):
+            return self._web_json({"status": "error", "message": "密钥参数无效。"}, status_code=400)
+        try:
+            result = self.app.tts.update_secrets(values)
+            await self.app.store.record_audit(
+                actor_id=self._web_actor_id(),
+                action="update_tts_secrets",
+                target="tts",
+                details={"keys": result["keys"], "source": "webui"},
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            return self._web_json({"status": "error", "message": str(exc)}, status_code=400)
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_tts_secrets_clear(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        if payload.get("confirmed") is not True:
+            return self._web_json({"status": "error", "message": "请确认清除云端 TTS 密钥。"}, status_code=400)
+        try:
+            result = self.app.tts.clear_secrets()
+            await self.app.store.record_audit(
+                actor_id=self._web_actor_id(),
+                action="clear_tts_secrets",
+                target="tts",
+                details={"source": "webui"},
+            )
+        except (OSError, RuntimeError) as exc:
+            return self._web_json({"status": "error", "message": str(exc)}, status_code=400)
+        return self._web_json({"status": "ok", "data": result})
 
     async def web_tts_test(self):
         payload, error = await self._authorized_web_payload()

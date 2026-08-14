@@ -416,12 +416,12 @@ def test_tts_settings_persist_validate_local_endpoint_and_reject_stale_revision(
         )
 
 
-def test_tts_settings_reject_cloud_driver_and_roll_back_on_save_failure():
+def test_tts_settings_accept_cloud_driver_and_roll_back_on_save_failure():
     service = ConfigService({})
-    with pytest.raises(ValueError, match="tts_driver_unavailable"):
-        service._validated_tts_update(
-            {"enabled": False, "driver": "openai", "probability_percent": 0}
-        )
+    result = service._validated_tts_update(
+        {"enabled": False, "driver": "openai", "probability_percent": 0}
+    )
+    assert result["driver"] == "openai"
 
     class Source(dict):
         async def save_config_async(self):

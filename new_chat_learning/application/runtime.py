@@ -58,7 +58,7 @@ class RuntimeApplication:
             self.migration,
         )
         self.reply = ReplyService(self.store, self.config, self.content_filter)
-        self.tts = TTSService(self.data_dir, self.config)
+        self.tts = TTSService(self.data_dir, self.config, store=self.store)
         self.web_auth = WebAuthService(self.data_dir, self.store)
         self.started_at: datetime | None = None
 

@@ -345,7 +345,7 @@
       "driver": {
         "description": "TTS 驱动",
         "type": "string",
-        "options": ["windows", "gpt_sovits", "local_http"],
+        "options": ["windows", "gpt_sovits", "local_http", "volcengine", "aliyun", "tencent", "azure", "openai", "openai_compatible", "custom_http"],
         "default": "windows"
       },
       "probability_percent": {
@@ -404,7 +404,18 @@
         "description": "GPT-SoVITS 参考语言",
         "type": "string",
         "default": "zh"
+      },
+      "model": {"description": "Cloud TTS model", "type": "string", "default": ""},
+      "region": {"description": "Cloud region", "type": "string", "default": ""},
+      "app_id": {"description": "Application ID", "type": "string", "default": ""},
+      "app_key": {"description": "Application key", "type": "string", "default": ""},
+      "response_mode": {"description": "Response mode", "type": "string", "default": "audio"},
+      "custom_headers": {"description": "Custom HTTP headers", "type": "object", "default": {}},
+      "custom_body": {"description": "Custom HTTP body mapping", "type": "object", "default": {"text": "${text}"}},
+      "custom_response_field": {"description": "Base64 response field", "type": "string", "default": "audio_base64"},
+      "per_minute_requests": {"description": "Requests per minute", "type": "int", "default": 10},
+      "daily_requests": {"description": "Requests per day", "type": "int", "default": 200},
+      "daily_characters": {"description": "Characters per day", "type": "int", "default": 50000}
       }
     }
   }
-}

@@ -27,6 +27,8 @@ ACTION_NAMES = {
     "update_group_settings": "更新群聊设置",
     "update_permission_settings": "更新权限设置",
     "update_tts_settings": "更新语音设置",
+    "update_tts_secrets": "更新语音密钥",
+    "clear_tts_secrets": "清除语音密钥",
     "update_scheduled_task": "更新定时任务",
     "delete_scheduled_task": "删除定时任务",
     "webui_login": "WebUI 登录",

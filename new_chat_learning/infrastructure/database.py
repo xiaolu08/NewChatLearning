@@ -184,6 +184,15 @@ CREATE TABLE IF NOT EXISTS scheduled_task_runs (
     summary_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS tts_usage (
+    bucket_type TEXT NOT NULL,
+    bucket TEXT NOT NULL,
+    requests INTEGER NOT NULL DEFAULT 0,
+    characters INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(bucket_type, bucket)
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_group ON questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(group_id, user_id);
@@ -197,6 +206,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_due
 ON scheduled_tasks(enabled, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_recent
 ON scheduled_task_runs(task_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_tts_usage_updated ON tts_usage(updated_at);
 """
 
 
@@ -250,6 +260,7 @@ class SQLiteStore:
                 "filter_hits",
                 "scheduled_tasks",
                 "scheduled_task_runs",
+                "tts_usage",
             )
             result: dict[str, int] = {}
             for table in tables:
@@ -670,6 +681,71 @@ class SQLiteStore:
             )
             connection.commit()
             return len(rows)
+
+    async def reserve_tts_quota(
+        self,
+        *,
+        now: str,
+        minute_bucket: str,
+        day_bucket: str,
+        characters: int,
+        per_minute_requests: int,
+        daily_requests: int,
+        daily_characters: int,
+    ) -> dict[str, Any]:
+        if characters < 1:
+            raise ValueError("invalid_tts_characters")
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                rows = {}
+                for bucket_type, bucket in (("minute", minute_bucket), ("day", day_bucket)):
+                    row = connection.execute(
+                        "SELECT requests, characters FROM tts_usage WHERE bucket_type = ? AND bucket = ?",
+                        (bucket_type, bucket),
+                    ).fetchone()
+                    rows[bucket_type] = (int(row[0]), int(row[1])) if row else (0, 0)
+                minute_requests, _ = rows["minute"]
+                day_requests, day_characters = rows["day"]
+                if minute_requests >= per_minute_requests:
+                    connection.rollback()
+                    return {"allowed": False, "reason": "minute_quota"}
+                if day_requests >= daily_requests or day_characters + characters > daily_characters:
+                    connection.rollback()
+                    return {"allowed": False, "reason": "daily_quota"}
+                for bucket_type, bucket, char_count in (
+                    ("minute", minute_bucket, characters),
+                    ("day", day_bucket, characters),
+                ):
+                    connection.execute(
+                        "INSERT INTO tts_usage(bucket_type, bucket, requests, characters, updated_at) "
+                        "VALUES(?, ?, 1, ?, ?) ON CONFLICT(bucket_type, bucket) DO UPDATE SET "
+                        "requests = tts_usage.requests + 1, characters = tts_usage.characters + excluded.characters, "
+                        "updated_at = excluded.updated_at",
+                        (bucket_type, bucket, char_count, now),
+                    )
+                connection.execute(
+                    "DELETE FROM tts_usage WHERE updated_at < datetime('now', '-8 days')"
+                )
+                connection.commit()
+                return {"allowed": True, "reason": "ok"}
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def tts_usage(self, *, day_bucket: str, minute_bucket: str) -> dict[str, int]:
+        async with self._lock:
+            connection = self._require_connection()
+            result = {}
+            for bucket_type, bucket in (("minute", minute_bucket), ("day", day_bucket)):
+                row = connection.execute(
+                    "SELECT requests, characters FROM tts_usage WHERE bucket_type = ? AND bucket = ?",
+                    (bucket_type, bucket),
+                ).fetchone()
+                result[f"{bucket_type}_requests"] = int(row[0]) if row else 0
+                result[f"{bucket_type}_characters"] = int(row[1]) if row else 0
+            return result
 
     async def audit_entries(
         self,
@@ -2266,6 +2342,14 @@ class SQLiteStore:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_recent "
             "ON scheduled_task_runs(task_id, id DESC)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS tts_usage (bucket_type TEXT NOT NULL, bucket TEXT NOT NULL, "
+            "requests INTEGER NOT NULL DEFAULT 0, characters INTEGER NOT NULL DEFAULT 0, "
+            "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(bucket_type, bucket))"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tts_usage_updated ON tts_usage(updated_at)"
         )
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"
