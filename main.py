@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import secrets
 import sqlite3
 import sys
@@ -32,16 +33,21 @@ from new_chat_learning.commands.permissions import is_group_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
 from new_chat_learning.migration.scanner import scan_directory, scan_file
 from new_chat_learning.platform.astrbot.renderer import render_message_chain
+from new_chat_learning.platform.napcat import normalizer as _napcat_normalizer
 from new_chat_learning.platform.napcat.actions import (
     recall_message,
     send_group_message_with_id,
 )
-from new_chat_learning.platform.napcat.normalizer import (
-    enrich_long_tail_components,
-    normalize_group_message,
-    parse_recall_notice,
-    reply_matching_key,
-)
+
+# AstrBot hot-install can retain the top-level ``new_chat_learning`` module from
+# a previous plugin version. Reload the current package module when that stale
+# object predates the long-tail message adapter.
+if not hasattr(_napcat_normalizer, "enrich_long_tail_components"):
+    _napcat_normalizer = importlib.reload(_napcat_normalizer)
+enrich_long_tail_components = _napcat_normalizer.enrich_long_tail_components
+normalize_group_message = _napcat_normalizer.normalize_group_message
+parse_recall_notice = _napcat_normalizer.parse_recall_notice
+reply_matching_key = _napcat_normalizer.reply_matching_key
 from new_chat_learning.web.auth import COOKIE_NAME, SESSION_TTL_SECONDS
 
 WEB_HEADERS = {
