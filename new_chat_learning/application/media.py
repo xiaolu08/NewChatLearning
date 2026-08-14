@@ -20,7 +20,15 @@ from new_chat_learning.domain.message import NormalizedMessage, canonical_json
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
-MEDIA_TYPES = {"image", "flashimage", "record", "voice", "video", "file"}
+MEDIA_TYPES = {
+    "image",
+    "flashimage",
+    "record",
+    "voice",
+    "video",
+    "file",
+    "marketface",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +279,8 @@ class MediaService:
     ) -> dict:
         component_type = str(component.get("type", "")).lower()
         data = component.get("data", {})
+        if component_type in {"node", "nodes"} and isinstance(data, dict):
+            return await self._localize_forward_component(component, data, settings)
         if component_type not in MEDIA_TYPES or not isinstance(data, dict):
             return component
         source = _media_source(data)
@@ -302,6 +312,38 @@ class MediaService:
                 "media_state": "healthy",
             }
         )
+        return {"type": component.get("type", ""), "data": updated_data}
+
+    async def _localize_forward_component(
+        self,
+        component: dict,
+        data: dict,
+        settings: dict[str, object],
+    ) -> dict:
+        raw_nodes = data.get("nodes") if str(component.get("type", "")).lower() == "nodes" else [data]
+        if not isinstance(raw_nodes, list):
+            return component
+        changed = False
+        nodes = []
+        for node in raw_nodes:
+            if not isinstance(node, dict) or not isinstance(node.get("content"), list):
+                nodes.append(node)
+                continue
+            content = []
+            for nested in node["content"]:
+                if not isinstance(nested, dict):
+                    content.append(nested)
+                    continue
+                updated = await self._localize_component(nested, settings)
+                content.append(updated)
+                changed = changed or updated is not nested
+            nodes.append({**node, "content": content})
+        if not changed:
+            return component
+        if str(component.get("type", "")).lower() == "nodes":
+            updated_data = {**data, "nodes": nodes}
+        else:
+            updated_data = nodes[0] if nodes else data
         return {"type": component.get("type", ""), "data": updated_data}
 
     async def _store_source(
@@ -492,6 +534,18 @@ def _is_sendable_non_media(component_type: str, data: dict) -> bool:
         return isinstance(data.get("data"), (dict, str))
     if component_type == "share":
         return bool(data.get("url") and data.get("title"))
+    if component_type in {"node", "nodes", "forward"}:
+        nodes = data.get("nodes") if component_type == "nodes" else [data]
+        if not isinstance(nodes, list):
+            return False
+        return any(
+            isinstance(node, dict)
+            and isinstance(node.get("content"), list)
+            and _components_are_sendable(node["content"])
+            for node in nodes
+        )
+    if component_type in {"xml", "marketface"}:
+        return bool(data)
     return component_type in {"music", "musicshare", "dice"}
 
 

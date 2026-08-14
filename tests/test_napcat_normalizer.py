@@ -1,6 +1,8 @@
+import asyncio
 from dataclasses import dataclass
 
 from new_chat_learning.platform.napcat.normalizer import (
+    enrich_long_tail_components,
     normalize_group_message,
     parse_recall_notice,
     reply_matching_key,
@@ -58,6 +60,16 @@ class Event:
 
     def get_messages(self):
         return self.components
+
+
+class Bot:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    async def call_action(self, action, **kwargs):
+        self.calls.append((action, kwargs))
+        return self.payload
 
 
 def test_normalizes_components_and_removes_transient_matching_fields():
@@ -140,3 +152,80 @@ def test_reply_key_ignores_bot_mention_and_quote():
 
     assert message is not None and plain is not None
     assert reply_matching_key(message, "9") == plain.normalized_key
+
+
+def test_enriches_market_face_and_xml_from_raw_segments():
+    event = Event(
+        {
+            "post_type": "message",
+            "message": [
+                {
+                    "type": "mface",
+                    "data": {
+                        "emoji_id": "e1",
+                        "emoji_package_id": "p1",
+                        "key": "temporary-key",
+                        "summary": "开心",
+                        "url": "https://example.test/mface.png",
+                    },
+                },
+                {"type": "xml", "data": {"data": "<msg>card</msg>\x00"}},
+            ],
+        },
+        [Plain("fallback")],
+    )
+    message = normalize_group_message(event)
+
+    enriched = asyncio.run(enrich_long_tail_components(event, message))
+
+    assert [item["type"] for item in enriched.components] == [
+        "Plain",
+        "MarketFace",
+        "Xml",
+    ]
+    assert enriched.components[1]["data"]["summary"] == "开心"
+    assert enriched.components[2]["data"]["data"] == "<msg>card</msg>"
+    assert "temporary-key" not in repr(enriched.matching_components)
+    assert "https://example.test" not in repr(enriched.matching_components)
+
+
+def test_resolves_forward_nodes_and_nested_components():
+    event = Event(
+        {
+            "post_type": "message",
+            "message": [{"type": "forward", "data": {"id": "forward-1"}}],
+        },
+        [
+            type(
+                "Forward",
+                (),
+                {"type": "Forward", "dict": lambda self: {"type": "Forward", "id": "forward-1"}},
+            )()
+        ],
+    )
+    event.bot = Bot(
+        {
+            "data": {
+                "messages": [
+                    {
+                        "sender": {"user_id": 42, "nickname": "群友"},
+                        "message": [
+                            {"type": "text", "data": {"text": "转发内容"}},
+                            {"type": "image", "data": {"url": "https://example.test/a.png"}},
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+    message = normalize_group_message(event)
+
+    enriched = asyncio.run(enrich_long_tail_components(event, message))
+
+    assert enriched.components[0]["type"] == "Nodes"
+    node = enriched.components[0]["data"]["nodes"][0]
+    assert node["uin"] == "42"
+    assert node["name"] == "群友"
+    assert [item["type"] for item in node["content"]] == ["Plain", "Image"]
+    assert event.bot.calls[0] == ("get_forward_msg", {"message_id": "forward-1"})
+    assert "https://example.test" not in repr(enriched.matching_components)

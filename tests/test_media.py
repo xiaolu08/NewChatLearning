@@ -55,6 +55,48 @@ def test_base64_media_is_persisted_by_hash_and_deduplicated(tmp_path):
     assert stats["media_bytes"] == len(payload)
 
 
+def test_forward_node_media_is_localized_recursively(tmp_path):
+    source = "base64://" + base64.b64encode(b"forward image").decode()
+    message = NormalizedMessage(
+        platform="aiocqhttp",
+        group_id="10001",
+        sender_id="42",
+        message_id="forward-1",
+        timestamp=1000,
+        components=(
+            {
+                "type": "Nodes",
+                "data": {
+                    "nodes": [
+                        {
+                            "uin": "42",
+                            "name": "群友",
+                            "content": [{"type": "Image", "data": {"file": source}}],
+                        }
+                    ]
+                },
+            },
+        ),
+        matching_components=(),
+    )
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "forward.sqlite3")
+        await store.open()
+        service = MediaService(tmp_path / "data", store, ConfigService({}))
+        try:
+            return await service.localize_message(message)
+        finally:
+            await store.close()
+
+    result = asyncio.run(scenario())
+    nested = result.components[0]["data"]["nodes"][0]["content"][0]["data"]
+
+    assert nested["media_path"].startswith("media/")
+    assert "file" not in nested
+    assert (tmp_path / "data" / nested["media_path"]).read_bytes() == b"forward image"
+
+
 def test_local_file_persists_and_quota_failure_keeps_original_component(tmp_path):
     source_file = tmp_path / "source.bin"
     source_file.write_bytes(b"123456")

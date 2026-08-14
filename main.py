@@ -37,6 +37,7 @@ from new_chat_learning.platform.napcat.actions import (
     send_group_message_with_id,
 )
 from new_chat_learning.platform.napcat.normalizer import (
+    enrich_long_tail_components,
     normalize_group_message,
     parse_recall_notice,
     reply_matching_key,
@@ -286,6 +287,7 @@ class NewChatLearningPlugin(star.Star):
         message = normalize_group_message(event)
         if message is None:
             return
+        message = await enrich_long_tail_components(event, message)
         self._record_diagnostic(group_id, "normalized_messages")
         if learning_enabled:
             learning = await self.app.observe(message)
@@ -1642,11 +1644,24 @@ class NewChatLearningPlugin(star.Star):
                 {"status": "error", "message": "群号无效。"}, status_code=400
             )
         try:
-            result = await self.app.export.export_group(
-                group_id=group_id,
-                actor_id=self._web_actor_id(),
-                source="webui",
-            )
+            export_format = str(payload.get("format", "archive"))
+            if export_format == "legacy_cl":
+                result = await self.app.export.export_legacy_group(
+                    group_id=group_id,
+                    actor_id=self._web_actor_id(),
+                    source="webui",
+                )
+            elif export_format == "archive":
+                result = await self.app.export.export_group(
+                    group_id=group_id,
+                    actor_id=self._web_actor_id(),
+                    source="webui",
+                )
+            else:
+                return self._web_json(
+                    {"status": "error", "message": "词库导出格式无效。"},
+                    status_code=400,
+                )
         except (OSError, RuntimeError):
             self.logger.exception("Failed to export group library from WebUI.")
             return self._web_json(
@@ -1659,6 +1674,11 @@ class NewChatLearningPlugin(star.Star):
             "session": self._web_actor_id(),
             "path": result["path"],
             "filename": result["filename"],
+            "content_type": (
+                "application/octet-stream"
+                if result["filename"].lower().endswith(".cl")
+                else "application/zip"
+            ),
             "expires_at": time.monotonic() + EXPORT_TICKET_TTL_SECONDS,
         }
         return self._web_json(
@@ -1669,6 +1689,7 @@ class NewChatLearningPlugin(star.Star):
                     "filename": result["filename"],
                     "question_count": result["question_count"],
                     "answer_count": result["answer_count"],
+                    "degraded_components": result.get("degraded_components", 0),
                     "expires_in_seconds": EXPORT_TICKET_TTL_SECONDS,
                 },
             }
@@ -1694,7 +1715,7 @@ class NewChatLearningPlugin(star.Star):
         return file_response(
             export["path"],
             filename=export["filename"],
-            content_type="application/zip",
+            content_type=export.get("content_type", "application/octet-stream"),
             headers=WEB_HEADERS,
         )
 

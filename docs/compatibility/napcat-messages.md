@@ -1,6 +1,6 @@
 ---
 title: NewChatLearning NapCat 消息兼容矩阵
-version: 0.2
+version: 0.3
 date: 2026-08-13
 status: 当前有效
 ---
@@ -19,13 +19,13 @@ status: 当前有效
 | `Image` | Image/CQ image | 是 | 已实现本地下载与 SHA-256 去重 | 本地文件优先，缺失时回退远程 URL |
 | `FlashImage` | 闪照或图片降级 | 是 | 已实现本地下载 | 当前按普通图片稳定降级 |
 | `Face` | Face | 是 | ID + 名称 | 按 ID 重发，失败用文本占位 |
-| `MarketFace` | 商城表情/原始 CQ | 尽力 | 原始字段 + 可用媒体 | 支持时重发，否则跳过 |
+| `MarketFace` | 商城表情/原始 CQ | 是 | 从 NapCat 原始段补回标识并持久化可用媒体 | 图片可用时优先图片，否则原生 `mface` 段或文本降级 |
 | `At` | At | 是 | QQ + 显示名 | 重发前验证目标，必要时降级文本 |
 | `Quote` | Reply | 不作为稳定问题字段 | 引用摘要 | 新回复不复用旧消息 ID，降级为摘要 |
 | `Voice` | Record | 可选 | 已实现本地下载 | 本地音频重发，缺失时回退远程 URL |
-| `Forward` | Forward/Nodes | 尽力 | 规范化节点摘要 | 支持时重建，否则文本摘要 |
+| `Forward` | Forward/Nodes | 是 | 最多两层、每层 50 节点与每节点 50 组件 | 调用 `get_forward_msg` 后重建 `Nodes`，失败时明确文本降级 |
 | `App` | JSON 卡片 | 谨慎 | 原始 JSON | 通过白名单验证后重发，否则跳过 |
-| `Xml` | XML 卡片 | 谨慎 | 原始 XML | 通过白名单验证后重发，否则跳过 |
+| `Xml` | XML 卡片 | 谨慎 | 从原始段补回，移除空字符并限制 32 KiB | NapCat 原生 `xml` 段重发，空内容跳过 |
 | `Json` | JSON 卡片 | 谨慎 | 原始 JSON | 同 App |
 | `File` | File | 不参与文本相似度 | 已实现元数据与可选下载 | 仅在本地文件存在或仍有远程 URL 时重发 |
 | `MusicShare` | Music | 是 | 结构字段 | 已使用 AstrBot Music 组件重建 |
@@ -65,3 +65,4 @@ status: 当前有效
 | --- | --- | --- |
 | 2026-08-13 | 0.1 | 建立原版消息类型到 NapCat/AstrBot 的兼容策略。 |
 | 2026-08-13 | 0.2 | 实现核心媒体本地化、去重、配额、SSRF 防护与本地优先重发。 |
+| 2026-08-14 | 0.3 | 实现合并转发受限展开与 Nodes 重建、商城表情原始段补全、XML 限长重发及转发内媒体递归持久化。 |

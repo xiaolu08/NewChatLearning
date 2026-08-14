@@ -30,6 +30,11 @@ class MessageChain:
         self.chain = []
 
 
+class Nodes(Component):
+    def __init__(self, nodes):
+        self.nodes = nodes
+
+
 def load_renderer(monkeypatch):
     components = types.ModuleType("astrbot.api.message_components")
     components.Plain = Component
@@ -39,6 +44,8 @@ def load_renderer(monkeypatch):
     components.Record = Media
     components.Video = Media
     components.Json = Component
+    components.Node = Component
+    components.Nodes = Nodes
     components.File = Component
     components.Share = Component
     components.Music = Component
@@ -170,3 +177,35 @@ def test_renderer_builds_share_music_and_dice(monkeypatch):
     assert chain.chain[0].title == "Example"
     assert chain.chain[1]._type == "qq"
     assert chain.chain[2].id == 6
+
+
+def test_renderer_builds_market_face_xml_and_forward_nodes(monkeypatch):
+    renderer = load_renderer(monkeypatch)
+
+    chain = renderer.render_message_chain(
+        (
+            {
+                "type": "MarketFace",
+                "data": {"emoji_id": "e1", "emoji_package_id": "p1", "summary": "开心"},
+            },
+            {"type": "Xml", "data": {"data": "<msg>card</msg>"}},
+            {
+                "type": "Nodes",
+                "data": {
+                    "nodes": [
+                        {
+                            "uin": "42",
+                            "name": "群友",
+                            "content": [{"type": "Plain", "data": {"text": "内容"}}],
+                        }
+                    ]
+                },
+            },
+        ),
+        max_plain_length=100,
+    )
+
+    assert chain.chain[0].toDict()["type"] == "mface"
+    assert chain.chain[1].toDict() == {"type": "xml", "data": {"data": "<msg>card</msg>"}}
+    assert chain.chain[2].nodes[0].uin == "42"
+    assert chain.chain[2].nodes[0].content[0].text == "内容"

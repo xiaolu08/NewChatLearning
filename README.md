@@ -99,6 +99,7 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - Windows 系统语音、GPT-SoVITS 与通用本地 HTTP TTS；仅转换纯文本词库答案，失败时自动回退文本
 - WebUI 语音页支持概率、长度、音色、超时、GPT-SoVITS 参考信息、驱动状态和测试合成
 - 分享、音乐和骰子组件原生重建，闪照按普通图片安全降级
+- 合并转发消息受限拉取与节点重建、商城表情原始段补全、XML 卡片原生段重发
 - SQLite schema v4 媒体来源元数据与健康状态迁移
 - 分群词库默认隔离，以及实时全局联合查询
 - 定向学习只固化指定用户紧随上一条群消息给出的答案，非目标用户消息仍参与后续相邻消息链
@@ -110,15 +111,14 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - 旧 `.cl` 受限扫描器：独立进程、opcode 拒绝、基础容器结构统计
 - 旧词库隔离转换为 JSONL，并在单个 SQLite 事务中合并频次和原版权重
 - 2.1 MB 真实共享词库已通过临时 SQLite 完整导入验证，未写入插件运行数据
+- 当前群词库可反向导出原版协议 4 `.cl`，保留频次、正则与答案权重语义
 
 尚未完成：
 
-- 转发、商城表情、XML 等长尾消息的完整重建
 - 无人值守的定时词库清理（当前只支持管理员主动预览并确认执行，不会后台自动删除）
 - 词库管理的媒体问答编辑与批量操作
 - WebUI 的任务管理页面；诊断页已提供按群只读运行计数与词库汇总
 - 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 云端 TTS，以及 DPAPI 密钥保护与调用额度
-- 旧 `.cl` 格式反向导出工具
 - Windows + AstrBot + NapCat 实机验收
 
 ## 技术文档

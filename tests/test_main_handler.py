@@ -1164,6 +1164,49 @@ def test_web_library_export_prepare_requires_confirmation(monkeypatch):
     assert exporter.called is False
 
 
+def test_web_library_export_supports_legacy_cl_format(monkeypatch, tmp_path):
+    main_module = load_main(monkeypatch)
+    export_path = tmp_path / "group.cl"
+    export_path.write_bytes(b"legacy")
+
+    class Auth:
+        async def authorize(self, _token, _csrf=None):
+            return True
+
+    class Export:
+        async def export_legacy_group(self, **kwargs):
+            assert kwargs["group_id"] == "10001"
+            return {
+                "path": export_path,
+                "filename": "group.cl",
+                "question_count": 2,
+                "answer_count": 3,
+                "degraded_components": 1,
+            }
+
+    async def body():
+        return (
+            b'{"group_id":"10001","format":"legacy_cl","confirmed":true,'
+            b'"csrf_token":"csrf"}'
+        )
+
+    request = SimpleNamespace(
+        cookies={"ncl_admin_session": "session"}, body=body, query={}
+    )
+    monkeypatch.setattr(main_module, "request", request)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.export = Export()
+
+    prepared = asyncio.run(plugin.web_library_export_prepare())
+    request.query = {"ticket": prepared["data"]["ticket"]}
+    downloaded = asyncio.run(plugin.web_library_export())
+
+    assert prepared["data"]["degraded_components"] == 1
+    assert downloaded["filename"] == "group.cl"
+    assert downloaded["content_type"] == "application/octet-stream"
+
+
 def test_web_library_export_ticket_is_bound_to_session(monkeypatch, tmp_path):
     main_module = load_main(monkeypatch)
     export_path = tmp_path / "group.zip"

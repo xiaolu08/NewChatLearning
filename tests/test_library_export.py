@@ -1,11 +1,13 @@
 import asyncio
 import json
+import pickle
 import zipfile
 from xml.etree import ElementTree
 
 from new_chat_learning.application.export import LibraryExportService, _excel_text
 from new_chat_learning.application.library import LibraryService
 from new_chat_learning.infrastructure.database import SQLiteStore
+from new_chat_learning.migration.scanner import scan_file
 
 
 def test_group_export_contains_safe_xlsx_lossless_jsonl_and_audit(tmp_path):
@@ -102,3 +104,67 @@ def test_export_file_is_removed_when_audit_fails(tmp_path):
 
 def test_excel_text_removes_xml_invalid_characters_and_protects_formulas():
     assert _excel_text("=bad\x00\ud800value") == "'=badvalue"
+
+
+def test_legacy_cl_export_preserves_weights_and_degrades_local_media(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "legacy-export.sqlite3")
+        await store.open()
+        library = LibraryService(store, tmp_path)
+        result = await library.add_text_pair(
+            group_id="10001",
+            actor_id="7",
+            question="问题",
+            answer="答案",
+            is_regex=True,
+        )
+        await library.set_weight(
+            group_id="10001",
+            actor_id="7",
+            answer_id=result["answer_id"],
+            weight=4,
+        )
+        await store.add_custom_pair(
+            group_id="10001",
+            actor_id="7",
+            question_key="media-question",
+            question_components_json=(
+                '{"schema_version":1,"components":[{"type":"Plain","data":{"text":"媒体"}}]}'
+            ),
+            question_text="媒体",
+            answer_key="local-image",
+            answer_components_json=(
+                '{"schema_version":1,"components":[{"type":"Image","data":'
+                '{"media_path":"media/aa/local.png","content_hash":"abc"}}]}'
+            ),
+            is_regex=False,
+        )
+        exported = await LibraryExportService(tmp_path, store).export_legacy_group(
+            group_id="10001",
+            actor_id="7",
+            source="webui",
+        )
+        audit = await store.audit_entries(action="export_legacy_library", limit=10)
+        await store.close()
+        return exported, audit
+
+    result, audit = asyncio.run(scenario())
+
+    with result["path"].open("rb") as stream:
+        payload = pickle.load(stream)
+    regex = next(value for value in payload.values() if value["regular"])
+    assert regex["answer"][0]["same"] == 3
+    assert any(
+        "本地媒体未随 .cl 导出" in answer["answertext"]
+        for question in payload.values()
+        for answer in question["answer"]
+    )
+    assert result["question_count"] == 2
+    assert result["answer_count"] == 2
+    assert result["degraded_components"] == 1
+    assert str(tmp_path) not in repr(payload)
+    assert audit["entries"][0]["action"] == "export_legacy_library"
+    scan = scan_file(result["path"])
+    assert scan["status"] == "compatible"
+    assert scan["structure"]["question_count"] == 2
+    assert scan["structure"]["answer_count"] == 2

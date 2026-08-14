@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import pickle
 import sqlite3
 import time
 import zipfile
@@ -66,11 +67,59 @@ class LibraryExportService:
             "answer_count": answer_count,
         }
 
+    async def export_legacy_group(
+        self,
+        *,
+        group_id: str,
+        actor_id: str,
+        source: str,
+    ) -> dict:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        base_name = f"NewChatLearning-group-{group_id}-{timestamp}"
+        self.export_dir.mkdir(parents=True, exist_ok=True)
+        self._cleanup_expired()
+        export_path = self.export_dir / f"{base_name}.cl"
+        snapshot_path = self.export_dir / f".{base_name}.sqlite3.tmp"
+        await self.store.backup_to(snapshot_path)
+        try:
+            result = await asyncio.to_thread(
+                _write_legacy_cl,
+                export_path,
+                snapshot_path,
+                group_id,
+            )
+        except Exception:
+            export_path.unlink(missing_ok=True)
+            raise
+        finally:
+            snapshot_path.unlink(missing_ok=True)
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="export_legacy_library",
+                target=f"group:{group_id}",
+                details={
+                    "group_id": group_id,
+                    "question_count": result["question_count"],
+                    "answer_count": result["answer_count"],
+                    "degraded_components": result["degraded_components"],
+                    "source": source,
+                },
+            )
+        except Exception:
+            export_path.unlink(missing_ok=True)
+            raise
+        return {
+            "path": export_path,
+            "filename": export_path.name,
+            **result,
+        }
+
     def _cleanup_expired(self) -> None:
         cutoff = time.time() - EXPORT_TTL_SECONDS
-        for path in self.export_dir.glob("NewChatLearning-group-*.zip"):
+        for path in self.export_dir.glob("NewChatLearning-group-*"):
             try:
-                if path.is_file() and path.stat().st_mtime < cutoff:
+                if path.suffix.lower() in {".zip", ".cl"} and path.stat().st_mtime < cutoff:
                     path.unlink()
             except OSError:
                 continue
@@ -130,6 +179,132 @@ class LibraryExportService:
             connection.close()
             xlsx_path.unlink(missing_ok=True)
             jsonl_path.unlink(missing_ok=True)
+
+
+def _write_legacy_cl(path: Path, snapshot_path: Path, group_id: str) -> dict[str, int]:
+    connection = sqlite3.connect(snapshot_path)
+    connection.row_factory = sqlite3.Row
+    library: dict[str, dict] = {}
+    degraded_components = 0
+    answer_count = 0
+    seen_question_ids: set[int] = set()
+    try:
+        for row in _export_rows(connection, group_id):
+            question_components, question_degraded = _legacy_components(
+                row["question_components_json"]
+            )
+            question_key = repr(question_components)
+            question = library.setdefault(
+                question_key,
+                {
+                    "answer": [],
+                    "freq": max(1, int(row["question_frequency"])),
+                    "regular": bool(row["is_regex"]),
+                    "time": _legacy_timestamp(row["question_updated_at"]),
+                },
+            )
+            if question_key in library:
+                question["freq"] = max(question["freq"], int(row["question_frequency"]))
+            question_id = int(row["question_id"])
+            if question_id not in seen_question_ids:
+                degraded_components += question_degraded
+                seen_question_ids.add(question_id)
+            if row["answer_id"] is None:
+                continue
+            answer_components, answer_degraded = _legacy_components(
+                row["answer_components_json"]
+            )
+            question["answer"].append(
+                {
+                    "answertext": repr(answer_components),
+                    "same": max(0, int(row["answer_weight"]) - 1),
+                    "time": _legacy_timestamp(row["answer_updated_at"]),
+                }
+            )
+            answer_count += 1
+            degraded_components += answer_degraded
+        with path.open("wb") as output:
+            pickle.dump(library, output, protocol=4)
+        return {
+            "question_count": len(library),
+            "answer_count": answer_count,
+            "degraded_components": degraded_components,
+        }
+    finally:
+        connection.close()
+
+
+def _legacy_components(value: object) -> tuple[list[dict], int]:
+    payload = _json_value(value)
+    raw_components = payload.get("components", []) if isinstance(payload, dict) else []
+    components = []
+    degraded = 0
+    for component in raw_components if isinstance(raw_components, list) else []:
+        if not isinstance(component, dict):
+            continue
+        component_type = str(component.get("type", "Unknown"))
+        data = component.get("data", {})
+        data = dict(data) if isinstance(data, dict) else {}
+        legacy = {"type": component_type}
+        lower = component_type.lower()
+        if lower == "plain":
+            legacy["text"] = str(data.get("text", ""))
+        elif lower == "face":
+            legacy["faceId"] = data.get("id", 0)
+            if data.get("name"):
+                legacy["name"] = data["name"]
+        elif lower in {"at", "atall"}:
+            legacy["target"] = str(data.get("qq", "all" if lower == "atall" else ""))
+            if data.get("name"):
+                legacy["display"] = data["name"]
+        elif lower in {"image", "flashimage", "record", "voice", "video", "file"}:
+            portable = _portable_media_data(data)
+            if portable:
+                legacy.update(portable)
+            else:
+                legacy = {
+                    "type": "Plain",
+                    "text": f"[本地媒体未随 .cl 导出: {component_type}]",
+                }
+                degraded += 1
+        else:
+            legacy.update(
+                {
+                    str(key): item
+                    for key, item in data.items()
+                    if key not in {"media_path", "path", "file_", "content_hash"}
+                }
+            )
+        components.append(legacy)
+    if not components:
+        components = [{"type": "Plain", "text": "[空消息]"}]
+        degraded += 1
+    return components, degraded
+
+
+def _portable_media_data(data: dict) -> dict:
+    url = str(data.get("url") or "")
+    file_value = str(data.get("file") or "")
+    if url.startswith(("http://", "https://")):
+        result = {"url": url}
+    elif file_value.startswith(("http://", "https://", "base64://")):
+        result = {"file": file_value}
+    else:
+        return {}
+    name = str(data.get("name") or data.get("file_name") or "")
+    if name:
+        result["name"] = Path(name).name
+    return result
+
+
+def _legacy_timestamp(value: object) -> int:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace(" ", "T"))
+    except (TypeError, ValueError):
+        return 0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0, int(parsed.timestamp()))
 
 
 def _jsonl_record(group_id: str, row: dict) -> dict:

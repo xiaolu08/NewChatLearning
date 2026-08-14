@@ -7,6 +7,15 @@ import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
 
 
+class _RawOneBotComponent:
+    def __init__(self, segment_type: str, data: dict[str, Any]) -> None:
+        self.segment_type = segment_type
+        self.data = data
+
+    def toDict(self) -> dict[str, Any]:
+        return {"type": self.segment_type, "data": self.data}
+
+
 def render_message_chain(
     components: tuple[dict[str, Any], ...],
     *,
@@ -61,6 +70,16 @@ def _render_component(
     if component_type in {"image", "flashimage"}:
         source = _media_source(data, data_dir)
         return _media_component(Comp.Image, source)
+    if component_type == "marketface":
+        source = _media_source(data, data_dir)
+        if source:
+            return _media_component(Comp.Image, source)
+        raw = {
+            key: data[key]
+            for key in ("emoji_id", "emoji_package_id", "key", "summary")
+            if data.get(key) not in (None, "")
+        }
+        return _RawOneBotComponent("mface", raw) if raw else Comp.Plain("[商城表情]")
     if component_type in {"record", "voice"}:
         source = _media_source(data, data_dir)
         return _media_component(Comp.Record, source)
@@ -72,6 +91,19 @@ def _render_component(
             return Comp.Json(data=data["data"])
         except (TypeError, ValueError):
             return None
+    if component_type == "xml":
+        xml = str(data.get("data") or "").replace("\x00", "")[:32768]
+        return _RawOneBotComponent("xml", {"data": xml}) if xml else None
+    if component_type in {"node", "nodes", "forward"}:
+        nodes = data.get("nodes") if component_type == "nodes" else [data]
+        if not isinstance(nodes, list):
+            return None
+        rendered_nodes = []
+        for node in nodes[:50]:
+            rendered = _render_node(node, max_plain_length=max_plain_length, data_dir=data_dir)
+            if rendered is not None:
+                rendered_nodes.append(rendered)
+        return Comp.Nodes(rendered_nodes) if rendered_nodes else None
     if component_type == "share" and data.get("url") and data.get("title"):
         return Comp.Share(
             url=str(data["url"]),
@@ -102,6 +134,34 @@ def _render_component(
             url=url,
         )
     return None
+
+
+def _render_node(
+    node: Any,
+    *,
+    max_plain_length: int,
+    data_dir: Path | None,
+) -> Any | None:
+    if not isinstance(node, dict) or not isinstance(node.get("content"), list):
+        return None
+    content = []
+    for component in node["content"][:50]:
+        if not isinstance(component, dict):
+            continue
+        rendered = _render_component(
+            component,
+            max_plain_length=max_plain_length,
+            data_dir=data_dir,
+        )
+        if rendered is not None:
+            content.append(rendered)
+    if not content:
+        return None
+    return Comp.Node(
+        content=content,
+        uin=str(node.get("uin") or "0"),
+        name=str(node.get("name") or ""),
+    )
 
 
 def _media_source(
