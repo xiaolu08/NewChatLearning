@@ -1,5 +1,10 @@
 # 更新日志
 
+## 0.1.0-beta.31.post6 - 2026-08-14
+
+- 修复 AstrBot 4.27.2 中私聊事件过滤器使用 `PRIVATE_MESSAGE` 命名，而错误引用 `FRIEND_MESSAGE` 导致插件导入失败的问题。
+- 已使用 AstrBot 实际 `.venv` 完成插件入口模块导入验证。
+
 ## 0.1.0-beta.31.post5 - 2026-08-14
 
 - 恢复原版 `!grouplist` 与 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 跨群控制语义。

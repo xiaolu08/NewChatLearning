@@ -22,7 +22,7 @@ def load_main(monkeypatch):
 
         class EventMessageType:
             GROUP_MESSAGE = "group"
-            FRIEND_MESSAGE = "friend"
+            PRIVATE_MESSAGE = "private"
 
         platform_adapter_type = staticmethod(lambda _kind: lambda function: function)
         event_message_type = staticmethod(lambda _kind, **_kwargs: lambda function: function)

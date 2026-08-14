@@ -412,7 +412,7 @@ class NewChatLearningPlugin(star.Star):
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(
-        filter.EventMessageType.FRIEND_MESSAGE,
+        filter.EventMessageType.PRIVATE_MESSAGE,
         priority=maxsize - 100,
     )
     async def capture_private_message(self, event: AstrMessageEvent) -> None:
