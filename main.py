@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib
 import secrets
 import sqlite3
@@ -13,6 +14,26 @@ from sys import maxsize
 PLUGIN_ROOT = Path(__file__).resolve().parent
 if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
+
+# AstrBot unloads the plugin entry module but top-level packages imported from
+# the plugin directory can remain in sys.modules. Purge them before importing
+# the current release so hot updates cannot mix a new WebUI with old backend
+# code.
+for _module_name, _module in tuple(sys.modules.items()):
+    if _module_name != "new_chat_learning" and not _module_name.startswith(
+        "new_chat_learning."
+    ):
+        continue
+    _module_file = getattr(_module, "__file__", None)
+    if not _module_file:
+        continue
+    try:
+        _loaded_from_plugin = Path(_module_file).resolve().is_relative_to(PLUGIN_ROOT)
+    except (OSError, ValueError):
+        _loaded_from_plugin = False
+    if _loaded_from_plugin:
+        sys.modules.pop(_module_name, None)
+importlib.invalidate_caches()
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
@@ -38,11 +59,6 @@ from new_chat_learning.platform.napcat.actions import (
     send_group_message_with_id,
 )
 
-# AstrBot hot-install can retain the top-level ``new_chat_learning`` module from
-# a previous plugin version. Reload the current package module when that stale
-# object predates the long-tail message adapter.
-if not hasattr(_napcat_normalizer, "enrich_long_tail_components"):
-    _napcat_normalizer = importlib.reload(_napcat_normalizer)
 enrich_long_tail_components = _napcat_normalizer.enrich_long_tail_components
 normalize_group_message = _napcat_normalizer.normalize_group_message
 parse_recall_notice = _napcat_normalizer.parse_recall_notice
@@ -82,6 +98,16 @@ class NewChatLearningPlugin(star.Star):
             "NewChatLearning Beta 运行状态",
         )
         for suffix, handler, methods, description in (
+            ("auth/state", self.web_auth_state, ["GET"], "NewChatLearning 登录状态"),
+            ("auth/setup", self.web_auth_setup, ["POST"], "NewChatLearning 首次设密"),
+            ("auth/login", self.web_auth_login, ["POST"], "NewChatLearning 登录"),
+            ("auth/logout", self.web_auth_logout, ["POST"], "NewChatLearning 退出"),
+            (
+                "auth/change-password",
+                self.web_auth_change_password,
+                ["POST"],
+                "NewChatLearning 修改密码",
+            ),
             ("media/groups", self.web_media_groups, ["GET"], "NewChatLearning 媒体群列表"),
             ("groups", self.web_groups, ["GET"], "NewChatLearning 群聊列表"),
             ("groups/settings", self.web_group_settings, ["GET"], "NewChatLearning 群聊设置"),
@@ -2535,7 +2561,10 @@ class NewChatLearningPlugin(star.Star):
                 {"status": "error", "message": "备份恢复失败，运行数据库已自动回滚。"},
                 status_code=500,
             )
-        return self._web_json({"status": "ok", "data": result})
+        await self.app.web_auth.invalidate_all_sessions()
+        response = self._web_json({"status": "ok", "data": result})
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return response
 
     async def _authorized_web_payload(self):
         if self.app is None:
@@ -2574,7 +2603,8 @@ class NewChatLearningPlugin(star.Star):
         return str(request.cookies.get(COOKIE_NAME, "") or "")
 
     def _web_actor_id(self) -> str:
-        return "webui:astrbot-dashboard"
+        digest = hashlib.sha256(self._web_session_token().encode("utf-8")).hexdigest()[:16]
+        return f"webui:{digest}"
 
     def _web_session_response(self, session):
         response = self._web_json(

@@ -1,0 +1,27 @@
+name: Feature request
+description: 提议新功能或兼容性改进
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        NewChatLearning 的核心学习与回复流程保持零 LLM Token。请说明功能是否需要外部服务、网络访问或新增隐私风险。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: 平台与兼容性影响
+      description: 请说明 Windows、AstrBot、NapCat、OneBot 或其他平台的影响。

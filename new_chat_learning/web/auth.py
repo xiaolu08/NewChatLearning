@@ -31,13 +31,7 @@ class AuthSession:
 
 
 class WebAuthService:
-    def __init__(
-        self,
-        data_dir: Path,
-        store: SQLiteStore | None = None,
-        *,
-        authentication_required: bool = True,
-    ) -> None:
+    def __init__(self, data_dir: Path, store: SQLiteStore | None = None) -> None:
         self.data_dir = Path(data_dir)
         self.credential_path = self.data_dir / "webui-password.json"
         self._sessions: dict[str, AuthSession] = {}
@@ -45,67 +39,35 @@ class WebAuthService:
         self._locked_until: dict[str, float] = {}
         self._lock = asyncio.Lock()
         self.store = store
-        self.authentication_required = authentication_required
+        # beta31 used a password file; remove it so the compatibility entry
+        # point can never retain or accidentally reuse an old password.
+        try:
+            self.credential_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     @property
     def is_configured(self) -> bool:
-        return self.credential_path.is_file()
+        return True
 
     async def state(self, session_token: str) -> dict[str, Any]:
-        if not self.authentication_required:
-            return {
-                "setup_required": False,
-                "authenticated": True,
-                "csrf_token": "",
-                "session_expires_at": None,
-            }
         async with self._lock:
             session = self._valid_session(session_token)
             return {
-                "setup_required": not self.is_configured,
+                "setup_required": False,
                 "authenticated": session is not None,
+                "entry_mode": "passwordless",
                 "csrf_token": session.csrf_token if session is not None else None,
                 "session_expires_at": session.expires_at if session is not None else None,
             }
 
     async def setup(self, password: str, client_host: str) -> tuple[str, AuthSession | None]:
         async with self._lock:
-            if self.is_configured:
-                return "already_configured", None
-            if not _is_loopback(client_host):
-                return "loopback_required", None
-            password_error = _password_error(password)
-            if password_error:
-                return password_error, None
-            credential = await asyncio.to_thread(_make_credential, password)
-            await asyncio.to_thread(self._write_credential, credential)
-            self._sessions.clear()
-            await self._audit("webui_password_setup", client_host, {"result": "success"})
-            return "ok", self._new_session()
+            return "already_configured", None
 
     async def login(self, password: str, client_host: str) -> tuple[str, AuthSession | None]:
         async with self._lock:
             now = time.time()
-            client_key = _client_key(client_host)
-            if not self.is_configured:
-                return "setup_required", None
-            if self._is_locked(client_key, now) or self._is_locked("account", now):
-                return "locked", None
-            try:
-                credential = await asyncio.to_thread(self._load_credential)
-            except (OSError, ValueError, TypeError):
-                await self._audit("webui_login", client_host, {"result": "credential_error"})
-                return "credential_error", None
-            valid = await asyncio.to_thread(_verify_password, password, credential)
-            if not valid:
-                self._record_failure(client_key, now)
-                self._record_failure("account", now)
-                await self._audit("webui_login", client_host, {"result": "failure"})
-                return "invalid_credentials", None
-            self._failures.pop(client_key, None)
-            self._failures.pop("account", None)
-            self._locked_until.pop(client_key, None)
-            self._locked_until.pop("account", None)
             await self._audit("webui_login", client_host, {"result": "success"})
             return "ok", self._new_session(now)
 
@@ -148,8 +110,6 @@ class WebAuthService:
             return "ok", self._new_session()
 
     async def authorize(self, session_token: str, csrf_token: str | None = None) -> bool:
-        if not self.authentication_required:
-            return True
         async with self._lock:
             session = self._valid_session(session_token)
             if session is None:

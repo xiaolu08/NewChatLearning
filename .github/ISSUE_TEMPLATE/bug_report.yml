@@ -1,0 +1,48 @@
+name: Bug report
+description: 报告可复现的问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先搜索已有 Issue。不要上传聊天记录、`.cl` 文件、数据库、媒体、备份、Cookie 或 API 密钥。
+  - type: input
+    id: version
+    attributes:
+      label: NewChatLearning 版本
+      placeholder: 0.1.0-beta.31.post4
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      placeholder: Windows 11 / AstrBot 4.27.2 / NapCat / OneBot v11
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请提供最小、可重复的步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志
+      description: 请先删除聊天正文、QQ 号、路径、Cookie、密钥和令牌。

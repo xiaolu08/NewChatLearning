@@ -44,6 +44,7 @@ dist/
 coverage/
 
 # Editors and operating systems
+AGENTS.md
 .idea/
 .vscode/
 *.swp

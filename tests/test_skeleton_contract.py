@@ -21,8 +21,10 @@ def test_astrbot_plugin_root_is_importable_before_application_imports():
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
 
     root_setup = main_source.index("PLUGIN_ROOT = Path(__file__).resolve().parent")
+    module_purge = main_source.index("for _module_name, _module in tuple(sys.modules.items())")
     application_import = main_source.index("from new_chat_learning.application.library")
-    assert root_setup < application_import
+    assert root_setup < module_purge < application_import
+    assert "importlib.invalidate_caches()" in main_source[module_purge:application_import]
 
 
 def test_config_schema_and_dashboard_entry_are_valid():
@@ -81,9 +83,14 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert '#migration-prepare.busy:disabled { cursor: progress; }' in dashboard
     assert 'button.classList.add("busy")' in dashboard
     assert 'button.classList.remove("busy")' in dashboard
-    assert 'id="auth-form"' not in dashboard
-    assert 'api/auth/login' not in dashboard
-    assert 'api/auth/setup' not in dashboard
+    assert 'id="password"' not in dashboard
+    assert 'id="confirm-password"' not in dashboard
+    assert 'apiPost("api/auth/login", { password: "" })' in dashboard
+    assert 'authState.entry_mode !== "passwordless"' in dashboard
+    assert "插件版本未完整更新" in dashboard
+    assert '进入 NewChatLearning' in dashboard
+    assert '>进入</button>' in dashboard
+    assert 'minlength="12"' not in dashboard
     assert 'bridge.upload("api/migration/upload", file)' in dashboard
     assert "api/migration/upload?ticket=" not in dashboard
     assert 'postSecure("api/migration/prepare"' in dashboard

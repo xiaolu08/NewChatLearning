@@ -1,56 +1,67 @@
 # NewChatLearning
 
-> **Beta 开发项目**
->
-> NewChatLearning 目前处于设计与开发阶段，尚未发布可安装的 AstrBot 插件，也不应被视为可用于生产环境的正式版本。
+> **ChatLearning for AstrBot · 公开预览 Beta**
 
-NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面向 AstrBot 生态的移植与现代化项目。首个版本以 Windows、AstrBot、NapCat（OneBot v11）和 QQ 群聊为目标运行环境。
+将 QQ 群聊里的相邻消息整理成可检索的问答词库，让 AstrBot 用本地算法学习和回复。核心学习、匹配和回复流程不调用 LLM，不主动消耗 Token。
 
-当前安装包兼容 AstrBot 4.27.2 及以上版本。
+![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post4-orange)
+![Stage](https://img.shields.io/badge/stage-public%20beta-orange)
+![Platform](https://img.shields.io/badge/platform-Windows-blue)
+![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
+![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 
-项目保留 ChatLearning 的无 Token 学习模式：根据群聊中的相邻消息建立问答关系，并通过本地算法完成匹配与回复选择，不依赖 LLM 生成内容。
+这是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面向 AstrBot 生态的独立移植与现代化项目，适用于 **Windows + AstrBot + NapCat + OneBot v11 + QQ 群**。当前版本用于社区测试，不是稳定版，也不建议直接用于无人值守的生产群聊。
 
-## 设计原则
+## 你可以用它做什么
 
-- **核心流程不依赖 LLM**：学习、匹配、排序和回复选择不会调用大语言模型，也不会主动产生模型 Token 费用。
-- **完整行为兼容**：首个可用 Beta 以覆盖原版 ChatLearning 的用户可观察功能为发布前提。
-- **原生接入 AstrBot**：消息事件、配置、生命周期和消息发送均使用当前 AstrBot 接口。
-- **可靠的本地存储**：结构化数据使用 SQLite，媒体资源在本地持久化，并提供配额、健康检查和清理能力。
-- **明确的管理边界**：命令、WebUI、导入、删除和配置修改均受权限控制并记录审计日志。
-- **安全迁移旧词库**：旧 `.cl` 文件通过受限迁移流程检查和导入，不在插件主进程中直接反序列化未知数据。
+- 让机器人学习群聊中的相邻消息，并按精确、正则或本地相似度匹配回复。
+- 为不同群设置学习、回复、仅学习、仅回复或静默学习模式。
+- 通过定向学习，收集指定群成员的回复风格。
+- 保存图片、语音、视频和文件等消息组件，去重并按配额管理媒体。
+- 导入旧版 `.cl` 词库：先隔离扫描，再生成群绑定计划，确认后备份并导入。
+- 在 WebUI 中管理词库、过滤、权限、媒体、任务、备份、诊断和 TTS。
+- 使用 Windows 本地 TTS、GPT-SoVITS、本地 HTTP TTS，或主动配置可选云端 TTS。
 
-## 计划功能
+## 安装
 
-- 按相邻群消息建立问答链，支持自定义会话间隔
-- 分群词库、共享词库、群标签和合并词库
-- 精确匹配、正则匹配和基于 jieba 的文本相似度匹配
-- 答案权重、回复概率、冷却时间、等待时间和类型阈值
-- 文本、图片、语音、@、引用、转发消息、卡片和文件处理
-- 内容过滤、敏感词、黑名单、自动清理和快速删除
-- 兼容原版命令，并提供统一的 `/ncl` 管理命令
-- 静默学习：持续学习指定群聊，但不在该群触发自动词库回复
-- 定向学习：学习指定群成员的回复方式
-- 媒体持久化、内容去重、空间配额和失效媒体清理
-- 受限导入旧 `.cl` 词库，并生成兼容性与媒体状态报告
-- `/ncl migrate-scan` 隔离扫描旧 `.cl` 词库；当前只生成报告，不自动导入
-- `/ncl migrate-prepare` 与显式确认的 `migrate-apply` 两阶段导入，写入前自动备份
-- 定时任务、备份恢复、导入导出和成员贡献删除
-- Windows 本地 TTS、GPT-SoVITS、本地 HTTP TTS 和可选云端 TTS
-- 内置管理 WebUI，覆盖统计、词库、群组、媒体、语音、权限、任务、备份和诊断
+1. 下载 Release 资产 `NewChatLearning-0.1.0-beta.31.post4.zip`。
+2. 打开 AstrBot Dashboard → **插件管理** → **从本地文件安装**，选择 ZIP。
+3. 确认插件正常加载，并打开插件的内嵌 WebUI。
+4. 点击 **进入** 建立一小时管理会话；不需要输入 NewChatLearning 密码。
+5. 建议先关闭自动回复，完成群设置、备份和词库迁移检查后再逐步启用。
+
+> 从旧版本升级后，如果页面提示前后端版本不一致，请关闭已打开的插件页并重新进入；仍异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post4`。
+
+## 常用命令
+
+```text
+/ncl help                         查看帮助
+/ncl status                       查看运行状态与统计
+/ncl mode learning                当前群仅学习
+/ncl mode reply                   当前群仅回复
+/ncl mode learning_reply          当前群学习并回复
+/ncl mode silent                  当前群静默学习
+/ncl target list                  查看定向学习目标
+/ncl media-scan                   扫描当前群失效媒体
+/ncl migrate-scan                扫描旧 .cl 词库
+```
+
+普通成员触发管理命令时保持静默；管理命令、AstrBot 消息和 NewChatLearning 自身回复不会进入学习链。完整命令说明见[系统设计](./docs/architecture/system-design.md)。
+
+## WebUI
+
+插件页面提供概览、群设置、词库、媒体、过滤、权限、迁移、TTS、任务、备份、审计和诊断功能。高风险操作会要求二次确认，并由服务端继续校验 CSRF、配置版本、计划绑定、备份和审计。
 
 ## 兼容范围
 
-首个 Beta 的兼容承诺如下：
-
-| 组件 | 目标环境 |
+| 项目 | 支持范围 |
 | --- | --- |
 | 操作系统 | Windows |
-| Bot 框架 | AstrBot |
-| QQ 协议端 | NapCat |
-| 通信协议 | OneBot v11 |
+| Bot 框架 | AstrBot 4.27.2+ |
+| QQ 接入 | NapCat / OneBot v11 |
 | 会话类型 | QQ 群聊 |
 
-其他操作系统、QQ 协议实现和消息平台暂不属于首版兼容范围。
+其他操作系统、其他 QQ 协议端、私聊和非 QQ 平台暂不属于当前支持范围。
 
 ## 开发进度
 
@@ -81,8 +92,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - `/ncl media-scan` 对本群答案执行只读媒体健康检查并持久化失效标记
 - `/ncl media-preview` 汇总失效组件、受影响问答及清理后可能为空的答案
 - 两阶段媒体清理默认只移除失效组件；可显式选择整条答案删除，并在执行前备份
-- 内置管理页面直接复用 AstrBot Dashboard 的访问控制，不再要求 NewChatLearning 独立密码或插件登录
-- 高风险操作保留明确二次确认、配置 revision、备份和审计保护
+- 内置管理页面使用无密码“进入”入口、一小时服务端会话、CSRF、入口版本校验和认证审计
+- WebUI 登录会话有效期为一小时；会话内功能不重复要求密码，高风险操作使用明确二次确认弹窗
 - WebUI 媒体页支持按群扫描、影响预览、两阶段清理、执行前确认和备份结果
 - WebUI 词库页支持按群搜索、问题详情、文本/正则问答添加、答案权重修改和带备份的安全删除
 - WebUI 可按群导出 ZIP 词库包，包含公式注入防护的 XLSX 预览和保留完整问答组件的 JSONL
@@ -116,11 +127,12 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - WebUI 任务页支持无重载刷新、新建编辑、启停、立即执行和最近执行历史
 - 内建媒体扫描、数据库备份、过期产物清理与过滤词库预演/自动清理；自动删除默认不创建且每次执行前备份并复核
 
-尚未完成：
+公开预览版已知限制：
 
-- 词库管理的媒体问答编辑与批量操作
-- 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 云端 TTS，以及 DPAPI 密钥保护与调用额度
-- Windows + AstrBot + NapCat 实机验收
+- 词库管理的媒体问答人工编辑与批量操作暂不纳入当前产品范围。
+- 火山引擎、阿里云、腾讯云、Azure、OpenAI、OpenAI 风格和自定义 HTTP 云端 TTS 已实现配置、DPAPI 密钥保护和调用额度，但尚未逐一连接真实付费账户验收。
+- Windows + AstrBot + NapCat 已完成插件安装、WebUI 会话、旧 `.cl` 扫描与导入、备份和统计核对；消息类型、长时间任务、全部管理页和大规模词库仍需更广泛实机验证。
+- 其他操作系统、其他 QQ 协议端、私聊和非 QQ 平台暂不属于支持范围。
 
 ## 技术文档
 

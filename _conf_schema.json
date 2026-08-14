@@ -323,7 +323,7 @@
   "webui": {
     "description": "管理页面",
     "type": "object",
-    "hint": "管理页面由 AstrBot Dashboard 承载，不再使用 NewChatLearning 独立密码或插件登录会话。高风险操作仍需要页面二次确认。",
+    "hint": "管理页面使用独立密码和服务端会话。首次设置密码只能从运行 AstrBot 的本机访问；页面仍由 AstrBot Dashboard 承载。",
     "items": {
       "enabled": {
         "description": "启用管理页面",

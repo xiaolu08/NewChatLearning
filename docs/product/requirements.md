@@ -17,7 +17,7 @@ NewChatLearning 是 ChatLearning 面向 AstrBot + NapCat 的 QQ 群完整移植�
 
 1. 项目名为 `NewChatLearning`。
 2. 首版平台为 Windows、AstrBot、NapCat、OneBot v11、QQ 群。
-3. 首个可运行 Beta 覆盖原 ChatLearning 全部用户可观察功能。
+3. 首个公开预览 Beta 可以在明确披露未完成实机项目的前提下发布；完成版仍以覆盖原 ChatLearning 全部用户可观察功能为目标。
 4. 核心学习、匹配、选择和回复路径零 LLM Token。
 5. 本地词库回复成功后停止当次 LLM，尽可能写入后续会话历史。
 6. 保留相邻消息问答链和同一成员连续发言学习语义。
