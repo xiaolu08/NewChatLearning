@@ -61,9 +61,9 @@
 | `!remove learnings <群号...>` | WebUI「群聊」页，关闭该群能力 | 同时移除学习和回复 |
 | `!add reply <群号...>` | WebUI「群聊」页 / `reply.group_ids` | 添加开启回复的群；当前 `/ncl reply on` 只作用于当前群 |
 | `!remove reply <群号...>` | WebUI「群聊」页 / `reply.group_ids` | 移除开启回复的群；当前 `/ncl reply off` 只作用于当前群 |
-| `!add/remove tag <标签> <群号...>` | WebUI「群聊」页 / `library.group_tags` | 当前没有等价聊天命令；配置群标签 |
-| `!add/remove subadmin <群号...>` | WebUI「权限」页 / `permissions.group_sub_admins` | 当前没有等价聊天命令；配置群词库子管理员 |
-| `!add/remove unmerge <群号...>` | WebUI「词库」页 / `library.excluded_group_ids` | 当前没有等价聊天命令；设置不参与全局词库的群 |
+| `!add tag <标签> <群号...>` / `!remove tag <群号...>` | WebUI「群聊」页 / `library.group_tags` | 当前没有等价聊天命令；配置群标签 |
+| `!add subadmin <群号...>` / `!remove subadmin <群号...>` | WebUI「权限」页 / `permissions.group_sub_admins` | 当前没有等价聊天命令；配置群词库子管理员 |
+| `!add unmerge <群号...>` / `!remove unmerge <群号...>` | WebUI「词库」页 / `library.excluded_group_ids` | 当前没有等价聊天命令；设置不参与全局词库的群 |
 | `!learning` | `/ncl learning on|off` | 兼容入口：无参数时切换当前群学习 |
 | `!reply` | `/ncl reply on|off` | 兼容入口：无参数时切换当前群词库回复 |
 
