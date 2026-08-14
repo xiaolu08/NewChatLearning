@@ -4,7 +4,7 @@
 
 将 QQ 群聊里的相邻消息整理成可检索的问答词库，让 AstrBot 用本地算法学习和回复。核心学习、匹配和回复流程不调用 LLM，不主动消耗 Token。
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post4-orange)
+![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post5-orange)
 ![Stage](https://img.shields.io/badge/stage-public%20beta-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
@@ -30,7 +30,7 @@
 4. 点击 **进入** 管理会话。
 5. 建议先关闭自动回复，完成群设置、备份和词库迁移检查后再逐步启用。
 
-> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post4`。
+> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post5`。
 
 ## 常用命令
 
@@ -50,7 +50,7 @@
 
 ### 旧版命令对应关系
 
-> 本节描述开发分支中已完成、将随下一安装包提供的跨群命令；首发包 `0.1.0-beta.31.post4` 尚不包含本次补齐。
+> 以下跨群命令从 `0.1.0-beta.31.post5` 开始提供；首发包 `0.1.0-beta.31.post4` 不包含本次补齐。
 
 下列旧版跨群命令已经恢复，且只允许 AstrBot 全局管理员或 NewChatLearning 插件管理员执行。群聊子管理员只能使用 `/ncl` 命令管理自己获授权的群，不能执行跨群命令。当前群开关仍建议使用统一的 `/ncl` 命令：
 

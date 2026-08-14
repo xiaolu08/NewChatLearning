@@ -1,6 +1,6 @@
 # 更新日志
 
-## 未发布
+## 0.1.0-beta.31.post5 - 2026-08-14
 
 - 恢复原版 `!grouplist` 与 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 跨群控制语义。
 - 按消息场景恢复 `!learning`/`!reply`：管理员私聊控制全局主开关，群聊控制当前群能力。
