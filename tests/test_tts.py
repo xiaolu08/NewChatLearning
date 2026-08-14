@@ -7,7 +7,12 @@ from types import SimpleNamespace
 import pytest
 
 from new_chat_learning.infrastructure.config import ConfigService
-from new_chat_learning.tts.service import TTSService, _is_loopback_http_url, _reply_text
+from new_chat_learning.tts.service import (
+    TTSService,
+    _is_loopback_http_url,
+    _reply_text,
+    _substitute_mapping,
+)
 
 
 def enabled_config(**overrides):
@@ -33,6 +38,23 @@ def test_tts_only_extracts_plain_text_and_ignores_at_components():
         )
     ) == "hello world"
     assert _reply_text(({"type": "Image", "data": {"url": "https://example.test/a"}},)) == ""
+
+
+def test_custom_http_mapping_substitutes_settings_and_dpapi_secrets():
+    value = _substitute_mapping(
+        {
+            "Authorization": "Bearer ${secret.api_key}",
+            "payload": {"text": "${text}", "voice": "${voice}"},
+        },
+        "hello",
+        {"voice": "alloy"},
+        secrets={"api_key": "private-token"},
+    )
+
+    assert value == {
+        "Authorization": "Bearer private-token",
+        "payload": {"text": "hello", "voice": "alloy"},
+    }
 
 
 def test_local_http_tts_requires_literal_loopback_host_and_explicit_port():

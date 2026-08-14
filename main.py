@@ -1480,6 +1480,11 @@ class NewChatLearningPlugin(star.Star):
         payload, error = await self._authorized_web_payload()
         if error is not None:
             return error
+        if payload.get("confirmed") is not True:
+            return self._web_json(
+                {"status": "error", "message": "请确认保存云端 TTS 密钥。"},
+                status_code=400,
+            )
         values = payload.get("values", payload.get("secrets", {}))
         if not isinstance(values, dict):
             return self._web_json({"status": "error", "message": "密钥参数无效。"}, status_code=400)
@@ -1518,6 +1523,23 @@ class NewChatLearningPlugin(star.Star):
         if error is not None:
             return error
         text = str(payload.get("text", "")).strip()
+        if (
+            self.app.config.tts_settings()["driver"]
+            in {
+                "volcengine",
+                "aliyun",
+                "tencent",
+                "azure",
+                "openai",
+                "openai_compatible",
+                "custom_http",
+            }
+            and payload.get("confirmed") is not True
+        ):
+            return self._web_json(
+                {"status": "error", "message": "云端测试可能产生费用，请确认后重试。"},
+                status_code=400,
+            )
         try:
             output_path = await self.app.tts.synthesize(text)
         except ValueError as exc:

@@ -68,6 +68,8 @@ status: 当前有效
 
 Beta 31.post1 修复 AstrBot 4.27.2 配置 schema 兼容性：自定义 HTTP 的请求头与请求体映射使用平台原生 `dict` 类型，避免插件加载时把无子项的 `object` 递归解析并触发 `KeyError: 'items'`。
 
+Beta 31.post2 补齐云端 TTS WebUI：提供全部云端驱动、模型与区域、应用参数、调用额度、自定义 HTTP JSON 映射、DPAPI 密钥状态与管理；切换驱动时更新默认接口并显示对应密钥字段。云端测试和密钥变更要求二次确认，页面刷新不重新加载或重新登录。自定义 HTTP 映射可通过 `${secret.<名称>}` 引用 DPAPI 密钥，配置中不保存密钥明文。
+
 - [x] Windows 本地、GPT-SoVITS、通用本地 HTTP（离线测试通过；Windows `System.Speech` 已完成本机真实 WAV 冒烟测试，NapCat 语音发送待实机验收）。
 - [ ] 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 映射。
 - [ ] 云端默认关闭、费用警示、频率/每日额度、超时和错误脱敏。

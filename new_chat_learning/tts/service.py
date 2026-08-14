@@ -26,6 +26,15 @@ if TYPE_CHECKING:
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 GENERATED_AUDIO_TTL_SECONDS = 24 * 60 * 60
 LOCAL_HTTP_HOSTS = {"127.0.0.1", "::1", "localhost"}
+CLOUD_DRIVERS = {
+    "volcengine",
+    "aliyun",
+    "tencent",
+    "azure",
+    "openai",
+    "openai_compatible",
+    "custom_http",
+}
 
 
 class TTSService:
@@ -82,15 +91,7 @@ class TTSService:
                 return await asyncio.to_thread(self._synthesize_windows, text, settings)
             if driver in {"gpt_sovits", "local_http"}:
                 return await asyncio.to_thread(self._synthesize_http, text, settings)
-            if driver in {
-                "volcengine",
-                "aliyun",
-                "tencent",
-                "azure",
-                "openai",
-                "openai_compatible",
-                "custom_http",
-            }:
+            if driver in CLOUD_DRIVERS:
                 if self.store is None:
                     raise RuntimeError("tts_quota_store_unavailable")
                 quota = await self.store.reserve_tts_quota(
@@ -110,20 +111,32 @@ class TTSService:
     def status(self) -> dict[str, Any]:
         settings = self.config.tts_settings()
         driver = str(settings["driver"])
-        available = (
-            os.name == "nt" and shutil.which("powershell.exe") is not None
-            if driver == "windows"
-            else _is_loopback_http_url(str(settings["endpoint_url"]))
-            if driver in {"gpt_sovits", "local_http"}
-            else False
-        )
+        secret_status = self.secrets.status()
+        if driver == "windows":
+            available = os.name == "nt" and shutil.which("powershell.exe") is not None
+        elif driver in {"gpt_sovits", "local_http"}:
+            available = _is_loopback_http_url(str(settings["endpoint_url"]))
+        elif driver in CLOUD_DRIVERS:
+            endpoint = str(settings.get("endpoint_url", ""))
+            endpoint_ready = bool(endpoint.startswith("https://")) or driver in {
+                "openai",
+                "volcengine",
+                "aliyun",
+                "tencent",
+                "azure",
+            }
+            available = endpoint_ready and (
+                secret_status["configured"] or driver == "custom_http"
+            )
+        else:
+            available = False
         return {
             "enabled": settings["enabled"],
             "driver": driver,
             "available": available,
             "probability_percent": settings["probability_percent"],
             "max_text_length": settings["max_text_length"],
-            "secret_configured": self.secrets.status()["configured"],
+            "secret_configured": secret_status["configured"],
             "quota": {
                 "per_minute_requests": settings.get("per_minute_requests", 10),
                 "daily_requests": settings.get("daily_requests", 200),
@@ -316,8 +329,12 @@ try {
             }
         else:
             endpoint = str(settings["endpoint_url"])
-            headers = dict(settings["custom_headers"])
-            payload = _substitute_mapping(settings["custom_body"], text, settings)
+            headers = _substitute_mapping(
+                settings["custom_headers"], text, settings, secrets=secrets
+            )
+            payload = _substitute_mapping(
+                settings["custom_body"], text, settings, secrets=secrets
+            )
         if not endpoint.startswith("https://"):
             raise ValueError("tts_cloud_endpoint_must_be_https")
         if isinstance(payload, str):
@@ -424,7 +441,13 @@ def _xml_escape(value: str) -> str:
     )
 
 
-def _substitute_mapping(value: Any, text: str, settings: dict[str, Any]) -> Any:
+def _substitute_mapping(
+    value: Any,
+    text: str,
+    settings: dict[str, Any],
+    *,
+    secrets: dict[str, str] | None = None,
+) -> Any:
     replacements = {
         "${text}": text,
         "${voice}": str(settings.get("voice", "")),
@@ -432,10 +455,15 @@ def _substitute_mapping(value: Any, text: str, settings: dict[str, Any]) -> Any:
         "${app_id}": str(settings.get("app_id", "")),
         "${app_key}": str(settings.get("app_key", "")),
     }
+    for key, secret in (secrets or {}).items():
+        replacements[f"${{secret.{key}}}"] = secret
     if isinstance(value, dict):
-        return {str(key): _substitute_mapping(item, text, settings) for key, item in value.items()}
+        return {
+            str(key): _substitute_mapping(item, text, settings, secrets=secrets)
+            for key, item in value.items()
+        }
     if isinstance(value, list):
-        return [_substitute_mapping(item, text, settings) for item in value]
+        return [_substitute_mapping(item, text, settings, secrets=secrets) for item in value]
     if isinstance(value, str):
         result = value
         for key, replacement in replacements.items():
