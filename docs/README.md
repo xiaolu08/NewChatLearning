@@ -30,5 +30,6 @@
 
 - [上游项目评估](./research/upstream-assessment.md)：原 ChatLearning 的价值、限制、迁移风险和验证建议。
 - [功能兼容矩阵](./research/feature-parity.md)：原版能力到 NewChatLearning 的实现映射。
+- [命令兼容性核对](./research/command-parity.md)：上游聊天命令与当前命令、WebUI、配置映射及未复现项。
 
 文档以当前有效版本为准。实现变化如果影响外部行为、数据格式、安全边界或兼容范围，必须同步更新相关文档。
