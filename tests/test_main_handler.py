@@ -606,6 +606,38 @@ def test_private_legacy_learning_toggles_global_switch(monkeypatch):
     assert event.result.text == "全局学习已开启。"
 
 
+def test_private_help_aliases_reach_ncl_help_for_plugin_admin(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class App:
+        config = Config()
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+
+    for command in ("!help", "！help", "/ncl help"):
+        event = Event()
+        event.message_str = command
+        asyncio.run(plugin.capture_private_message(event))
+        assert event.stopped is True
+        assert event.result is not None
+        assert "NewChatLearning Beta" in event.result.text
+
+
+def test_private_help_remains_silent_for_ordinary_member(monkeypatch):
+    main_module = load_main(monkeypatch)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.config = {}
+    event = Event()
+    event.message_str = "/ncl help"
+
+    asyncio.run(plugin.capture_private_message(event))
+
+    assert event.stopped is True
+    assert event.result is None
+
+
 def test_private_legacy_reply_supports_explicit_state_and_rejects_members(monkeypatch):
     main_module = load_main(monkeypatch)
 

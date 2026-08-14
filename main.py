@@ -418,7 +418,12 @@ class NewChatLearningPlugin(star.Star):
     async def capture_private_message(self, event: AstrMessageEvent) -> None:
         if self.app is None or not self._legacy_command_aliases_enabled():
             return
-        parsed = parse_legacy_group_command(event.get_message_str())
+        message_text = event.get_message_str().strip()
+        if message_text.lower() in {"!help", "！help", "/ncl help"}:
+            await self.ncl_help(event)
+            event.stop_event()
+            return
+        parsed = parse_legacy_group_command(message_text)
         if isinstance(parsed, GroupSettingsCommand) and parsed.name in {"learning", "reply"}:
             parsed = LegacyGlobalCommand(parsed.name, parsed.arguments)
         if not isinstance(parsed, (LegacyGlobalCommand, CrossGroupCommand)):
