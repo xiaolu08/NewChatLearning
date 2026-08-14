@@ -50,17 +50,24 @@
 
 ### 旧版命令对应关系
 
-旧版命令仍可作为兼容入口；新配置建议使用统一的 `/ncl` 命令：
+下表区分了当前已兼容的旧版命令和需要改用 WebUI / AstrBot 配置的旧版管理操作。当前群开关建议使用统一的 `/ncl` 命令：
 
 | 旧版命令 | 新版命令 | 含义 |
 | --- | --- | --- |
-| `!grouplist` | `/ncl mode` | 查看当前群的运行模式和定向学习目标 |
-| `!add learning` / `!add learnings` | `/ncl learning on` | 开启当前群学习 |
-| `!remove learning` / `!remove learnings` | `/ncl learning off` | 关闭当前群学习 |
-| `!add reply` | `/ncl reply on` | 开启当前群词库回复 |
-| `!remove reply` | `/ncl reply off` | 关闭当前群词库回复 |
+| `!grouplist` | WebUI「群聊」页 / AstrBot 插件配置 | 查看已配置学习或回复的群列表；`/ncl mode` 只查看当前群模式 |
+| `!add learning <群号...>` | WebUI「群聊」页 / `learning.group_ids` | 添加开启学习的群；当前 `/ncl learning on` 只作用于当前群 |
+| `!remove learning <群号...>` | WebUI「群聊」页 / `learning.group_ids` | 移除开启学习的群；当前 `/ncl learning off` 只作用于当前群 |
+| `!add learnings <群号...>` | WebUI「群聊」页，模式设为“学习并回复” | 同时开启学习和回复 |
+| `!remove learnings <群号...>` | WebUI「群聊」页，关闭该群能力 | 同时移除学习和回复 |
+| `!add reply <群号...>` | WebUI「群聊」页 / `reply.group_ids` | 添加开启回复的群；当前 `/ncl reply on` 只作用于当前群 |
+| `!remove reply <群号...>` | WebUI「群聊」页 / `reply.group_ids` | 移除开启回复的群；当前 `/ncl reply off` 只作用于当前群 |
+| `!add/remove tag <标签> <群号...>` | WebUI「群聊」页 / `library.group_tags` | 当前没有等价聊天命令；配置群标签 |
+| `!add/remove subadmin <群号...>` | WebUI「权限」页 / `permissions.group_sub_admins` | 当前没有等价聊天命令；配置群词库子管理员 |
+| `!add/remove unmerge <群号...>` | WebUI「词库」页 / `library.excluded_group_ids` | 当前没有等价聊天命令；设置不参与全局词库的群 |
 | `!learning` | `/ncl learning on|off` | 兼容入口：无参数时切换当前群学习 |
 | `!reply` | `/ncl reply on|off` | 兼容入口：无参数时切换当前群词库回复 |
+
+`!grouplist` 和带群号的 `!add/!remove` 操作属于原版的跨群管理语义，当前版本不通过聊天命令直接改写其他群；请使用 WebUI 或 AstrBot 插件配置完成。`tag`、`subadmin` 和 `unmerge` 旧命令暂未兼容。
 
 ## WebUI
 
@@ -91,7 +98,7 @@
 - SQLite schema、统一配置读取和运行状态服务骨架
 - `/ncl help`、`/ncl status` 管理命令与只读 Dashboard 状态页
 - `/ncl mode`、`learning`、`reply`、`silent` 与 `target` 当前群运行模式和定向学习管理命令
-- 可关闭的 `!learning`、`!reply`、`!grouplist` 及 `!add/!remove learning|reply` 原版兼容入口
+- 可关闭的 `!learning`、`!reply`、`!grouplist` 及当前群 `!add/!remove learning|reply` 原版兼容入口
 - NapCat/OneBot 群消息规范化与版本化组件 JSON
 - 可配置群白名单的相邻消息学习、重复答案增权和超时断链
 - 尚未固化消息的持久化暂存与群消息撤回清理

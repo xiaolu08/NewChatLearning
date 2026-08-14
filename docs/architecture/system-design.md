@@ -70,7 +70,7 @@ NewChatLearning/
 
 - 主入口：`/ncl help`、`/ncl status`、`/ncl learning`、`/ncl reply`、`/ncl silent`、`/ncl target`、`/ncl library`、`/ncl media`、`/ncl tts`、`/ncl task`、`/ncl admin`。
 - Beta 25 已实现当前群 `/ncl mode [disabled|learning|reply|learning_reply|silent]`、`/ncl learning on|off`、`/ncl reply on|off`、`/ncl silent on|off` 和 `/ncl target list|add|remove|clear`。开关命令只改变对应能力并保留另一项；定向用户只有在学习模式下才能新增。
-- 原版兼容入口 `!learning`、`!reply`、`!grouplist`、`!add/!remove learning|learnings|reply` 在消息学习前解析。无参数 `!learning` 与 `!reply` 切换当前群能力；所有别名只显示和修改当前群，普通成员被静默截断，且命令消息不进入学习链。
+- 当前已兼容的原版入口包括 `!learning`、`!reply`、`!grouplist` 和当前群 `!add/!remove learning|learnings|reply` 语法。无参数 `!learning` 与 `!reply` 切换当前群能力；`!grouplist` 显示当前群设置摘要，带群号的旧版跨群管理语义由 WebUI / AstrBot 配置替代。`tag`、`subadmin` 和 `unmerge` 旧命令暂未兼容。普通成员被静默截断，命令消息不进入学习链。
 - 当前词库管理命令：`/ncl search <关键词>`、`/ncl show <问题ID>`、`/ncl add <问题> => <答案>`、`/ncl add-regex <表达式> => <答案>`、`/ncl weight <答案ID> <权重>`、`/ncl delete-answer <答案ID>`、`/ncl delete-question <问题ID>`。
 - 词库管理命令始终限定当前群作用域。全局管理员和插件管理员仍按当前群操作；群子管理员不能借助问题或答案 ID 访问其他群。
 - WebUI 词库页复用同一应用服务；读取要求一小时服务端会话，新增与权重修改要求 CSRF，答案和问题删除还要求二次确认与删除前数据库备份。
