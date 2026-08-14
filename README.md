@@ -43,10 +43,24 @@
 /ncl mode silent                  当前群静默学习
 /ncl target list                  查看定向学习目标
 /ncl media-scan                   扫描当前群失效媒体
-/ncl migrate-scan                扫描旧 .cl 词库
+/ncl migrate-scan                 扫描旧 .cl 词库
 ```
 
 普通成员触发管理命令时保持静默；管理命令、AstrBot 消息和 NewChatLearning 自身回复不会进入学习链。完整命令说明见[系统设计](./docs/architecture/system-design.md)。
+
+### 旧版命令对应关系
+
+旧版命令仍可作为兼容入口；新配置建议使用统一的 `/ncl` 命令：
+
+| 旧版命令 | 新版命令 | 含义 |
+| --- | --- | --- |
+| `!grouplist` | `/ncl mode` | 查看当前群的运行模式和定向学习目标 |
+| `!add learning` / `!add learnings` | `/ncl learning on` | 开启当前群学习 |
+| `!remove learning` / `!remove learnings` | `/ncl learning off` | 关闭当前群学习 |
+| `!add reply` | `/ncl reply on` | 开启当前群词库回复 |
+| `!remove reply` | `/ncl reply off` | 关闭当前群词库回复 |
+| `!learning` | `/ncl learning on|off` | 兼容入口：无参数时切换当前群学习 |
+| `!reply` | `/ncl reply on|off` | 兼容入口：无参数时切换当前群词库回复 |
 
 ## WebUI
 
