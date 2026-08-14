@@ -50,24 +50,26 @@
 
 ### 旧版命令对应关系
 
-下表区分了当前已兼容的旧版命令和需要改用 WebUI / AstrBot 配置的旧版管理操作。当前群开关建议使用统一的 `/ncl` 命令：
+> 本节描述开发分支中已完成、将随下一安装包提供的跨群命令；首发包 `0.1.0-beta.31.post4` 尚不包含本次补齐。
+
+下列旧版跨群命令已经恢复，且只允许 AstrBot 全局管理员或 NewChatLearning 插件管理员执行。群聊子管理员只能使用 `/ncl` 命令管理自己获授权的群，不能执行跨群命令。当前群开关仍建议使用统一的 `/ncl` 命令：
 
 | 旧版命令 | 新版命令 | 含义 |
 | --- | --- | --- |
-| `!grouplist` | WebUI「群聊」页 / AstrBot 插件配置 | 查看已配置学习或回复的群列表；`/ncl mode` 只查看当前群模式 |
-| `!add learning <群号...>` | WebUI「群聊」页 / `learning.group_ids` | 添加开启学习的群；当前 `/ncl learning on` 只作用于当前群 |
-| `!remove learning <群号...>` | WebUI「群聊」页 / `learning.group_ids` | 移除开启学习的群；当前 `/ncl learning off` 只作用于当前群 |
-| `!add learnings <群号...>` | WebUI「群聊」页，模式设为“学习并回复” | 同时开启学习和回复 |
-| `!remove learnings <群号...>` | WebUI「群聊」页，关闭该群能力 | 同时移除学习和回复 |
-| `!add reply <群号...>` | WebUI「群聊」页 / `reply.group_ids` | 添加开启回复的群；当前 `/ncl reply on` 只作用于当前群 |
-| `!remove reply <群号...>` | WebUI「群聊」页 / `reply.group_ids` | 移除开启回复的群；当前 `/ncl reply off` 只作用于当前群 |
-| `!add tag <标签> <群号...>` / `!remove tag <群号...>` | WebUI「群聊」页 / `library.group_tags` | 当前没有等价聊天命令；配置群标签 |
-| `!add subadmin <群号...>` / `!remove subadmin <群号...>` | WebUI「权限」页 / `permissions.group_sub_admins` | 当前没有等价聊天命令；配置群词库子管理员 |
-| `!add unmerge <群号...>` / `!remove unmerge <群号...>` | WebUI「词库」页 / `library.excluded_group_ids` | 当前没有等价聊天命令；设置不参与全局词库的群 |
+| `!grouplist` | 原命令可直接使用 | 查看已开启学习、回复、允许自主管理及不进入全局词库的群 |
+| `!add learning <群号...>` | 原命令可直接使用 | 添加开启学习的群；`/ncl learning on` 只作用于当前群 |
+| `!remove learning <群号...>` | 原命令可直接使用 | 移除开启学习的群；同时退出这些群的静默学习状态 |
+| `!add learnings <群号...>` | 原命令可直接使用 | 同时开启学习和回复 |
+| `!remove learnings <群号...>` | 原命令可直接使用 | 同时移除学习和回复 |
+| `!add reply <群号...>` | 原命令可直接使用 | 添加开启回复的群；同时退出这些群的静默学习状态 |
+| `!remove reply <群号...>` | 原命令可直接使用 | 移除开启回复的群 |
+| `!add tag <标签> <群号...>` / `!remove tag <群号...>` | 原命令可直接使用 | 添加共享标签；移除时清除目标群的全部标签 |
+| `!add subadmin <群号...>` / `!remove subadmin <群号...>` | 原命令可直接使用 | 从 NapCat 读取目标群当前群主/群管理员并授予本群管理权，或移除该群授权 |
+| `!add unmerge <群号...>` / `!remove unmerge <群号...>` | 原命令可直接使用 | 添加/移除不进入全局词库的群 |
 | `!learning` | `/ncl learning on|off` | 兼容入口：无参数时切换当前群学习 |
 | `!reply` | `/ncl reply on|off` | 兼容入口：无参数时切换当前群词库回复 |
 
-`!grouplist` 和带群号的 `!add/!remove` 操作属于原版的跨群管理语义，当前版本不通过聊天命令直接改写其他群；请使用 WebUI 或 AstrBot 插件配置完成。`tag`、`subadmin` 和 `unmerge` 旧命令暂未兼容。
+跨群写入使用与 WebUI 相同的配置 revision、持久化与审计服务；任一目标群或配置保存失败时不会保留部分修改。`!add subadmin` 需要 Bot 能通过 NapCat 读取目标群资料，并保存执行时的群主和群管理员 QQ 号；群管理成员发生变化后可再次执行该命令刷新授权名单。
 
 ## WebUI
 
@@ -98,7 +100,7 @@
 - SQLite schema、统一配置读取和运行状态服务骨架
 - `/ncl help`、`/ncl status` 管理命令与只读 Dashboard 状态页
 - `/ncl mode`、`learning`、`reply`、`silent` 与 `target` 当前群运行模式和定向学习管理命令
-- 可关闭的 `!learning`、`!reply`、`!grouplist` 及当前群 `!add/!remove learning|reply` 原版兼容入口
+- 可关闭的 `!learning`、`!reply`，以及 `!grouplist`、`!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 原版兼容入口
 - NapCat/OneBot 群消息规范化与版本化组件 JSON
 - 可配置群白名单的相邻消息学习、重复答案增权和超时断链
 - 尚未固化消息的持久化暂存与群消息撤回清理

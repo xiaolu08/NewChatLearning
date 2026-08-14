@@ -90,3 +90,38 @@ def test_runtime_permission_update_audits_counts_without_ids(tmp_path):
         "after_sub_admin_count": 3,
         "source": "webui",
     }
+
+
+def test_runtime_cross_group_update_audits_operation_without_group_ids(tmp_path):
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    async def scenario():
+        source = Source()
+        app = RuntimeApplication(tmp_path, source)
+        await app.start()
+        try:
+            result = await app.update_cross_group_settings(
+                action="add",
+                category="learning",
+                group_ids=["10001", "10002"],
+                expected_revision=app.config.revision,
+                actor_id="12345",
+            )
+            audit = await app.audit.list_entries(
+                action="update_cross_group_settings"
+            )
+            return result, audit
+        finally:
+            await app.stop()
+
+    result, audit = asyncio.run(scenario())
+
+    assert result["learning_group_ids"] == ["10001", "10002"]
+    assert audit["entries"][0]["details"] == {
+        "operation": "add",
+        "category": "learning",
+        "group_count": 2,
+        "source": "legacy_command",
+    }

@@ -128,6 +128,42 @@ class RuntimeApplication:
             logger.exception("Group settings were saved but audit recording failed.")
         return result
 
+    async def update_cross_group_settings(
+        self,
+        *,
+        action: str,
+        category: str,
+        group_ids: list[str],
+        expected_revision: str,
+        actor_id: str,
+        tag: str | None = None,
+        sub_admins: dict[str, list[str]] | None = None,
+        source: str = "legacy_command",
+    ) -> dict[str, Any]:
+        result = await self.config.update_cross_group_settings(
+            action=action,
+            category=category,
+            group_ids=group_ids,
+            expected_revision=expected_revision,
+            tag=tag,
+            sub_admins=sub_admins,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_cross_group_settings",
+                target=f"groups:{category}",
+                details={
+                    "operation": action,
+                    "category": category,
+                    "group_count": len(group_ids),
+                    "source": source,
+                },
+            )
+        except Exception:
+            logger.exception("Cross-group settings were saved but audit recording failed.")
+        return result
+
     async def filter_settings(self, group_id: str = "") -> dict[str, Any]:
         result = self.config.filter_settings(group_id)
         result["group_rules"] = self.config.snapshot()["filters"].get("group_rules", [])

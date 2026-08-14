@@ -379,6 +379,131 @@ class ConfigService:
                 raise
             return self.permission_settings()
 
+    def cross_group_settings(self) -> dict[str, Any]:
+        snapshot = self.snapshot()
+        tags = self._normalized_group_tags(snapshot["library"].get("group_tags"))
+        permissions = self._validated_permission_update(snapshot["permissions"])
+        return {
+            "learning_group_ids": self._normalized_group_ids(
+                snapshot["learning"].get("group_ids", [])
+            ),
+            "reply_group_ids": self._normalized_group_ids(
+                snapshot["reply"].get("group_ids", [])
+            ),
+            "silent_group_ids": self._normalized_group_ids(
+                snapshot["reply"].get("silent_group_ids", [])
+            ),
+            "excluded_group_ids": self._normalized_group_ids(
+                snapshot["library"].get("excluded_group_ids", [])
+            ),
+            "group_tags": [
+                {"group_id": group_id, "tags": list(group_tags)}
+                for group_id, group_tags in tags.items()
+            ],
+            "group_sub_admins": permissions["group_sub_admins"],
+            "revision": self.revision,
+        }
+
+    async def update_cross_group_settings(
+        self,
+        *,
+        action: str,
+        category: str,
+        group_ids: list[str],
+        expected_revision: str,
+        tag: str | None = None,
+        sub_admins: dict[str, list[str]] | None = None,
+    ) -> dict[str, Any]:
+        if action not in {"add", "remove"} or category not in {
+            "learning", "learnings", "reply", "tag", "subadmin", "unmerge"
+        }:
+            raise ValueError("invalid_cross_group_settings")
+        normalized_groups = self._normalized_group_ids(group_ids)
+        if not normalized_groups:
+            raise ValueError("invalid_cross_group_settings")
+        normalized_tag = self._bounded_text(tag, 64) if tag is not None else None
+        if category == "tag" and action == "add" and not normalized_tag:
+            raise ValueError("invalid_cross_group_settings")
+
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            original = deepcopy(self._source)
+            try:
+                learning = self._source.setdefault("learning", {})
+                reply = self._source.setdefault("reply", {})
+                library = self._source.setdefault("library", {})
+                permissions = self._source.setdefault("permissions", {})
+                enabled = action == "add"
+
+                if category in {"learning", "learnings"}:
+                    learning["group_ids"] = self._replace_group_memberships(
+                        learning.get("group_ids", []), normalized_groups, enabled
+                    )
+                    if enabled:
+                        learning["enabled"] = True
+                    if not enabled:
+                        reply["silent_group_ids"] = self._replace_group_memberships(
+                            reply.get("silent_group_ids", []), normalized_groups, False
+                        )
+                if category in {"reply", "learnings"}:
+                    reply["group_ids"] = self._replace_group_memberships(
+                        reply.get("group_ids", []), normalized_groups, enabled
+                    )
+                    reply["silent_group_ids"] = self._replace_group_memberships(
+                        reply.get("silent_group_ids", []), normalized_groups, False
+                    )
+                    if enabled:
+                        reply["enabled"] = True
+                if category == "unmerge":
+                    library["excluded_group_ids"] = self._replace_group_memberships(
+                        library.get("excluded_group_ids", []), normalized_groups, enabled
+                    )
+                if category == "tag":
+                    tags = self._normalized_group_tags(library.get("group_tags"))
+                    for group_id in normalized_groups:
+                        if enabled:
+                            tags[group_id] = tuple(
+                                dict.fromkeys((*tags.get(group_id, ()), normalized_tag))
+                            )
+                        else:
+                            tags.pop(group_id, None)
+                    library["group_tags"] = [
+                        {"group_id": group_id, "tags": list(values)}
+                        for group_id, values in tags.items()
+                    ]
+                if category == "subadmin":
+                    current = self._validated_permission_update(
+                        self.snapshot()["permissions"]
+                    )
+                    entries = {
+                        entry["group_id"]: list(entry["admin_ids"])
+                        for entry in current["group_sub_admins"]
+                    }
+                    if enabled:
+                        if not isinstance(sub_admins, dict):
+                            raise ValueError("invalid_cross_group_settings")
+                        for group_id in normalized_groups:
+                            admin_ids = self._normalized_qq_ids(
+                                sub_admins.get(group_id), maximum=100
+                            )
+                            if not admin_ids:
+                                raise ValueError("invalid_cross_group_settings")
+                            entries[group_id] = admin_ids
+                    else:
+                        for group_id in normalized_groups:
+                            entries.pop(group_id, None)
+                    permissions["group_sub_admins"] = [
+                        {"group_id": group_id, "admin_ids": admin_ids}
+                        for group_id, admin_ids in entries.items()
+                    ]
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.cross_group_settings()
+
     def tts_settings(self) -> dict[str, Any]:
         tts = self.snapshot()["tts"]
         result = self._validated_tts_update(tts, allow_unavailable_driver=True)
@@ -736,6 +861,31 @@ class ConfigService:
         if enabled:
             result.append(group_id)
         return list(dict.fromkeys(result))
+
+    @classmethod
+    def _replace_group_memberships(
+        cls, values: Any, group_ids: list[str], enabled: bool
+    ) -> list[str]:
+        result = cls._normalized_group_ids(values)
+        requested = set(group_ids)
+        result = [group_id for group_id in result if group_id not in requested]
+        if enabled:
+            result.extend(group_ids)
+        return result
+
+    @classmethod
+    def _normalized_group_ids(cls, value: Any, *, maximum: int = 200) -> list[str]:
+        if not isinstance(value, (list, tuple)) or len(value) > maximum:
+            raise ValueError("invalid_cross_group_settings")
+        result = []
+        for item in value:
+            try:
+                group_id = cls._validated_qq_id(item)
+            except ValueError as exc:
+                raise ValueError("invalid_cross_group_settings") from exc
+            if group_id not in result:
+                result.append(group_id)
+        return result
 
     @staticmethod
     def _normalized_group_tags(value: Any) -> dict[str, tuple[str, ...]]:

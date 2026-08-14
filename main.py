@@ -44,12 +44,13 @@ from new_chat_learning.application.runtime import RuntimeApplication
 from new_chat_learning.commands.fast_delete import FastDeleteRequest, parse_fast_delete
 from new_chat_learning.commands.group_settings import (
     LEARNING_MODES,
+    CrossGroupCommand,
     GroupSettingsCommand,
     parse_legacy_group_command,
     parse_on_off,
     transition_toggle,
 )
-from new_chat_learning.commands.permissions import is_group_admin
+from new_chat_learning.commands.permissions import is_group_admin, is_plugin_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
 from new_chat_learning.migration.scanner import scan_directory, scan_file
 from new_chat_learning.platform.astrbot.renderer import render_message_chain
@@ -311,11 +312,14 @@ class NewChatLearningPlugin(star.Star):
         if self._legacy_command_aliases_enabled():
             legacy_command = parse_legacy_group_command(event.get_message_str())
         if legacy_command is not None:
-            await self._handle_group_settings_command(
-                event,
-                legacy_command,
-                source="legacy_command",
-            )
+            if isinstance(legacy_command, CrossGroupCommand):
+                await self._handle_cross_group_command(event, legacy_command)
+            else:
+                await self._handle_group_settings_command(
+                    event,
+                    legacy_command,
+                    source="legacy_command",
+                )
             event.stop_event()
             return
         fast_delete = parse_fast_delete(event)
@@ -479,7 +483,12 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl media-scan - 扫描并标记本群媒体状态\n"
                 "/ncl media-preview - 预览本群失效媒体影响\n"
                 "/ncl media-cleanup-prepare [prune|drop-answer] - 准备清理\n"
-                "/ncl media-cleanup-apply <计划ID> confirm - 备份并执行清理"
+                "/ncl media-cleanup-apply <计划ID> confirm - 备份并执行清理\n"
+                "全局/插件管理员旧版跨群命令：\n"
+                "!grouplist - 查看学习、回复、自主管理和全局排除群\n"
+                "!add/remove learning|learnings|reply <群号...>\n"
+                "!add tag <标签> <群号...> / !remove tag <群号...>\n"
+                "!add/remove subadmin|unmerge <群号...>"
             )
         )
 
@@ -1074,6 +1083,124 @@ class NewChatLearningPlugin(star.Star):
             event.set_result(MessageEventResult().message("群聊设置保存失败，原配置已保留。"))
             return
         event.set_result(MessageEventResult().message(self._format_group_settings(result, saved=True)))
+
+    async def _handle_cross_group_command(
+        self,
+        event: AstrMessageEvent,
+        command: CrossGroupCommand,
+    ) -> None:
+        if self.app is None or not is_plugin_admin(event, getattr(self, "config", {})):
+            event.stop_event()
+            return
+        settings = self.app.config.cross_group_settings()
+        if command.action == "list":
+            event.set_result(
+                MessageEventResult().message(self._format_cross_group_settings(settings))
+            )
+            return
+
+        group_ids = [self._web_group_id(value) for value in command.group_ids]
+        if not group_ids or any(group_id is None for group_id in group_ids):
+            event.set_result(
+                MessageEventResult().message(self._cross_group_command_usage(command.category))
+            )
+            return
+        normalized_group_ids = list(
+            dict.fromkeys(group_id for group_id in group_ids if group_id is not None)
+        )
+        sub_admins = None
+        if command.category == "subadmin" and command.action == "add":
+            sub_admins = {}
+            for group_id in normalized_group_ids:
+                try:
+                    group = await event.get_group(group_id)
+                except Exception:
+                    self.logger.exception("Failed to read target group administrators.")
+                    group = None
+                admin_ids = self._group_manager_ids(group)
+                if not admin_ids:
+                    event.set_result(
+                        MessageEventResult().message(
+                            f"无法读取群 {group_id} 的群主或群管理员，未保存任何修改。"
+                        )
+                    )
+                    return
+                sub_admins[group_id] = admin_ids
+        try:
+            result = await self.app.update_cross_group_settings(
+                action=command.action,
+                category=command.category,
+                group_ids=normalized_group_ids,
+                tag=command.tag,
+                sub_admins=sub_admins,
+                expected_revision=settings["revision"],
+                actor_id=event.get_sender_id(),
+                source="legacy_command",
+            )
+        except ValueError as exc:
+            if str(exc) == "revision_conflict":
+                text = "配置已被其他入口修改，请重试。"
+            else:
+                text = self._cross_group_command_usage(command.category)
+            event.set_result(MessageEventResult().message(text))
+            return
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist cross-group settings from command.")
+            event.set_result(MessageEventResult().message("跨群设置保存失败，原配置已保留。"))
+            return
+        verb = "添加" if command.action == "add" else "移除"
+        event.set_result(
+            MessageEventResult().message(
+                f"跨群设置已保存：{verb} {command.category}，"
+                f"共 {len(normalized_group_ids)} 个群。\n"
+                f"{self._format_cross_group_settings(result)}"
+            )
+        )
+
+    @staticmethod
+    def _group_manager_ids(group) -> list[str]:
+        if group is None:
+            return []
+        values = [getattr(group, "group_owner", None)]
+        admins = getattr(group, "group_admins", [])
+        if isinstance(admins, (list, tuple, set)):
+            values.extend(admins)
+        result = []
+        for value in values:
+            qq_id = str(value or "").strip()
+            if qq_id.isdigit() and 5 <= len(qq_id) <= 20 and qq_id not in result:
+                result.append(qq_id)
+        return result
+
+    @staticmethod
+    def _format_cross_group_settings(settings: dict) -> str:
+        def joined(key: str) -> str:
+            values = settings.get(key, [])
+            return "、".join(str(value) for value in values) if values else "无"
+
+        sub_admin_groups = [
+            entry.get("group_id", "")
+            for entry in settings.get("group_sub_admins", [])
+            if isinstance(entry, dict) and entry.get("group_id")
+        ]
+        return (
+            f"已开启学习的群：{joined('learning_group_ids')}\n"
+            f"已开启回复的群：{joined('reply_group_ids')}\n"
+            f"允许自主管理的群：{'、'.join(sub_admin_groups) if sub_admin_groups else '无'}\n"
+            f"不进入全局词库的群：{joined('excluded_group_ids')}"
+        )
+
+    @staticmethod
+    def _cross_group_command_usage(category: str) -> str:
+        usages = {
+            "learning": "用法：!add/remove learning <群号...>",
+            "learnings": "用法：!add/remove learnings <群号...>",
+            "reply": "用法：!add/remove reply <群号...>",
+            "tag": "用法：!add tag <标签> <群号...> 或 !remove tag <群号...>",
+            "subadmin": "用法：!add/remove subadmin <群号...>",
+            "unmerge": "用法：!add/remove unmerge <群号...>",
+        }
+        return usages.get(category, "跨群设置命令无效。")
 
     @staticmethod
     def _format_group_settings(settings: dict, *, saved: bool = False) -> str:

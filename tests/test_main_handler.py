@@ -562,6 +562,195 @@ def test_parameterless_legacy_alias_toggles_current_group(monkeypatch):
     assert plugin.app.calls[0]["mode"] == "reply"
 
 
+def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": ["10001"],
+                "reply_group_ids": ["10002"],
+                "excluded_group_ids": ["10003"],
+                "group_sub_admins": [
+                    {"group_id": "10004", "admin_ids": ["12345"]}
+                ],
+                "revision": "revision-1",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.config = CrossGroupConfig()
+    event = Event()
+    event.is_admin = lambda: True
+
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event, main_module.CrossGroupCommand("list")
+        )
+    )
+
+    assert "已开启学习的群：10001" in event.result.text
+    assert "已开启回复的群：10002" in event.result.text
+    assert "允许自主管理的群：10004" in event.result.text
+    assert "不进入全局词库的群：10003" in event.result.text
+
+    plugin.config = {
+        "permissions": {
+            "group_sub_admins": [{"group_id": "10001", "admin_ids": ["7"]}]
+        }
+    }
+    event = Event()
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event, main_module.CrossGroupCommand("list")
+        )
+    )
+    assert event.stopped is True
+    assert event.result is None
+
+
+def test_cross_group_learning_command_persists_all_target_groups(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": [],
+                "reply_group_ids": [],
+                "excluded_group_ids": [],
+                "group_sub_admins": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_cross_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                "learning_group_ids": ["10001", "10002"],
+                "reply_group_ids": [],
+                "excluded_group_ids": [],
+                "group_sub_admins": [],
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand(
+                "add", "learning", ("10001", "10002", "10001")
+            ),
+        )
+    )
+
+    assert plugin.app.calls == [
+        {
+            "action": "add",
+            "category": "learning",
+            "group_ids": ["10001", "10002"],
+            "tag": None,
+            "sub_admins": None,
+            "expected_revision": "revision-1",
+            "actor_id": "7",
+            "source": "legacy_command",
+        }
+    ]
+    assert "共 2 个群" in event.result.text
+
+
+def test_cross_group_subadmin_reads_target_group_managers_before_save(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": [],
+                "reply_group_ids": [],
+                "excluded_group_ids": [],
+                "group_sub_admins": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_cross_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return self.config.cross_group_settings()
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    async def get_group(group_id):
+        assert group_id == "10002"
+        return SimpleNamespace(
+            group_owner="12345", group_admins=[23456, "12345", "bad"]
+        )
+
+    event.get_group = get_group
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand("add", "subadmin", ("10002",)),
+        )
+    )
+
+    assert plugin.app.calls[0]["sub_admins"] == {
+        "10002": ["12345", "23456"]
+    }
+
+
+def test_cross_group_subadmin_aborts_when_group_managers_cannot_be_read(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": [],
+                "reply_group_ids": [],
+                "excluded_group_ids": [],
+                "group_sub_admins": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_cross_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    async def get_group(_group_id):
+        return None
+
+    event.get_group = get_group
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand("add", "subadmin", ("10002",)),
+        )
+    )
+
+    assert plugin.app.calls == []
+    assert "未保存任何修改" in event.result.text
+
+
 def test_group_command_reports_revision_conflict(monkeypatch):
     main_module = load_main(monkeypatch)
 

@@ -12,25 +12,42 @@ class GroupSettingsCommand:
     arguments: tuple[str, ...] = ()
 
 
-def parse_legacy_group_command(text: str) -> GroupSettingsCommand | None:
+@dataclass(frozen=True)
+class CrossGroupCommand:
+    action: str
+    category: str = ""
+    group_ids: tuple[str, ...] = ()
+    tag: str | None = None
+
+
+def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCommand | None:
     parts = text.strip().split()
     if not parts:
         return None
     command = parts[0].lower()
-    arguments = tuple(part.lower() for part in parts[1:])
+    raw_arguments = tuple(parts[1:])
+    arguments = tuple(part.lower() for part in raw_arguments)
     if command == "!learning":
         return GroupSettingsCommand("learning", arguments)
     if command == "!reply":
         return GroupSettingsCommand("reply", arguments)
     if command == "!grouplist" and not arguments:
-        return GroupSettingsCommand("mode")
-    if command in {"!add", "!remove"} and len(arguments) >= 1:
-        action = "on" if command == "!add" else "off"
+        return CrossGroupCommand("list")
+    if command in {"!add", "!remove"} and arguments:
+        action = "add" if command == "!add" else "remove"
         category = arguments[0]
-        if category in {"learning", "learnings"}:
-            return GroupSettingsCommand("learning", (action, *arguments[1:]))
-        if category == "reply":
-            return GroupSettingsCommand("reply", (action, *arguments[1:]))
+        if category not in {"learning", "learnings", "reply", "tag", "subadmin", "unmerge"}:
+            return None
+        if category == "tag" and action == "add":
+            if len(raw_arguments) < 3:
+                return CrossGroupCommand(action, category)
+            return CrossGroupCommand(
+                action,
+                category,
+                tuple(raw_arguments[2:]),
+                raw_arguments[1],
+            )
+        return CrossGroupCommand(action, category, tuple(raw_arguments[1:]))
     return None
 
 

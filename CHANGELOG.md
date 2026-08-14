@@ -1,5 +1,11 @@
 # 更新日志
 
+## 未发布
+
+- 恢复原版 `!grouplist` 与 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 跨群控制语义。
+- 跨群命令仅允许 AstrBot 全局管理员或插件管理员执行，配置整批原子保存并写入审计。
+- `!add subadmin` 通过 NapCat/AstrBot 读取目标群当前群主和群管理员名单；读取失败时不保存部分修改。
+
 ## 0.1.0-beta.31.post4 - 2026-08-14
 
 首个公开预览版本，基于 Beta 31 云端 TTS 能力和 Beta 31.post2 的 WebUI 会话基础。

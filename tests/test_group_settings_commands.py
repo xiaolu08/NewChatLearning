@@ -1,4 +1,5 @@
 from new_chat_learning.commands.group_settings import (
+    CrossGroupCommand,
     GroupSettingsCommand,
     parse_legacy_group_command,
     parse_on_off,
@@ -13,16 +14,28 @@ def test_parse_legacy_group_commands():
     assert parse_legacy_group_command(" !REPLY OFF ") == GroupSettingsCommand(
         "reply", ("off",)
     )
-    assert parse_legacy_group_command("!grouplist") == GroupSettingsCommand("mode")
-    assert parse_legacy_group_command("!add learnings") == GroupSettingsCommand(
-        "learning", ("on",)
+    assert parse_legacy_group_command("!grouplist") == CrossGroupCommand("list")
+    assert parse_legacy_group_command("!add learnings 10001 10002") == CrossGroupCommand(
+        "add", "learnings", ("10001", "10002")
     )
-    assert parse_legacy_group_command("!remove reply") == GroupSettingsCommand(
-        "reply", ("off",)
+    assert parse_legacy_group_command("!remove reply 10001") == CrossGroupCommand(
+        "remove", "reply", ("10001",)
+    )
+    assert parse_legacy_group_command("!add tag Friends 10001 10002") == CrossGroupCommand(
+        "add", "tag", ("10001", "10002"), "Friends"
+    )
+    assert parse_legacy_group_command("!remove tag 10001") == CrossGroupCommand(
+        "remove", "tag", ("10001",)
+    )
+    assert parse_legacy_group_command("!add subadmin 10001") == CrossGroupCommand(
+        "add", "subadmin", ("10001",)
+    )
+    assert parse_legacy_group_command("!remove unmerge 10001") == CrossGroupCommand(
+        "remove", "unmerge", ("10001",)
     )
 
 
-def test_legacy_parser_does_not_intercept_unrelated_or_cross_group_forms():
+def test_legacy_parser_does_not_intercept_unrelated_forms():
     assert parse_legacy_group_command("hello !learning on") is None
     assert parse_legacy_group_command("!grouplist extra") is None
     assert parse_legacy_group_command("!unknown") is None

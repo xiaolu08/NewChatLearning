@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 
 import pytest
 
@@ -286,7 +287,7 @@ def test_filter_settings_roll_back_on_save_failure():
 
     source = Source({"filters": {"enabled": True, "contains": ["old"]}})
     service = ConfigService(source)
-    before = dict(source)
+    before = deepcopy(source)
     with pytest.raises(OSError, match="disk full"):
         asyncio.run(
             service.update_filter_settings(
@@ -295,6 +296,139 @@ def test_filter_settings_roll_back_on_save_failure():
             )
         )
     assert source == before
+
+
+def test_cross_group_settings_update_all_legacy_categories_atomically():
+    class Source(dict):
+        saves = 0
+
+        async def save_config_async(self):
+            self.saves += 1
+            return True
+
+    source = Source(
+        {
+            "reply": {"silent_group_ids": ["10001"]},
+            "permissions": {"plugin_admin_ids": ["99999"]},
+        }
+    )
+    service = ConfigService(source)
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="learnings",
+            group_ids=["10001", "10002", "10001"],
+            expected_revision=service.revision,
+        )
+    )
+    assert result["learning_group_ids"] == ["10001", "10002"]
+    assert result["reply_group_ids"] == ["10001", "10002"]
+    assert result["silent_group_ids"] == []
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="tag",
+            group_ids=["10001", "10002"],
+            tag="friends",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["group_tags"] == [
+        {"group_id": "10001", "tags": ["friends"]},
+        {"group_id": "10002", "tags": ["friends"]},
+    ]
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="subadmin",
+            group_ids=["10001"],
+            sub_admins={"10001": ["12345", "23456"]},
+            expected_revision=service.revision,
+        )
+    )
+    assert result["group_sub_admins"] == [
+        {"group_id": "10001", "admin_ids": ["12345", "23456"]}
+    ]
+    assert source["permissions"]["plugin_admin_ids"] == ["99999"]
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="unmerge",
+            group_ids=["10002"],
+            expected_revision=service.revision,
+        )
+    )
+    assert result["excluded_group_ids"] == ["10002"]
+    assert source.saves == 4
+
+
+def test_cross_group_settings_remove_tag_and_roll_back_on_save_failure():
+    class Source(dict):
+        fail = False
+
+        async def save_config_async(self):
+            if self.fail:
+                raise OSError("disk full")
+            return True
+
+    source = Source(
+        {
+            "library": {
+                "group_tags": [
+                    {"group_id": "10001", "tags": ["friends", "games"]}
+                ]
+            }
+        }
+    )
+    service = ConfigService(source)
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="remove",
+            category="tag",
+            group_ids=["10001"],
+            expected_revision=service.revision,
+        )
+    )
+    assert result["group_tags"] == []
+
+    before = deepcopy(source)
+    source.fail = True
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_cross_group_settings(
+                action="add",
+                category="learning",
+                group_ids=["10002"],
+                expected_revision=service.revision,
+            )
+        )
+    assert source == before
+
+
+def test_cross_group_settings_validate_ids_and_revision():
+    service = ConfigService({})
+    with pytest.raises(ValueError, match="invalid_cross_group_settings"):
+        asyncio.run(
+            service.update_cross_group_settings(
+                action="add",
+                category="learning",
+                group_ids=["bad"],
+                expected_revision=service.revision,
+            )
+        )
+    with pytest.raises(ValueError, match="revision_conflict"):
+        asyncio.run(
+            service.update_cross_group_settings(
+                action="add",
+                category="learning",
+                group_ids=["10001"],
+                expected_revision="stale",
+            )
+        )
 
 
 def test_permission_settings_normalize_persist_and_reject_stale_revision():
