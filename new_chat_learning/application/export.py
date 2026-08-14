@@ -115,14 +115,20 @@ class LibraryExportService:
             **result,
         }
 
-    def _cleanup_expired(self) -> None:
+    def cleanup_expired(self) -> int:
         cutoff = time.time() - EXPORT_TTL_SECONDS
+        removed = 0
         for path in self.export_dir.glob("NewChatLearning-group-*"):
             try:
                 if path.suffix.lower() in {".zip", ".cl"} and path.stat().st_mtime < cutoff:
                     path.unlink()
+                    removed += 1
             except OSError:
                 continue
+        return removed
+
+    def _cleanup_expired(self) -> None:
+        self.cleanup_expired()
 
     @staticmethod
     def _write_package(

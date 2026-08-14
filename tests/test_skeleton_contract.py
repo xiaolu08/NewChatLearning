@@ -64,6 +64,17 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'apiGet("api/tts/settings")' in dashboard
     assert 'api/tts/settings/update' in dashboard
     assert 'api/tts/test' in dashboard
+    assert 'id="tab-tasks"' in dashboard
+    assert 'id="tasks-view"' in dashboard
+    assert 'apiGet("api/tasks")' in dashboard
+    assert 'postSecure("api/tasks/save"' in dashboard
+    assert 'postSecure("api/tasks/run"' in dashboard
+    assert 'postSecure("api/tasks/delete"' in dashboard
+    tasks_refresh = dashboard.split(
+        'el("tasks-refresh").addEventListener', 1
+    )[1].split('el("task-save")', 1)[0]
+    assert 'refreshAuth()' not in tasks_refresh
+    assert 'location.reload' not in tasks_refresh
     assert 'id="tab-migration"' in dashboard
     assert 'id="migration-view"' in dashboard
     assert '#migration-prepare:disabled { cursor: not-allowed; }' in dashboard

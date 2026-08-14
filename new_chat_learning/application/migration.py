@@ -110,10 +110,11 @@ class MigrationService:
             reverse=True,
         )[:50]
 
-    def cleanup_expired(self) -> None:
+    def cleanup_expired(self) -> int:
         if not self.staging_dir.is_dir():
-            return
+            return 0
         now = int(time.time())
+        removed = 0
         for path in self.staging_dir.glob("*.json"):
             try:
                 manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -131,6 +132,8 @@ class MigrationService:
                 self._remove_staging(manifest)
             if expired_plan or old_applied:
                 path.unlink(missing_ok=True)
+                removed += 1
+        return removed
 
     def _remove_staging(self, manifest: dict[str, Any]) -> None:
         staging_name = str(manifest.get("staging_file", ""))

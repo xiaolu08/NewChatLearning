@@ -1,6 +1,7 @@
 import asyncio
 import sqlite3
 
+from new_chat_learning.constants import SCHEMA_VERSION
 from new_chat_learning.infrastructure.database import SQLiteStore
 
 
@@ -18,7 +19,7 @@ def test_database_initializes_schema_and_statistics(tmp_path):
     health, statistics = asyncio.run(scenario())
 
     assert health["connected"] is True
-    assert health["schema_version"] == 8
+    assert health["schema_version"] == SCHEMA_VERSION
     assert health["integrity"] == "ok"
     assert statistics["questions"] == 0
     assert statistics["answers"] == 0
@@ -111,7 +112,7 @@ def test_database_upgrades_skeleton_schema_v1_in_place(tmp_path):
         answer_columns = {row[1] for row in connection.execute("PRAGMA table_info(answers)")}
     finally:
         connection.close()
-    assert health["schema_version"] == 8
+    assert health["schema_version"] == SCHEMA_VERSION
     assert statistics["pending_messages"] == 0
     assert "frequency" in question_columns
     assert "plain_text" in question_columns

@@ -2238,6 +2238,110 @@ def test_web_backups_requires_login_and_returns_safe_metadata(monkeypatch):
     assert "path" not in response["data"]["backups"][0]
 
 
+def test_web_tasks_requires_login_and_returns_safe_history(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, _csrf=None):
+            assert token == "session"
+            return True
+
+    class Tasks:
+        async def list_tasks(self):
+            return [
+                {
+                    "task_id": "a" * 32,
+                    "name": "每日扫描",
+                    "task_type": "media_scan",
+                    "history": [{"status": "success", "summary": {"scanned_answers": 2}}],
+                }
+            ]
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.tasks = Tasks()
+
+    response = asyncio.run(plugin.web_tasks())
+    assert response["status"] == "ok"
+    assert response["data"]["tasks"][0]["history"][0]["summary"] == {
+        "scanned_answers": 2
+    }
+
+
+def test_web_task_save_passes_csrf_confirmation_and_revision(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class Tasks:
+        async def save_task(self, **kwargs):
+            assert kwargs["task_id"] == "a" * 32
+            assert kwargs["expected_revision"] == 4
+            assert kwargs["cleanup_mode"] == "apply"
+            assert kwargs["confirmed"] is True
+            assert kwargs["actor_id"].startswith("webui:")
+            return {"task_id": kwargs["task_id"], "revision": 5}
+
+    async def body():
+        return (
+            b'{"task_id":"'
+            + b"a" * 32
+            + b'","revision":4,"name":"auto","task_type":"filter_cleanup",'
+            b'"group_id":"10001","enabled":true,"interval_minutes":1440,'
+            b'"cleanup_mode":"apply","confirmed":true,"csrf_token":"csrf"}'
+        )
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.tasks = Tasks()
+
+    response = asyncio.run(plugin.web_task_save())
+    assert response["status"] == "ok"
+    assert response["data"]["revision"] == 5
+
+
+def test_web_task_run_does_not_hide_destructive_confirmation(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, _token, _csrf):
+            return True
+
+    class Tasks:
+        async def run_now(self, **kwargs):
+            assert kwargs["confirmed"] is False
+            raise ValueError("destructive_confirmation_required")
+
+    async def body():
+        return b'{"task_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","confirmed":false,"csrf_token":"csrf"}'
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.web_auth = Auth()
+    plugin.app.tasks = Tasks()
+
+    response = asyncio.run(plugin.web_task_run())
+    assert response["status"] == "error"
+    assert response["message"] == "立即执行自动删除任务前需要明确确认。"
+
+
 def test_web_audit_requires_login_and_passes_bounded_cursor(monkeypatch):
     main_module = load_main(monkeypatch)
 

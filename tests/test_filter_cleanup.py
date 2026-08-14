@@ -201,3 +201,37 @@ def test_filter_cleanup_does_not_prepare_when_filters_are_disabled(tmp_path):
         "prepared": False,
         "reason": "no_filtered_answers",
     }
+
+
+def test_scheduled_filter_cleanup_previews_or_backs_up_before_deletion(tmp_path):
+    async def scenario():
+        data_dir, store, _config, service = await seeded_service(tmp_path)
+        try:
+            preview = await service.run_scheduled(
+                group_id="10001", actor_id="task:preview", apply=False
+            )
+            before_count = store._require_connection().execute(
+                "SELECT COUNT(*) FROM answers"
+            ).fetchone()[0]
+            applied = await service.run_scheduled(
+                group_id="10001", actor_id="task:apply", apply=True
+            )
+            after_count = store._require_connection().execute(
+                "SELECT COUNT(*) FROM answers"
+            ).fetchone()[0]
+            audit = store._require_connection().execute(
+                "SELECT actor_id, action, details_json FROM audit_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            return data_dir, preview, applied, before_count, after_count, tuple(audit)
+        finally:
+            await store.close()
+
+    data_dir, preview, applied, before_count, after_count, audit = asyncio.run(scenario())
+    assert preview["reason"] == "preview_only"
+    assert preview["affected_answers"] == 1
+    assert before_count == 2
+    assert after_count == 1
+    assert applied["deleted_answers"] == 1
+    assert (data_dir / "backups" / applied["backup_name"]).is_file()
+    assert audit[0:2] == ("task:apply", "cleanup_filtered_answers")
+    assert "blocked answer" not in audit[2]

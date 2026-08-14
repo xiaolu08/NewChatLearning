@@ -110,6 +110,47 @@ class FilterCleanupService:
             await asyncio.to_thread(path.write_text, canonical_json(manifest), "utf-8")
             return {**result, "backup_path": str(backup_path)}
 
+    async def run_scheduled(
+        self,
+        *,
+        group_id: str,
+        actor_id: str,
+        apply: bool,
+    ) -> dict[str, object]:
+        """Preview or execute a fixed-policy cleanup without a reusable WebUI plan."""
+        async with self._lock:
+            operations, summary = await self._matched_operations(str(group_id))
+            if not operations:
+                return {"applied": False, "reason": "no_filtered_answers", **summary}
+            if not apply:
+                return {"applied": False, "reason": "preview_only", **summary}
+            config_revision = self.config.revision
+            async with self.config.revision_guard(config_revision):
+                current_operations, current_summary = await self._matched_operations(
+                    str(group_id)
+                )
+                if current_operations != operations:
+                    return {"applied": False, "reason": "candidates_changed", **current_summary}
+                plan_id = secrets.token_hex(16)
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                backup_path = (
+                    self.backup_dir
+                    / f"before-filter-cleanup-{timestamp}-{plan_id[:12]}.sqlite3"
+                )
+                await self.store.backup_to(backup_path)
+                result = await self.store.apply_filter_cleanup(
+                    plan_id=plan_id,
+                    group_id=str(group_id),
+                    actor_id=str(actor_id),
+                    config_revision=config_revision,
+                    operations=current_operations,
+                )
+            return {
+                **result,
+                "backup_name": backup_path.name,
+                "rule_type_counts": current_summary["rule_type_counts"],
+            }
+
     async def _matched_operations(
         self, group_id: str
     ) -> tuple[list[dict[str, object]], dict[str, object]]:

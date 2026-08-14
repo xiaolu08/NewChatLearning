@@ -4,6 +4,7 @@ import sqlite3
 import pytest
 
 from new_chat_learning.application.backup import BackupService
+from new_chat_learning.constants import SCHEMA_VERSION
 from new_chat_learning.infrastructure.database import SQLiteStore
 
 
@@ -30,7 +31,7 @@ def test_backup_service_lists_and_inspects_only_local_sqlite_backups(tmp_path):
     entries, inspection = asyncio.run(scenario())
     assert [entry["name"] for entry in entries] == ["before-test.sqlite3"]
     assert inspection["integrity"] == "ok"
-    assert inspection["schema_version"] == 8
+    assert inspection["schema_version"] == SCHEMA_VERSION
     assert inspection["counts"]["questions"] == 1
     assert inspection["restorable"] is True
 
@@ -209,8 +210,8 @@ def test_restore_migrates_older_schema_backup(tmp_path):
         return result, health
 
     result, health = asyncio.run(scenario())
-    assert result["schema_version"] == 8
-    assert health["schema_version"] == 8
+    assert result["schema_version"] == SCHEMA_VERSION
+    assert health["schema_version"] == SCHEMA_VERSION
     assert health["integrity"] == "ok"
 
 

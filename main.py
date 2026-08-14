@@ -222,6 +222,25 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 媒体清理执行",
             ),
+            ("tasks", self.web_tasks, ["GET"], "NewChatLearning 定时任务"),
+            (
+                "tasks/save",
+                self.web_task_save,
+                ["POST"],
+                "NewChatLearning 保存定时任务",
+            ),
+            (
+                "tasks/delete",
+                self.web_task_delete,
+                ["POST"],
+                "NewChatLearning 删除定时任务",
+            ),
+            (
+                "tasks/run",
+                self.web_task_run,
+                ["POST"],
+                "NewChatLearning 立即执行定时任务",
+            ),
             ("backups", self.web_backups, ["GET"], "NewChatLearning 备份列表"),
             (
                 "backups/inspect",
@@ -2264,6 +2283,100 @@ class NewChatLearningPlugin(star.Star):
         return self._web_json(
             {"status": "ok", "data": {"backups": await self.app.backup.list_backups()}}
         )
+
+    async def web_tasks(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {"status": "ok", "data": {"tasks": await self.app.tasks.list_tasks()}}
+        )
+
+    async def web_task_save(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        task_id = str(payload.get("task_id", "")).strip().lower()
+        raw_revision = payload.get("revision")
+        try:
+            revision = int(raw_revision) if task_id else None
+            result = await self.app.tasks.save_task(
+                task_id=task_id,
+                name=str(payload.get("name", "")),
+                task_type=str(payload.get("task_type", "")),
+                group_id=str(payload.get("group_id", "")),
+                enabled=payload.get("enabled"),
+                interval_minutes=payload.get("interval_minutes"),
+                cleanup_mode=str(payload.get("cleanup_mode", "preview")),
+                expected_revision=revision,
+                confirmed=payload.get("confirmed") is True,
+                actor_id=self._web_actor_id(),
+            )
+        except (TypeError, ValueError) as exc:
+            messages = {
+                "destructive_confirmation_required": "自动删除任务需要明确二次确认。",
+                "invalid_task_name": "任务名称无效。",
+                "invalid_task_type": "任务类型无效。",
+                "invalid_task_group": "群号无效。",
+                "invalid_task_interval": "执行间隔必须在 15 分钟到 30 天之间。",
+                "invalid_cleanup_mode": "清理策略无效。",
+                "task_not_found": "任务不存在。",
+                "task_revision_required": "任务版本缺失，请刷新后重试。",
+                "task_revision_conflict": "任务已被修改，请刷新后重试。",
+                "task_running": "任务正在执行，暂时不能修改。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(str(exc), "任务参数无效。")},
+                status_code=409 if "revision" in str(exc) else 400,
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_task_delete(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        try:
+            await self.app.tasks.delete_task(
+                task_id=str(payload.get("task_id", "")).strip().lower(),
+                expected_revision=int(payload.get("revision")),
+                confirmed=payload.get("confirmed") is True,
+                actor_id=self._web_actor_id(),
+            )
+        except (TypeError, ValueError) as exc:
+            messages = {
+                "confirmation_required": "请先确认删除任务。",
+                "task_not_found": "任务不存在。",
+                "invalid_task_id": "任务 ID 无效。",
+                "task_running": "任务正在执行，暂时不能删除。",
+                "task_revision_conflict": "任务已被修改，请刷新后重试。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(str(exc), "任务删除失败。")},
+                status_code=409,
+            )
+        return self._web_json({"status": "ok", "data": {"deleted": True}})
+
+    async def web_task_run(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        try:
+            result = await self.app.tasks.run_now(
+                task_id=str(payload.get("task_id", "")).strip().lower(),
+                confirmed=payload.get("confirmed") is True,
+                actor_id=self._web_actor_id(),
+            )
+        except ValueError as exc:
+            messages = {
+                "destructive_confirmation_required": "立即执行自动删除任务前需要明确确认。",
+                "task_not_found": "任务不存在。",
+                "task_running": "任务已经在执行。",
+            }
+            return self._web_json(
+                {"status": "error", "message": messages.get(str(exc), "任务无法执行。")},
+                status_code=409,
+            )
+        return self._web_json({"status": "ok", "data": result})
 
     async def web_audit(self):
         error = await self._authorized_web_read()

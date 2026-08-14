@@ -113,6 +113,7 @@
         <button id="tab-media" type="button">媒体</button>
         <button id="tab-migration" type="button">迁移</button>
         <button id="tab-tts" type="button">语音</button>
+        <button id="tab-tasks" type="button">任务</button>
         <button id="tab-backups" type="button">备份</button>
         <button id="tab-diagnostics" type="button">诊断</button>
         <button id="tab-audit" type="button">审计</button>
@@ -317,6 +318,27 @@
           <div id="tts-test-result" class="result" role="status"></div>
         </section>
       </div>
+      <div id="tasks-view" class="hidden">
+        <div class="notice">后台任务只执行内建操作，不接受命令、脚本或任意路径。过滤词库自动删除默认不创建，启用前需要明确确认，并在每次执行时先备份再复核候选。</div>
+        <div class="toolbar"><button id="tasks-refresh" class="secondary" type="button">刷新任务</button><button id="task-new" type="button">新建任务</button><div id="tasks-message" class="result" role="status"></div></div>
+        <div class="split">
+          <div><div id="tasks-list" class="list"><p style="padding:14px">正在读取任务。</p></div></div>
+          <div>
+            <section style="margin-top:0"><h2 id="task-editor-title">新建任务</h2>
+              <label for="task-name">任务名称</label><input id="task-name" maxlength="80" placeholder="例如：每日媒体健康扫描">
+              <div class="rule-grid">
+                <div><label for="task-type">任务类型</label><select id="task-type"><option value="media_scan">媒体健康扫描</option><option value="database_backup">数据库备份</option><option value="artifact_cleanup">过期产物清理</option><option value="filter_cleanup">过滤词库清理</option></select></div>
+                <div><label for="task-interval">执行间隔（分钟）</label><input id="task-interval" type="number" min="15" max="43200" value="1440"></div>
+                <div id="task-group-field"><label for="task-group">目标 QQ 群</label><input id="task-group" inputmode="numeric" maxlength="20" placeholder="输入 QQ 群号"></div>
+                <div id="task-cleanup-field" class="hidden"><label for="task-cleanup-mode">过滤清理策略</label><select id="task-cleanup-mode"><option value="preview">仅预演统计</option><option value="apply">备份后自动删除</option></select></div>
+              </div>
+              <label class="inline-check"><input id="task-enabled" type="checkbox"> 启用后台自动执行</label>
+              <div class="toolbar" style="margin-top:16px"><button id="task-save" type="button">保存任务</button><button id="task-run" class="secondary" type="button" disabled>立即执行</button><button id="task-delete" class="danger" type="button" disabled>删除任务</button></div>
+            </section>
+            <section><h2>最近执行</h2><div class="table-scroll"><table><thead><tr><th>开始时间</th><th>触发</th><th>状态</th><th>结果摘要</th></tr></thead><tbody id="task-history"></tbody></table></div></section>
+          </div>
+        </div>
+      </div>
       <div id="backups-view" class="hidden">
         <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
         <div class="split">
@@ -406,6 +428,14 @@
         <div class="actions"><button id="permissions-cancel" class="secondary" type="button">取消</button><button type="submit">确认保存</button></div>
       </form>
     </dialog>
+    <dialog id="task-confirm-dialog">
+      <form id="task-confirm-form">
+        <h2 id="task-confirm-title">确认任务操作</h2>
+        <p id="task-confirm-copy"></p>
+        <div id="task-confirm-message" class="message" role="status"></div>
+        <div class="actions"><button id="task-confirm-cancel" class="secondary" type="button">取消</button><button id="task-confirm-submit" class="danger" type="submit">确认</button></div>
+      </form>
+    </dialog>
     <script src="/api/plugin/page/bridge-sdk.js"></script>
     <script>
       let authState = null;
@@ -424,6 +454,8 @@
       let migrationPlan = null;
       let libraryExportFormat = "archive";
       let auditBeforeId = null;
+      let selectedTask = null;
+      let pendingTaskAction = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
@@ -479,10 +511,11 @@
         const permissions = view === "permissions";
         const migration = view === "migration";
         const tts = view === "tts";
+        const tasks = view === "tasks";
         const backups = view === "backups";
         const diagnostics = view === "diagnostics";
         const audit = view === "audit";
-        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || migration || tts || backups || diagnostics || audit);
+        el("overview-view").classList.toggle("hidden", media || library || groups || filters || permissions || migration || tts || tasks || backups || diagnostics || audit);
         el("groups-view").classList.toggle("hidden", !groups);
         el("library-view").classList.toggle("hidden", !library);
         el("media-view").classList.toggle("hidden", !media);
@@ -490,10 +523,11 @@
         el("permissions-view").classList.toggle("hidden", !permissions);
         el("migration-view").classList.toggle("hidden", !migration);
         el("tts-view").classList.toggle("hidden", !tts);
+        el("tasks-view").classList.toggle("hidden", !tasks);
         el("backups-view").classList.toggle("hidden", !backups);
         el("diagnostics-view").classList.toggle("hidden", !diagnostics);
         el("audit-view").classList.toggle("hidden", !audit);
-        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !migration && !tts && !backups && !diagnostics && !audit);
+        el("tab-overview").classList.toggle("active", !media && !library && !groups && !filters && !permissions && !migration && !tts && !tasks && !backups && !diagnostics && !audit);
         el("tab-groups").classList.toggle("active", groups);
         el("tab-library").classList.toggle("active", library);
         el("tab-media").classList.toggle("active", media);
@@ -501,6 +535,7 @@
         el("tab-permissions").classList.toggle("active", permissions);
         el("tab-migration").classList.toggle("active", migration);
         el("tab-tts").classList.toggle("active", tts);
+        el("tab-tasks").classList.toggle("active", tasks);
         el("tab-backups").classList.toggle("active", backups);
         el("tab-diagnostics").classList.toggle("active", diagnostics);
         el("tab-audit").classList.toggle("active", audit);
@@ -508,6 +543,7 @@
         if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
         if (migration) loadMigrationStatus().catch(error => setText("migration-message", error?.message || "迁移记录读取失败。"));
         if (tts) loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。"));
+        if (tasks) loadTasks().catch(error => setText("tasks-message", error?.message || "任务列表读取失败。"));
         if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
         if (diagnostics) loadDiagnostics().catch(error => setText("diagnostics-message", error?.message || "运行诊断读取失败。"));
         if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。"));
@@ -778,11 +814,94 @@
         el("blacklist-body").replaceChildren(...rows);
       }
 
+      const taskTypeNames = { media_scan: "媒体健康扫描", database_backup: "数据库备份", artifact_cleanup: "过期产物清理", filter_cleanup: "过滤词库清理" };
+      const taskStatusNames = { never: "尚未执行", running: "执行中", success: "成功", failed: "失败", interrupted: "被中断" };
+
+      function taskSummary(summary) {
+        const entries = Object.entries(summary || {});
+        return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ") : "-";
+      }
+
+      function updateTaskFields() {
+        const groupTask = ["media_scan", "filter_cleanup"].includes(el("task-type").value);
+        el("task-group-field").classList.toggle("hidden", !groupTask);
+        el("task-cleanup-field").classList.toggle("hidden", el("task-type").value !== "filter_cleanup");
+      }
+
+      function renderTaskHistory(history) {
+        const rows = (history || []).map(entry => {
+          const row = document.createElement("tr");
+          for (const value of [new Date(entry.started_at).toLocaleString(), entry.trigger_type === "manual" ? "手动" : "计划", taskStatusNames[entry.status] || entry.status, taskSummary(entry.summary)]) {
+            const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+          }
+          return row;
+        });
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 4; cell.textContent = "暂无执行记录。"; row.append(cell); rows.push(row); }
+        el("task-history").replaceChildren(...rows);
+      }
+
+      function editTask(task = null) {
+        selectedTask = task;
+        setText("task-editor-title", task ? "编辑任务" : "新建任务");
+        el("task-name").value = task?.name || "";
+        el("task-type").value = task?.task_type || "media_scan";
+        el("task-group").value = task?.group_id || "";
+        el("task-interval").value = task?.interval_minutes || 1440;
+        el("task-cleanup-mode").value = task?.cleanup_mode || "preview";
+        el("task-enabled").checked = Boolean(task?.enabled);
+        el("task-run").disabled = !task || task.last_status === "running";
+        el("task-delete").disabled = !task || task.last_status === "running";
+        updateTaskFields(); renderTaskHistory(task?.history || []);
+      }
+
+      async function loadTasks(selectId = selectedTask?.task_id || "") {
+        const data = payloadData(await bridge.apiGet("api/tasks"));
+        const tasks = data.tasks || [];
+        const buttons = tasks.map(task => {
+          const button = document.createElement("button"); button.type = "button";
+          button.textContent = task.name;
+          const status = taskStatusNames[task.last_status] || task.last_status;
+          const nextRun = task.next_run_at ? new Date(task.next_run_at).toLocaleString() : "未安排";
+          const meta = document.createElement("small"); meta.textContent = `${taskTypeNames[task.task_type] || task.task_type} · ${task.enabled ? "已启用" : "已停用"} · ${status} · 下次 ${nextRun}`;
+          button.append(meta); button.addEventListener("click", () => { document.querySelectorAll("#tasks-list button").forEach(item => item.classList.toggle("active", item === button)); editTask(task); });
+          if (task.task_id === selectId) { button.classList.add("active"); selectedTask = task; }
+          return button;
+        });
+        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "尚未创建后台任务。"; buttons.push(p); }
+        el("tasks-list").replaceChildren(...buttons);
+        const selected = tasks.find(task => task.task_id === selectId) || null;
+        editTask(selected);
+        setText("tasks-message", `共 ${tasks.length} 个任务，列表已刷新。`);
+      }
+
+      function taskPayload(confirmed = false) {
+        return {
+          task_id: selectedTask?.task_id || "",
+          revision: selectedTask?.revision ?? null,
+          name: el("task-name").value.trim(),
+          task_type: el("task-type").value,
+          group_id: el("task-group").value.trim(),
+          interval_minutes: Number(el("task-interval").value),
+          cleanup_mode: el("task-cleanup-mode").value,
+          enabled: el("task-enabled").checked,
+          confirmed,
+        };
+      }
+
+      async function saveTask(confirmed = false) {
+        const data = await postSecure("api/tasks/save", taskPayload(confirmed));
+        await loadTasks(data.task_id); setText("tasks-message", "任务已保存。 ");
+      }
+
+      function confirmTaskAction(title, copy, action) {
+        pendingTaskAction = action; setText("task-confirm-title", title); setText("task-confirm-copy", copy); setText("task-confirm-message", ""); el("task-confirm-dialog").showModal();
+      }
+
       async function loadBackups() {
         const data = payloadData(await bridge.apiGet("api/backups"));
         selectedBackup = null; el("backup-restore").disabled = true;
         setText("backup-name", "未选择"); setText("backup-integrity", "-"); setText("backup-schema", "-"); setText("backup-counts", "-");
-        const kindNames = { restore_safety: "恢复保险", media_cleanup: "媒体清理", filter_cleanup: "过滤清理", library_delete: "词库删除", contribution_delete: "成员贡献删除", legacy_import: "旧词库导入", other: "其他" };
+        const kindNames = { restore_safety: "恢复保险", media_cleanup: "媒体清理", filter_cleanup: "过滤清理", library_delete: "词库删除", contribution_delete: "成员贡献删除", legacy_import: "旧词库导入", scheduled: "定时备份", other: "其他" };
         const buttons = (data.backups || []).map(entry => {
           const button = document.createElement("button"); button.type = "button";
           button.textContent = entry.name;
@@ -911,9 +1030,39 @@
       el("tab-media").addEventListener("click", () => showView("media"));
       el("tab-migration").addEventListener("click", () => showView("migration"));
       el("tab-tts").addEventListener("click", () => showView("tts"));
+      el("tab-tasks").addEventListener("click", () => showView("tasks"));
       el("tab-backups").addEventListener("click", () => showView("backups"));
       el("tab-diagnostics").addEventListener("click", () => showView("diagnostics"));
       el("tab-audit").addEventListener("click", () => showView("audit"));
+      el("task-type").addEventListener("change", updateTaskFields);
+      el("task-new").addEventListener("click", () => { editTask(); setText("tasks-message", "正在新建任务。 "); });
+      el("tasks-refresh").addEventListener("click", async () => {
+        const button = el("tasks-refresh"); button.disabled = true; setText("tasks-message", "正在刷新任务...");
+        try { await loadTasks(); } catch (error) { setText("tasks-message", error?.message || "任务刷新失败。 "); } finally { button.disabled = false; }
+      });
+      el("task-save").addEventListener("click", async () => {
+        const destructive = el("task-type").value === "filter_cleanup" && el("task-cleanup-mode").value === "apply";
+        if (destructive) return confirmTaskAction("确认自动清理任务", "该任务会在后台无人值守地删除命中过滤规则的答案。每次执行都会先创建数据库备份，并在事务内重新检查候选。", () => saveTask(true));
+        try { await saveTask(false); } catch (error) { setText("tasks-message", error?.message || "任务保存失败。 "); }
+      });
+      el("task-run").addEventListener("click", async () => {
+        if (!selectedTask) return;
+        const execute = async confirmed => { const data = await postSecure("api/tasks/run", { task_id: selectedTask.task_id, confirmed }); await loadTasks(selectedTask.task_id); setText("tasks-message", `任务执行${data.status === "success" ? "完成" : "失败"}：${taskSummary(data.summary)}`); };
+        if (selectedTask.destructive) return confirmTaskAction("确认立即执行自动清理", "将立即备份数据库、重新检查候选，并删除当前命中过滤规则的答案。", () => execute(true));
+        try { await execute(false); } catch (error) { setText("tasks-message", error?.message || "任务执行失败。 "); }
+      });
+      el("task-delete").addEventListener("click", () => {
+        if (!selectedTask) return;
+        confirmTaskAction("确认删除任务", `将删除任务“${selectedTask.name}”及其执行历史，不会删除已生成的备份或词库内容。`, async () => { await postSecure("api/tasks/delete", { task_id: selectedTask.task_id, revision: selectedTask.revision, confirmed: true }); selectedTask = null; await loadTasks(""); setText("tasks-message", "任务已删除。 "); });
+      });
+      el("task-confirm-cancel").addEventListener("click", () => { pendingTaskAction = null; el("task-confirm-dialog").close(); });
+      el("task-confirm-form").addEventListener("submit", async event => {
+        event.preventDefault(); if (!pendingTaskAction) return;
+        const action = pendingTaskAction; el("task-confirm-submit").disabled = true;
+        try { await action(); pendingTaskAction = null; el("task-confirm-dialog").close(); }
+        catch (error) { setText("task-confirm-message", error?.message || "任务操作失败。 "); }
+        finally { el("task-confirm-submit").disabled = false; }
+      });
       el("diagnostics-refresh").addEventListener("click", async () => {
         const button = el("diagnostics-refresh"); button.disabled = true; setText("diagnostics-message", "正在刷新诊断...");
         try { await loadDiagnostics(); }

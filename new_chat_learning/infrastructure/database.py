@@ -157,6 +157,33 @@ CREATE TABLE IF NOT EXISTS filter_hits (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    task_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    task_type TEXT NOT NULL,
+    group_id TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+    interval_minutes INTEGER NOT NULL CHECK(interval_minutes BETWEEN 15 AND 43200),
+    cleanup_mode TEXT NOT NULL DEFAULT 'preview',
+    revision INTEGER NOT NULL DEFAULT 1,
+    next_run_at TEXT,
+    last_started_at TEXT,
+    last_completed_at TEXT,
+    last_status TEXT NOT NULL DEFAULT 'never',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_task_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL REFERENCES scheduled_tasks(task_id) ON DELETE CASCADE,
+    trigger_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    summary_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_group ON questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(group_id, user_id);
@@ -166,6 +193,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_reply_records_recent
 ON reply_records(platform, group_id, state, id DESC);
 CREATE INDEX IF NOT EXISTS idx_filter_hits_recent ON filter_hits(created_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_due
+ON scheduled_tasks(enabled, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_recent
+ON scheduled_task_runs(task_id, id DESC);
 """
 
 
@@ -217,6 +248,8 @@ class SQLiteStore:
                 "legacy_imports",
                 "blacklist_state",
                 "filter_hits",
+                "scheduled_tasks",
+                "scheduled_task_runs",
             )
             result: dict[str, int] = {}
             for table in tables:
@@ -404,6 +437,239 @@ class SQLiteStore:
                 details=details,
             )
             connection.commit()
+
+    async def scheduled_tasks(self, *, history_limit: int = 20) -> list[dict[str, Any]]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT task_id, name, task_type, group_id, enabled, interval_minutes, "
+                "cleanup_mode, revision, next_run_at, last_started_at, last_completed_at, "
+                "last_status, created_at, updated_at FROM scheduled_tasks "
+                "ORDER BY created_at, task_id"
+            ).fetchall()
+            result = []
+            page_size = max(1, min(100, int(history_limit)))
+            for row in rows:
+                entry = dict(row)
+                entry["enabled"] = bool(entry["enabled"])
+                history = connection.execute(
+                    "SELECT id, trigger_type, status, started_at, finished_at, summary_json "
+                    "FROM scheduled_task_runs WHERE task_id = ? ORDER BY id DESC LIMIT ?",
+                    (str(entry["task_id"]), page_size),
+                ).fetchall()
+                entry["history"] = [dict(item) for item in history]
+                result.append(entry)
+            return result
+
+    async def scheduled_task(self, task_id: str) -> dict[str, Any] | None:
+        async with self._lock:
+            row = self._require_connection().execute(
+                "SELECT task_id, name, task_type, group_id, enabled, interval_minutes, "
+                "cleanup_mode, revision, next_run_at, last_started_at, last_completed_at, "
+                "last_status, created_at, updated_at FROM scheduled_tasks WHERE task_id = ?",
+                (str(task_id),),
+            ).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+            result["enabled"] = bool(result["enabled"])
+            return result
+
+    async def save_scheduled_task(
+        self,
+        *,
+        task_id: str,
+        name: str,
+        task_type: str,
+        group_id: str,
+        enabled: bool,
+        interval_minutes: int,
+        cleanup_mode: str,
+        expected_revision: int | None,
+        now: str,
+        next_run_at: str | None,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                existing = connection.execute(
+                    "SELECT revision, last_status FROM scheduled_tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if existing is None:
+                    if expected_revision is not None:
+                        raise ValueError("task_not_found")
+                    connection.execute(
+                        "INSERT INTO scheduled_tasks(task_id, name, task_type, group_id, enabled, "
+                        "interval_minutes, cleanup_mode, next_run_at, created_at, updated_at) "
+                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            task_id,
+                            name,
+                            task_type,
+                            group_id,
+                            int(enabled),
+                            interval_minutes,
+                            cleanup_mode,
+                            next_run_at,
+                            now,
+                            now,
+                        ),
+                    )
+                else:
+                    if str(existing["last_status"]) == "running":
+                        raise ValueError("task_running")
+                    if expected_revision is None or int(existing["revision"]) != expected_revision:
+                        raise ValueError("task_revision_conflict")
+                    connection.execute(
+                        "UPDATE scheduled_tasks SET name = ?, task_type = ?, group_id = ?, "
+                        "enabled = ?, interval_minutes = ?, cleanup_mode = ?, revision = revision + 1, "
+                        "next_run_at = ?, updated_at = ? WHERE task_id = ?",
+                        (
+                            name,
+                            task_type,
+                            group_id,
+                            int(enabled),
+                            interval_minutes,
+                            cleanup_mode,
+                            next_run_at,
+                            now,
+                            task_id,
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        result = await self.scheduled_task(task_id)
+        if result is None:
+            raise RuntimeError("scheduled_task_save_failed")
+        return result
+
+    async def delete_scheduled_task(self, *, task_id: str, expected_revision: int) -> bool:
+        async with self._lock:
+            connection = self._require_connection()
+            cursor = connection.execute(
+                "DELETE FROM scheduled_tasks WHERE task_id = ? AND revision = ? "
+                "AND last_status != 'running'",
+                (str(task_id), int(expected_revision)),
+            )
+            connection.commit()
+            if cursor.rowcount:
+                return True
+            row = connection.execute(
+                "SELECT revision, last_status FROM scheduled_tasks WHERE task_id = ?",
+                (str(task_id),),
+            ).fetchone()
+            if row is None:
+                raise ValueError("task_not_found")
+            if str(row["last_status"]) == "running":
+                raise ValueError("task_running")
+            raise ValueError("task_revision_conflict")
+
+    async def due_scheduled_task_ids(self, now: str) -> list[str]:
+        async with self._lock:
+            rows = self._require_connection().execute(
+                "SELECT task_id FROM scheduled_tasks WHERE enabled = 1 "
+                "AND next_run_at IS NOT NULL AND next_run_at <= ? AND last_status != 'running' "
+                "ORDER BY next_run_at, task_id LIMIT 20",
+                (now,),
+            ).fetchall()
+            return [str(row["task_id"]) for row in rows]
+
+    async def claim_scheduled_task(
+        self,
+        *,
+        task_id: str,
+        trigger_type: str,
+        started_at: str,
+        next_run_at: str | None,
+        require_due: bool,
+    ) -> tuple[dict[str, Any], int] | None:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT * FROM scheduled_tasks WHERE task_id = ?", (str(task_id),)
+                ).fetchone()
+                if row is None or str(row["last_status"]) == "running":
+                    connection.rollback()
+                    return None
+                if require_due and (
+                    not bool(row["enabled"])
+                    or row["next_run_at"] is None
+                    or str(row["next_run_at"]) > started_at
+                ):
+                    connection.rollback()
+                    return None
+                connection.execute(
+                    "UPDATE scheduled_tasks SET last_status = 'running', last_started_at = ?, "
+                    "next_run_at = COALESCE(?, next_run_at), updated_at = ? WHERE task_id = ?",
+                    (started_at, next_run_at, started_at, str(task_id)),
+                )
+                cursor = connection.execute(
+                    "INSERT INTO scheduled_task_runs(task_id, trigger_type, status, started_at) "
+                    "VALUES(?, ?, 'running', ?)",
+                    (str(task_id), trigger_type, started_at),
+                )
+                connection.commit()
+                result = dict(row)
+                result["enabled"] = bool(result["enabled"])
+                return result, int(cursor.lastrowid)
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def finish_scheduled_task_run(
+        self,
+        *,
+        task_id: str,
+        run_id: int,
+        status: str,
+        finished_at: str,
+        summary_json: str,
+    ) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "UPDATE scheduled_task_runs SET status = ?, finished_at = ?, summary_json = ? "
+                    "WHERE id = ? AND task_id = ?",
+                    (status, finished_at, summary_json, int(run_id), str(task_id)),
+                )
+                connection.execute(
+                    "UPDATE scheduled_tasks SET last_status = ?, last_completed_at = ?, "
+                    "updated_at = ? WHERE task_id = ?",
+                    (status, finished_at, finished_at, str(task_id)),
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+    async def recover_interrupted_scheduled_tasks(self, now: str) -> int:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT task_id FROM scheduled_tasks WHERE last_status = 'running'"
+            ).fetchall()
+            if not rows:
+                return 0
+            connection.execute(
+                "UPDATE scheduled_task_runs SET status = 'interrupted', finished_at = ?, "
+                "summary_json = '{\"reason\":\"plugin_restarted\"}' "
+                "WHERE status = 'running'",
+                (now,),
+            )
+            connection.execute(
+                "UPDATE scheduled_tasks SET last_status = 'interrupted', last_completed_at = ?, "
+                "updated_at = ? WHERE last_status = 'running'",
+                (now, now),
+            )
+            connection.commit()
+            return len(rows)
 
     async def audit_entries(
         self,
@@ -1976,6 +2242,30 @@ class SQLiteStore:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_filter_hits_recent ON filter_hits(created_at)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS scheduled_tasks (task_id TEXT PRIMARY KEY, "
+            "name TEXT NOT NULL, task_type TEXT NOT NULL, group_id TEXT NOT NULL DEFAULT '', "
+            "enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)), "
+            "interval_minutes INTEGER NOT NULL CHECK(interval_minutes BETWEEN 15 AND 43200), "
+            "cleanup_mode TEXT NOT NULL DEFAULT 'preview', revision INTEGER NOT NULL DEFAULT 1, "
+            "next_run_at TEXT, last_started_at TEXT, last_completed_at TEXT, "
+            "last_status TEXT NOT NULL DEFAULT 'never', created_at TEXT NOT NULL, "
+            "updated_at TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS scheduled_task_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "task_id TEXT NOT NULL REFERENCES scheduled_tasks(task_id) ON DELETE CASCADE, "
+            "trigger_type TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT NOT NULL, "
+            "finished_at TEXT, summary_json TEXT NOT NULL DEFAULT '{}')"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_due "
+            "ON scheduled_tasks(enabled, next_run_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_recent "
+            "ON scheduled_task_runs(task_id, id DESC)"
         )
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"

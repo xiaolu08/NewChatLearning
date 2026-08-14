@@ -107,6 +107,7 @@ def _backup_kind(name: str) -> str:
         ("before-library-delete-", "library_delete"),
         ("before-contribution-delete-", "contribution_delete"),
         ("before-import-", "legacy_import"),
+        ("scheduled-backup-", "scheduled"),
     ):
         if name.startswith(prefix):
             return kind

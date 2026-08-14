@@ -17,6 +17,7 @@ from new_chat_learning.application.library import LibraryService
 from new_chat_learning.application.media import MediaService
 from new_chat_learning.application.migration import MigrationService
 from new_chat_learning.application.reply import ReplyService
+from new_chat_learning.application.tasks import ScheduledTaskService
 from new_chat_learning.constants import PLUGIN_VERSION
 from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
 from new_chat_learning.infrastructure.config import ConfigService
@@ -48,6 +49,14 @@ class RuntimeApplication:
             self.content_filter,
         )
         self.export = LibraryExportService(self.data_dir, self.store)
+        self.tasks = ScheduledTaskService(
+            self.data_dir,
+            self.store,
+            self.media,
+            self.filter_cleanup,
+            self.export,
+            self.migration,
+        )
         self.reply = ReplyService(self.store, self.config, self.content_filter)
         self.tts = TTSService(self.data_dir, self.config)
         self.web_auth = WebAuthService(self.data_dir, self.store)
@@ -58,10 +67,13 @@ class RuntimeApplication:
         for directory in ("media", "backups", "exports", "temp", "logs"):
             (self.data_dir / directory).mkdir(exist_ok=True)
         await self.store.open()
+        await self.tasks.start()
         self.started_at = datetime.now(timezone.utc)
 
     async def stop(self) -> None:
+        await self.tasks.stop()
         await self.store.close()
+        self.started_at = None
 
     async def observe(self, message: NormalizedMessage) -> LearningResult:
         settings = self.config.filter_settings(message.group_id)
