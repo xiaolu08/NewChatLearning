@@ -24,7 +24,7 @@
 
 ## 安装
 
-1. 下载 [Releases](https://github.com/xiaolu08/NewChatLearning/releases) 资产 `NewChatLearning-0.1.0-beta.31.post4.zip`。
+1. 下载 [Releases](https://github.com/xiaolu08/NewChatLearning/releases) 资产
 2. 打开 AstrBot Webui → **插件管理** → **从本地文件安装**，选择 ZIP。
 3. 确认插件正常加载，并打开插件的内嵌 WebUI。
 4. 点击 **进入** 管理会话。
