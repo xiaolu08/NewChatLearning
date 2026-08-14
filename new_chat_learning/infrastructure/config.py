@@ -96,6 +96,10 @@ class ConfigService:
         self._source = source if source is not None else {}
         self._lock = asyncio.Lock()
 
+    def _backup_source(self) -> dict[str, Any]:
+        """Copy configuration values without copying AstrBot's wrapper object."""
+        return {key: deepcopy(value) for key, value in self._source.items()}
+
     def snapshot(self) -> dict[str, Any]:
         merged = deepcopy(DEFAULT_CONFIG)
         for section, value in self._source.items():
@@ -342,7 +346,7 @@ class ConfigService:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
             normalized = self._validated_filter_update(values)
-            original = deepcopy(self._source)
+            original = self._backup_source()
             try:
                 self._source["filters"] = normalized
                 await self._persist_source()
@@ -369,7 +373,7 @@ class ConfigService:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
             normalized = self._validated_permission_update(values)
-            original = deepcopy(self._source)
+            original = self._backup_source()
             try:
                 self._source["permissions"] = normalized
                 await self._persist_source()
@@ -424,7 +428,7 @@ class ConfigService:
         async with self._lock:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
-            original = deepcopy(self._source)
+            original = self._backup_source()
             try:
                 self._source.setdefault(capability, {})["enabled"] = enabled
                 await self._persist_source()
@@ -458,7 +462,7 @@ class ConfigService:
         async with self._lock:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
-            original = deepcopy(self._source)
+            original = self._backup_source()
             try:
                 learning = self._source.setdefault("learning", {})
                 reply = self._source.setdefault("reply", {})
@@ -550,7 +554,7 @@ class ConfigService:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
             normalized = self._validated_tts_update(values)
-            original = deepcopy(self._source)
+            original = self._backup_source()
             try:
                 self._source["tts"] = normalized
                 await self._persist_source()
@@ -828,7 +832,7 @@ class ConfigService:
         async with self._lock:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
-            original = deepcopy(self._source)
+            original = self._backup_source()
             try:
                 learning = self._source.setdefault("learning", {})
                 reply = self._source.setdefault("reply", {})

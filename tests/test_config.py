@@ -1,5 +1,6 @@
 import asyncio
 from copy import deepcopy
+from threading import Lock
 
 import pytest
 
@@ -364,6 +365,31 @@ def test_cross_group_settings_update_all_legacy_categories_atomically():
     )
     assert result["excluded_group_ids"] == ["10002"]
     assert source.saves == 4
+
+
+def test_cross_group_settings_accepts_astrbot_config_wrapper_with_lock():
+    class Source(dict):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._internal_lock = Lock()
+
+        async def save_config_async(self):
+            return True
+
+    source = Source({"permissions": {"plugin_admin_ids": ["99999"]}})
+    service = ConfigService(source)
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="learning",
+            group_ids=["399375745"],
+            expected_revision=service.revision,
+        )
+    )
+
+    assert result["learning_group_ids"] == ["399375745"]
+    assert source["learning"]["group_ids"] == ["399375745"]
 
 
 def test_global_switch_settings_persist_and_roll_back():
