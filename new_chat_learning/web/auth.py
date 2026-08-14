@@ -31,7 +31,13 @@ class AuthSession:
 
 
 class WebAuthService:
-    def __init__(self, data_dir: Path, store: SQLiteStore | None = None) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        store: SQLiteStore | None = None,
+        *,
+        authentication_required: bool = True,
+    ) -> None:
         self.data_dir = Path(data_dir)
         self.credential_path = self.data_dir / "webui-password.json"
         self._sessions: dict[str, AuthSession] = {}
@@ -39,12 +45,20 @@ class WebAuthService:
         self._locked_until: dict[str, float] = {}
         self._lock = asyncio.Lock()
         self.store = store
+        self.authentication_required = authentication_required
 
     @property
     def is_configured(self) -> bool:
         return self.credential_path.is_file()
 
     async def state(self, session_token: str) -> dict[str, Any]:
+        if not self.authentication_required:
+            return {
+                "setup_required": False,
+                "authenticated": True,
+                "csrf_token": "",
+                "session_expires_at": None,
+            }
         async with self._lock:
             session = self._valid_session(session_token)
             return {
@@ -134,6 +148,8 @@ class WebAuthService:
             return "ok", self._new_session()
 
     async def authorize(self, session_token: str, csrf_token: str | None = None) -> bool:
+        if not self.authentication_required:
+            return True
         async with self._lock:
             session = self._valid_session(session_token)
             if session is None:

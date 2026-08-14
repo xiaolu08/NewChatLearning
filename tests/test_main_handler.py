@@ -1007,7 +1007,7 @@ def test_web_media_cleanup_requires_confirmation_and_hides_backup_path(monkeypat
 
     class Media:
         async def apply_cleanup(self, **kwargs):
-            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            expected_actor = "webui:astrbot-dashboard"
             assert kwargs == {
                 "plan_id": "a" * 32,
                 "group_id": "10001",
@@ -1477,7 +1477,7 @@ def test_web_library_delete_requires_confirmation_is_group_scoped_and_hides_path
 
     class Library:
         async def delete_answer_with_backup(self, **kwargs):
-            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            expected_actor = "webui:astrbot-dashboard"
             assert kwargs == {"group_id": "10001", "actor_id": expected_actor, "answer_id": 17}
             return {
                 "deleted": True,
@@ -1551,7 +1551,7 @@ def test_web_group_settings_update_requires_csrf_and_binds_actor(monkeypatch):
         web_auth = Auth()
 
         async def update_group_settings(self, **kwargs):
-            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            expected_actor = "webui:astrbot-dashboard"
             assert kwargs == {
                 "group_id": "10001",
                 "mode": "silent",
@@ -2541,5 +2541,5 @@ def test_web_backup_restore_requires_confirmation_invalidates_sessions_and_cooki
 
     response = asyncio.run(plugin.web_backup_restore())
     assert response.data["status"] == "ok"
-    assert auth.invalidated is True
-    assert response.deleted_cookie == ("ncl_admin_session", {"path": "/"})
+    assert auth.invalidated is False
+    assert response.deleted_cookie is None

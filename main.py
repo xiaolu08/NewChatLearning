@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import importlib
 import secrets
 import sqlite3
@@ -83,16 +82,6 @@ class NewChatLearningPlugin(star.Star):
             "NewChatLearning Beta 运行状态",
         )
         for suffix, handler, methods, description in (
-            ("auth/state", self.web_auth_state, ["GET"], "NewChatLearning 登录状态"),
-            ("auth/setup", self.web_auth_setup, ["POST"], "NewChatLearning 首次设密"),
-            ("auth/login", self.web_auth_login, ["POST"], "NewChatLearning 登录"),
-            ("auth/logout", self.web_auth_logout, ["POST"], "NewChatLearning 退出"),
-            (
-                "auth/change-password",
-                self.web_auth_change_password,
-                ["POST"],
-                "NewChatLearning 修改密码",
-            ),
             ("media/groups", self.web_media_groups, ["GET"], "NewChatLearning 媒体群列表"),
             ("groups", self.web_groups, ["GET"], "NewChatLearning 群聊列表"),
             ("groups/settings", self.web_group_settings, ["GET"], "NewChatLearning 群聊设置"),
@@ -2546,10 +2535,7 @@ class NewChatLearningPlugin(star.Star):
                 {"status": "error", "message": "备份恢复失败，运行数据库已自动回滚。"},
                 status_code=500,
             )
-        await self.app.web_auth.invalidate_all_sessions()
-        response = self._web_json({"status": "ok", "data": result})
-        response.delete_cookie(COOKIE_NAME, path="/")
-        return response
+        return self._web_json({"status": "ok", "data": result})
 
     async def _authorized_web_payload(self):
         if self.app is None:
@@ -2588,8 +2574,7 @@ class NewChatLearningPlugin(star.Star):
         return str(request.cookies.get(COOKIE_NAME, "") or "")
 
     def _web_actor_id(self) -> str:
-        digest = hashlib.sha256(self._web_session_token().encode("utf-8")).hexdigest()[:16]
-        return f"webui:{digest}"
+        return "webui:astrbot-dashboard"
 
     def _web_session_response(self, session):
         response = self._web_json(

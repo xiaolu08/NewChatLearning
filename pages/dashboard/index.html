@@ -88,21 +88,9 @@
   <body>
     <header>
       <h1>NewChatLearning</h1>
-      <div class="actions"><span class="beta">BETA</span><button id="logout" class="secondary hidden" type="button">退出</button></div>
+      <div class="actions"><span class="beta">BETA</span></div>
     </header>
-    <main id="auth" class="auth-shell">
-      <form id="auth-form" class="auth-panel">
-        <h2 id="auth-title">管理页面登录</h2>
-        <p id="auth-copy">请输入独立管理密码。</p>
-        <label for="password">管理密码</label>
-        <input id="password" name="password" type="password" minlength="8" maxlength="256" autocomplete="current-password" required>
-        <label id="confirm-label" class="hidden" for="confirm-password">确认密码</label>
-        <input id="confirm-password" class="hidden" name="confirm-password" type="password" minlength="8" maxlength="256" autocomplete="new-password">
-        <button id="submit" type="submit">登录</button>
-        <div id="auth-message" class="message" role="status"></div>
-      </form>
-    </main>
-    <main id="dashboard" class="hidden">
+    <main id="dashboard">
       <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
       <nav class="tabs" aria-label="管理模块">
         <button id="tab-overview" class="active" type="button">概览</button>
@@ -282,7 +270,7 @@
           <div id="migration-plan" class="result">尚未生成导入计划。</div>
         </section>
         <section class="settings-band">
-          <div class="toolbar"><div><h2>迁移记录</h2><p>显示当前登录会话创建的待导入计划和已完成记录。</p></div><button id="migration-refresh" class="secondary" type="button">刷新记录</button></div>
+          <div class="toolbar"><div><h2>迁移记录</h2><p>显示当前管理页面创建的待导入计划和已完成记录。</p></div><button id="migration-refresh" class="secondary" type="button">刷新记录</button></div>
           <div class="table-scroll"><table><thead><tr><th>文件</th><th>目标群</th><th>状态</th><th>问题 / 答案</th><th>备份</th></tr></thead><tbody id="migration-body"></tbody></table></div>
           <div id="migration-message" class="result" role="status"></div>
         </section>
@@ -376,7 +364,7 @@
         <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
         <div class="split">
           <div><div id="backups-list" class="list"><p style="padding:14px">正在读取备份。</p></div><div id="backups-message" class="result" role="status"></div></div>
-          <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新登录。</p></section></div>
+          <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份，完成后页面会刷新运行状态。</p></section></div>
         </div>
       </div>
       <div id="diagnostics-view" class="hidden">
@@ -471,7 +459,6 @@
     </dialog>
     <script src="/api/plugin/page/bridge-sdk.js"></script>
     <script>
-      let authState = null;
       let cleanupPlan = null;
       let currentQuestion = null;
       let pendingLibraryDelete = null;
@@ -510,25 +497,8 @@
       const payloadData = (response) => { const value = unwrap(response); return value.data || value; };
       const formatBytes = (bytes) => bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 
-      async function refreshAuth() {
-        authState = payloadData(await bridge.apiGet("api/auth/state"));
-        if (authState.authenticated) return showDashboard();
-        el("auth").classList.remove("hidden");
-        el("dashboard").classList.add("hidden");
-        el("logout").classList.add("hidden");
-        const setup = Boolean(authState.setup_required);
-        setText("auth-title", setup ? "首次设置管理密码" : "管理页面登录");
-        setText("auth-copy", setup ? "首次设置只能从运行 AstrBot 的本机完成，密码至少 8 个字符。" : "请输入 NewChatLearning 的独立管理密码。");
-        setText("submit", setup ? "设置密码" : "登录");
-        el("confirm-label").classList.toggle("hidden", !setup);
-        el("confirm-password").classList.toggle("hidden", !setup);
-        el("password").autocomplete = setup ? "new-password" : "current-password";
-      }
-
       async function showDashboard() {
-        el("auth").classList.add("hidden");
         el("dashboard").classList.remove("hidden");
-        el("logout").classList.remove("hidden");
         await refreshOverview();
         await loadGroups();
       }
@@ -693,7 +663,7 @@
       }
 
       async function postSecure(path, body) {
-        return payloadData(await bridge.apiPost(path, { ...body, csrf_token: authState?.csrf_token || "" }));
+        return payloadData(await bridge.apiPost(path, body));
       }
 
       function selectedMigrationGroup() {
@@ -1100,27 +1070,6 @@
         renderPreview(data); return data;
       }
 
-      el("auth-form").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const password = el("password").value;
-        const setup = Boolean(authState?.setup_required);
-        if (setup && password !== el("confirm-password").value) {
-          setText("auth-message", "两次输入的密码不一致。"); return;
-        }
-        el("submit").disabled = true; setText("auth-message", "");
-        try {
-          const response = await bridge.apiPost(setup ? "api/auth/setup" : "api/auth/login", { password });
-          authState = { setup_required: false, authenticated: true, csrf_token: payloadData(response).csrf_token };
-          el("password").value = ""; el("confirm-password").value = "";
-          await showDashboard();
-        } catch (error) { setText("auth-message", error?.message || "操作失败，请稍后重试。"); }
-        finally { el("submit").disabled = false; }
-      });
-
-      el("logout").addEventListener("click", async () => {
-        try { await bridge.apiPost("api/auth/logout", { csrf_token: authState?.csrf_token || "" }); }
-        finally { authState = null; await refreshAuth(); }
-      });
       el("tab-overview").addEventListener("click", () => showView("overview"));
       el("overview-refresh").addEventListener("click", async () => {
         const button = el("overview-refresh");
@@ -1212,14 +1161,14 @@
       el("audit-refresh").addEventListener("click", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
       el("audit-action").addEventListener("change", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
       el("audit-more").addEventListener("click", () => loadAudit(false).catch(error => setText("audit-message", error?.message || "更早记录读取失败。")));
-      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新登录。`); el("backup-restore-dialog").showModal(); });
+      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后页面会刷新运行状态。`); el("backup-restore-dialog").showModal(); });
       el("backup-restore-cancel").addEventListener("click", () => el("backup-restore-dialog").close());
       el("backup-restore-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!selectedBackup) return;
         try {
           const data = await postSecure("api/backups/restore", { name: selectedBackup.name, confirmed: true });
-          el("backup-restore-dialog").close(); authState = null; selectedBackup = null;
-          await refreshAuth(); setText("auth-message", `恢复完成，保险备份：${data.safety_backup_name}。请重新登录。`);
+          el("backup-restore-dialog").close(); selectedBackup = null;
+          await showDashboard(); await loadBackups(); setText("backups-message", `恢复完成，保险备份：${data.safety_backup_name}。`);
         } catch (error) { setText("backup-restore-message", error?.message || "恢复未执行。"); }
       });
       el("permission-add-group").addEventListener("click", () => addPermissionGroup());
@@ -1455,8 +1404,8 @@
       });
 
       (async () => {
-        try { await bridge.ready(); await refreshAuth(); }
-        catch (error) { setText("auth-message", error?.message || "页面初始化失败。"); }
+        try { await bridge.ready(); await showDashboard(); }
+        catch (error) { setText("overview-message", error?.message || "页面初始化失败。"); }
       })();
     </script>
   </body>

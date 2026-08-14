@@ -81,8 +81,9 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert '#migration-prepare.busy:disabled { cursor: progress; }' in dashboard
     assert 'button.classList.add("busy")' in dashboard
     assert 'button.classList.remove("busy")' in dashboard
-    assert 'minlength="8"' in dashboard
-    assert 'minlength="12"' not in dashboard
+    assert 'id="auth-form"' not in dashboard
+    assert 'api/auth/login' not in dashboard
+    assert 'api/auth/setup' not in dashboard
     assert 'bridge.upload("api/migration/upload", file)' in dashboard
     assert "api/migration/upload?ticket=" not in dashboard
     assert 'postSecure("api/migration/prepare"' in dashboard

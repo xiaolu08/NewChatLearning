@@ -49,8 +49,8 @@ status: 当前有效
 
 ### WebUI 与安全
 
-- [ ] 首次强制设密、Argon2id/scrypt、登录限流、锁定、退出和改密（scrypt 与一小时登录会话已通过 AstrBot 实机验收；限流、锁定、退出、改密和 Argon2id 可选路径仍待实机或实现验收）。
-- [ ] CSRF、会话 Cookie、无缓存、安全响应头和高风险二次确认（认证基础与现有高风险操作已离线测试；AstrBot 实机验收待完成）。
+- [x] WebUI 直接依赖 AstrBot Dashboard 访问控制，不再要求 NewChatLearning 独立密码、插件登录会话或重复输入密码。
+- [ ] 无缓存、安全响应头和高风险二次确认（高风险操作已离线测试；AstrBot Dashboard 实机验收待完成）。
 - [ ] 默认本机访问，局域网模式需显式开启。
 - [ ] 概览、群目标、词库、媒体、过滤、权限、TTS、迁移、任务、备份、审计、诊断页面可用（概览原地刷新与旧词库迁移已通过 AstrBot 桌面实机验收；任务和诊断页已离线验证，其他页面仍需继续桌面/移动实机验收）。
 - [ ] WebUI、AstrBot 配置和命令同步，无静默覆盖冲突。
@@ -69,6 +69,8 @@ status: 当前有效
 Beta 31.post1 修复 AstrBot 4.27.2 配置 schema 兼容性：自定义 HTTP 的请求头与请求体映射使用平台原生 `dict` 类型，避免插件加载时把无子项的 `object` 递归解析并触发 `KeyError: 'items'`。
 
 Beta 31.post2 补齐云端 TTS WebUI：提供全部云端驱动、模型与区域、应用参数、调用额度、自定义 HTTP JSON 映射、DPAPI 密钥状态与管理；切换驱动时更新默认接口并显示对应密钥字段。云端测试和密钥变更要求二次确认，页面刷新不重新加载或重新登录。自定义 HTTP 映射可通过 `${secret.<名称>}` 引用 DPAPI 密钥，配置中不保存密钥明文。
+
+Beta 32 移除 NewChatLearning 独立 WebUI 登录、密码设置、退出和改密流程，页面直接进入管理界面并依赖 AstrBot Dashboard 的访问控制；备份恢复后不再要求重新登录。
 
 - [x] Windows 本地、GPT-SoVITS、通用本地 HTTP（离线测试通过；Windows `System.Speech` 已完成本机真实 WAV 冒烟测试，NapCat 语音发送待实机验收）。
 - [ ] 火山、阿里、腾讯、Azure、OpenAI、OpenAI 风格和自定义 HTTP 映射。

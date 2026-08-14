@@ -6,6 +6,23 @@ from new_chat_learning.infrastructure.database import SQLiteStore
 from new_chat_learning.web.auth import PASSWORD_MIN_LENGTH, SESSION_TTL_SECONDS, WebAuthService
 
 
+def test_plugin_authentication_can_be_disabled_for_astrbot_dashboard(tmp_path):
+    async def scenario():
+        service = WebAuthService(tmp_path, authentication_required=False)
+        return await service.state(""), await service.authorize("", "")
+
+    state, authorized = asyncio.run(scenario())
+
+    assert state == {
+        "setup_required": False,
+        "authenticated": True,
+        "csrf_token": "",
+        "session_expires_at": None,
+    }
+    assert authorized is True
+    assert not (tmp_path / "webui-password.json").exists()
+
+
 def test_first_setup_requires_loopback_and_strong_password(tmp_path):
     async def scenario():
         service = WebAuthService(tmp_path)

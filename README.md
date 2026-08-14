@@ -81,8 +81,8 @@ NewChatLearning 是 [ChatLearning](https://github.com/JHue58/ChatLearning) 面�
 - `/ncl media-scan` 对本群答案执行只读媒体健康检查并持久化失效标记
 - `/ncl media-preview` 汇总失效组件、受影响问答及清理后可能为空的答案
 - 两阶段媒体清理默认只移除失效组件；可显式选择整条答案删除，并在执行前备份
-- 内置管理页面首次本机设密、独立 scrypt 密码、服务端会话、CSRF、登录限流和认证审计
-- WebUI 登录会话有效期为一小时；会话内功能不重复要求密码，高风险操作使用明确二次确认弹窗
+- 内置管理页面直接复用 AstrBot Dashboard 的访问控制，不再要求 NewChatLearning 独立密码或插件登录
+- 高风险操作保留明确二次确认、配置 revision、备份和审计保护
 - WebUI 媒体页支持按群扫描、影响预览、两阶段清理、执行前确认和备份结果
 - WebUI 词库页支持按群搜索、问题详情、文本/正则问答添加、答案权重修改和带备份的安全删除
 - WebUI 可按群导出 ZIP 词库包，包含公式注入防护的 XLSX 预览和保留完整问答组件的 JSONL
