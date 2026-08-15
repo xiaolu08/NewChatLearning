@@ -170,17 +170,7 @@ def _merge_raw_components(
         counts[key] = counts.get(key, 0) + 1
     for component in raw:
         key = str(component.get("type", "")).lower()
-        if key in {
-            "image",
-            "flashimage",
-            "record",
-            "video",
-            "file",
-            "marketface",
-            "xml",
-            "json",
-            "forward",
-        } and counts.get(key, 0) > 0:
+        if counts.get(key, 0) > 0:
             counts[key] -= 1
             continue
         result.append(component)

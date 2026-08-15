@@ -86,6 +86,42 @@ def test_normalizes_components_and_removes_transient_matching_fields():
     assert result.normalized_key
 
 
+def test_raw_segments_only_fill_components_missing_from_astrbot():
+    event = Event(
+        {
+            "post_type": "message",
+            "message_id": 88,
+            "time": 1000,
+            "message": [
+                {"type": "text", "data": {"text": "hello"}},
+                {"type": "face", "data": {"id": "14"}},
+                {"type": "image", "data": {"file": "image-id"}},
+            ],
+        },
+        [
+            Plain("hello"),
+            type(
+                "Face",
+                (),
+                {"type": "Face", "dict": lambda self: {"type": "Face", "id": "14"}},
+            )(),
+        ],
+    )
+
+    result = normalize_group_message(event)
+
+    assert result is not None
+    assert [component["type"] for component in result.components] == [
+        "Plain",
+        "Face",
+        "Image",
+    ]
+    assert sum(
+        component["data"].get("text") == "hello"
+        for component in result.components
+    ) == 1
+
+
 def test_resolves_image_file_id_through_napcat_cache(tmp_path):
     cached = tmp_path / "cached-image.jpg"
     cached.write_bytes(b"image")
