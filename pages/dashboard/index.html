@@ -5,90 +5,303 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>NewChatLearning Beta</title>
     <style>
-      :root { color-scheme: light; --bg: #f3f5f6; --panel: #fff; --text: #172026; --muted: #69757d; --line: #d9dfe3; --accent: #087f5b; --danger: #c43d3d; --warn: #a85a00; }
-      :root[data-theme="dark"] { color-scheme: dark; --bg: #171b1e; --panel: #22282c; --text: #edf1f3; --muted: #a9b2b8; --line: #3a4247; --accent: #53c99b; --danger: #ff8585; --warn: #ffb75e; }
+      :root {
+        color-scheme: light;
+        --gray-0: #ffffff;
+        --gray-50: #f7f9f9;
+        --gray-100: #eef2f1;
+        --gray-200: #dde4e2;
+        --gray-300: #c7d0ce;
+        --gray-500: #697774;
+        --gray-600: #52605d;
+        --gray-700: #384541;
+        --gray-900: #17211e;
+        --accent-50: #e9f7f2;
+        --accent-100: #d2eee4;
+        --accent-500: #168463;
+        --accent-600: #0f7255;
+        --accent-700: #0b5e46;
+        --success: #177d54;
+        --warning: #9a5b10;
+        --danger: #b43f46;
+        --info: #336f91;
+        --bg: var(--gray-50);
+        --panel: var(--gray-0);
+        --panel-muted: #f1f5f4;
+        --sidebar: #edf3f1;
+        --text: var(--gray-900);
+        --muted: var(--gray-600);
+        --faint: #82908c;
+        --line: var(--gray-200);
+        --line-strong: var(--gray-300);
+        --accent: var(--accent-500);
+        --accent-hover: var(--accent-600);
+        --danger-bg: #fff1f2;
+        --warn: var(--warning);
+        --focus-ring: rgb(22 132 99 / .24);
+        --shadow-sm: 0 1px 2px rgb(23 33 30 / .05), 0 1px 1px rgb(23 33 30 / .03);
+        --shadow-md: 0 10px 24px rgb(23 33 30 / .08), 0 2px 6px rgb(23 33 30 / .05);
+        --radius-input: 6px;
+        --radius-panel: 8px;
+        --radius-dialog: 12px;
+        --header-height: 60px;
+        --sidebar-width: 224px;
+        --duration-fast: 80ms;
+        --duration-normal: 150ms;
+        --ease-out: cubic-bezier(.16, 1, .3, 1);
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --gray-0: #202724;
+        --gray-50: #171c1a;
+        --gray-100: #252d2a;
+        --gray-200: #35403c;
+        --gray-300: #45514d;
+        --gray-500: #9aa6a2;
+        --gray-600: #b1bbb8;
+        --gray-700: #d3dad7;
+        --gray-900: #f1f5f3;
+        --accent-50: #17372e;
+        --accent-100: #1d493c;
+        --accent-500: #51bd93;
+        --accent-600: #65caa3;
+        --accent-700: #7ad5b1;
+        --success: #65c99a;
+        --warning: #e4ad63;
+        --danger: #f0838a;
+        --info: #77b6da;
+        --bg: #151a18;
+        --panel: #202724;
+        --panel-muted: #252d2a;
+        --sidebar: #1b2421;
+        --text: #f1f5f3;
+        --muted: #b1bbb8;
+        --faint: #8c9995;
+        --line: #35403c;
+        --line-strong: #4a5652;
+        --accent: var(--accent-500);
+        --accent-hover: var(--accent-600);
+        --danger-bg: #3b2427;
+        --warn: var(--warning);
+        --focus-ring: rgb(81 189 147 / .28);
+        --shadow-sm: inset 0 1px 0 rgb(255 255 255 / .04);
+        --shadow-md: 0 18px 36px rgb(0 0 0 / .3), inset 0 1px 0 rgb(255 255 255 / .05);
+      }
       * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Microsoft YaHei", sans-serif; }
-      header { min-height: 64px; background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-      h1 { margin: 0; font-size: 20px; font-weight: 650; }
-      h2 { margin: 0 0 8px; font-size: 18px; }
-      p { margin: 0; color: var(--muted); }
-      button, input, select, textarea { font: inherit; }
-      button { border: 1px solid transparent; border-radius: 6px; background: var(--accent); color: #fff; min-height: 38px; padding: 8px 14px; cursor: pointer; }
-      button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
-      button.danger { background: var(--danger); }
-      button:disabled { opacity: .55; cursor: wait; }
+      html { min-width: 320px; background: var(--bg); }
+      body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif; letter-spacing: 0; }
+      button, input, select, textarea { font: inherit; letter-spacing: 0; }
+      button, input, select, textarea, .list { transition: border-color var(--duration-normal) var(--ease-out), background-color var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal) var(--ease-out); }
+      button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring); }
+      button { border: 1px solid transparent; border-radius: var(--radius-input); background: var(--accent); color: #fff; min-height: 36px; padding: 7px 12px; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+      button:hover:not(:disabled) { background: var(--accent-hover); }
+      button:active:not(:disabled) { transform: scale(.98); }
+      button.secondary { background: var(--panel); color: var(--text); border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+      button.secondary:hover:not(:disabled) { background: var(--panel-muted); border-color: var(--gray-500); }
+      button.danger { background: var(--danger); color: #fff; }
+      button.danger:hover:not(:disabled) { filter: brightness(.92); }
+      button:disabled { opacity: .52; cursor: not-allowed; }
       #migration-prepare:disabled { cursor: not-allowed; }
       #migration-prepare.busy:disabled { cursor: progress; }
-      input { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
-      textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 8px 10px; }
-      select { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; }
-      label { display: block; color: var(--muted); margin: 14px 0 5px; }
-      main { max-width: 1120px; margin: 0 auto; padding: 24px; }
-      .beta { color: var(--warn); font-weight: 650; }
-      .auth-shell { min-height: calc(100vh - 113px); display: grid; place-items: center; }
-      .auth-panel { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 24px; }
-      .auth-panel button { width: 100%; margin-top: 18px; }
-      .message { min-height: 22px; margin-top: 10px; color: var(--danger); }
-      .notice { border-left: 4px solid var(--warn); background: var(--panel); padding: 12px 16px; margin-bottom: 18px; }
-      .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-      .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-height: 96px; }
-      .metric span { color: var(--muted); display: block; margin-bottom: 8px; }
-      .metric strong { font-size: 24px; font-weight: 650; }
-      section { margin-top: 20px; }
-      table { width: 100%; border-collapse: collapse; background: var(--panel); }
-      th, td { padding: 11px 14px; border: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
-      th { width: 210px; color: var(--muted); font-weight: 550; }
-      .ok { color: var(--accent); }
-      .error { color: var(--danger); }
+      input, textarea, select { border: 1px solid var(--line-strong); border-radius: var(--radius-input); background: var(--panel); color: var(--text); }
+      input { width: 100%; min-height: 38px; padding: 7px 10px; }
+      textarea { width: 100%; min-height: 88px; resize: vertical; padding: 8px 10px; }
+      select { min-height: 38px; max-width: 100%; padding: 7px 30px 7px 10px; }
+      input:hover, textarea:hover, select:hover { border-color: var(--gray-500); }
+      input::placeholder, textarea::placeholder { color: var(--faint); }
+      input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+      label { display: block; color: var(--muted); margin: 12px 0 5px; font-size: 13px; font-weight: 600; }
+      h1, h2, p { letter-spacing: 0; }
+      h1 { margin: 0; font-size: 18px; line-height: 1.25; font-weight: 700; }
+      h2 { margin: 0 0 8px; font-size: 15px; line-height: 1.35; font-weight: 650; }
+      p { margin: 0; color: var(--muted); }
+      code, kbd, .metric strong, .summary strong, td, #version, #revision, #database { font-variant-numeric: tabular-nums slashed-zero; }
+      kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--panel); padding: 1px 5px; color: var(--muted); font: 11px/1.4 "Cascadia Mono", "SFMono-Regular", Consolas, monospace; }
       .hidden { display: none !important; }
-      .actions { display: flex; gap: 8px; }
-      .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; }
-      .tabs button { flex: 0 0 auto; background: transparent; color: var(--muted); border-radius: 0; padding: 10px 14px; }
-      .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
-      .toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+      .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+      .app-header { position: sticky; top: 0; z-index: 20; min-height: var(--header-height); background: color-mix(in srgb, var(--panel) 94%, transparent); border-bottom: 1px solid var(--line); padding: 8px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; backdrop-filter: blur(12px); }
+      .brand-lockup, .brand-copy, .header-actions, .workspace-state { display: flex; align-items: center; }
+      .brand-lockup { gap: 10px; min-width: 0; }
+      .brand-copy { align-items: flex-start; flex-direction: column; min-width: 0; }
+      .brand-copy p { font-size: 11px; white-space: nowrap; }
+      .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; background: var(--accent); color: #fff; font-weight: 800; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25), 0 5px 14px rgb(22 132 99 / .18); }
+      .header-actions { gap: 8px; }
+      .beta { display: inline-flex; align-items: center; min-height: 24px; border: 1px solid color-mix(in srgb, var(--warn) 38%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--warn); padding: 2px 8px; font-size: 11px; font-weight: 750; }
+      #nav-toggle { display: none; width: 38px; padding: 0; background: var(--panel); color: var(--text); border-color: var(--line-strong); }
+      #nav-toggle svg { width: 18px; height: 18px; }
+      main#auth { max-width: none; margin: 0; padding: 24px; }
+      .auth-shell { min-height: calc(100vh - var(--header-height)); display: grid; place-items: center; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 32px 32px; background-position: -1px -1px; }
+      .auth-panel { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-dialog); padding: 28px; box-shadow: var(--shadow-md); }
+      .auth-panel::before { content: "NCL / LOCAL CONTROL"; display: block; margin-bottom: 24px; color: var(--accent); font: 600 11px/1.4 "Cascadia Mono", "SFMono-Regular", Consolas, monospace; }
+      .auth-panel h2 { font-size: 20px; }
+      .auth-panel button { width: 100%; margin-top: 20px; }
+      .message { min-height: 22px; margin-top: 10px; color: var(--danger); font-size: 13px; }
+      #dashboard { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); max-width: none; min-height: calc(100vh - var(--header-height)); margin: 0; padding: 0; }
+      .sidebar { position: sticky; top: var(--header-height); align-self: start; height: calc(100vh - var(--header-height)); display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; background: var(--sidebar); border-right: 1px solid var(--line); }
+      .sidebar-label { padding: 18px 16px 8px; color: var(--faint); font-size: 11px; font-weight: 700; }
+      .tabs { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-height: 0; margin: 0; padding: 0 8px 12px; overflow-y: auto; }
+      .tabs button { position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; background: transparent; color: var(--muted); border: 0; border-radius: var(--radius-input); padding: 8px 10px; text-align: left; font-weight: 600; }
+      .tabs button::before { content: ""; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; transition: background-color var(--duration-fast); }
+      .tabs button:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); }
+      .tabs button.active { background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent); }
+      .tabs button.active::before { background: var(--accent); }
+      .nav-icon { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .sidebar-footer { flex: 0 0 auto; margin: 0 8px 12px; border-top: 1px solid var(--line); padding: 14px 8px 0; }
+      .live-indicator { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+      .live-indicator::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent); }
+      .sidebar-footer p { margin-top: 6px; font-size: 11px; }
+      #nav-backdrop { display: none; }
+      .workspace { min-width: 0; padding: 0 24px 32px; }
+      .workspace-header { min-height: 92px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+      .workspace-header h2 { margin: 2px 0 3px; font-size: 20px; }
+      .breadcrumb { color: var(--accent); font-size: 11px; font-weight: 700; }
+      .workspace-state { flex: 0 0 auto; gap: 8px; color: var(--muted); font-size: 12px; }
+      .workspace-state::before { content: ""; width: 6px; height: 28px; border-radius: 3px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); }
+      .workspace-state strong { color: var(--text); }
+      .view-content { padding-top: 20px; }
+      .notice { display: flex; align-items: flex-start; gap: 10px; border: 1px solid color-mix(in srgb, var(--info) 22%, var(--line)); border-left: 3px solid var(--info); border-radius: var(--radius-input); background: color-mix(in srgb, var(--info) 6%, var(--panel)); color: var(--muted); padding: 10px 12px; margin-bottom: 16px; font-size: 13px; }
+      .notice::before { content: "i"; display: grid; place-items: center; flex: 0 0 auto; width: 17px; height: 17px; margin-top: 1px; border: 1px solid currentColor; border-radius: 50%; color: var(--info); font: 700 11px/1 system-ui, sans-serif; }
+      .toolbar { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
       .toolbar label { margin: 0 0 5px; }
+      .toolbar > .result { flex: 1 1 240px; align-self: center; margin: 0; }
       .field { min-width: 180px; flex: 1 1 220px; }
-      .compact-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-      .summary { border: 1px solid var(--line); background: var(--panel); padding: 14px; min-height: 78px; }
-      .summary span { display: block; color: var(--muted); margin-bottom: 4px; }
-      .summary strong { font-size: 19px; }
-      .result { min-height: 24px; margin-top: 12px; color: var(--muted); }
-      .split { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(360px, 1.15fr); gap: 18px; }
-      .list { border: 1px solid var(--line); background: var(--panel); min-height: 240px; max-height: 520px; overflow: auto; }
-      .list button { width: 100%; background: transparent; color: var(--text); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; padding: 12px; }
+      .actions { display: flex; align-items: center; gap: 8px; }
+      .grid { display: grid; grid-template-columns: 1.35fr repeat(5, minmax(118px, 1fr)); gap: 8px; }
+      .metric { position: relative; min-width: 0; min-height: 96px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-panel); padding: 14px; box-shadow: var(--shadow-sm); }
+      .metric:first-child { background: var(--accent-50); border-color: var(--accent-100); }
+      .metric span { position: relative; z-index: 1; color: var(--muted); display: block; margin-bottom: 10px; font-size: 12px; font-weight: 600; }
+      .metric strong { position: relative; z-index: 1; display: block; overflow: hidden; color: var(--text); font-size: 24px; line-height: 1.15; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+      .metric:first-child strong { color: var(--accent); font-size: 28px; }
+      .compact-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+      .summary { border-left: 2px solid var(--line-strong); background: transparent; padding: 10px 12px; min-height: 70px; }
+      .summary:first-child { border-left-color: var(--accent); }
+      .summary span { display: block; color: var(--muted); margin-bottom: 5px; font-size: 12px; }
+      .summary strong { display: block; color: var(--text); font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+      section { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 18px; }
+      section:first-child, section[style*="margin-top:0"] { border-top: 0; padding-top: 0; }
+      .settings-band { border-top: 1px solid var(--line); padding-top: 18px; }
+      table { width: 100%; border: 1px solid var(--line); border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--panel); border-radius: var(--radius-panel); }
+      th, td { padding: 9px 12px; border: 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+      tr:last-child > th, tr:last-child > td { border-bottom: 0; }
+      thead th { background: var(--panel-muted); color: var(--muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
+      tbody > tr > th:first-child { width: 196px; color: var(--muted); font-weight: 600; }
+      tbody tr { transition: background-color var(--duration-fast); }
+      tbody tr:hover { background: color-mix(in srgb, var(--accent) 4%, var(--panel)); }
+      td { font-size: 13px; }
+      .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--panel); }
+      .table-scroll table { min-width: 680px; border: 0; border-radius: 0; }
+      .result { min-height: 22px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+      .result:not(:empty)::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--accent); }
+      .ok { color: var(--success) !important; }
+      .error { color: var(--danger) !important; }
+      .split { display: grid; grid-template-columns: minmax(260px, .78fr) minmax(420px, 1.22fr); gap: 20px; }
+      .list { border: 1px solid var(--line); background: var(--panel); min-height: 240px; max-height: 520px; overflow: auto; border-radius: var(--radius-panel); }
+      .list button { position: relative; width: 100%; min-height: 48px; background: transparent; color: var(--text); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; padding: 10px 12px; font-weight: 600; }
+      .list button:hover { background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
       .list button:last-child { border-bottom: 0; }
-      .list button.active { box-shadow: inset 3px 0 var(--accent); background: var(--bg); }
-      .list small, .answer-row small { display: block; color: var(--muted); margin-top: 3px; }
-      .detail { border-top: 1px solid var(--line); padding-top: 14px; }
-      .answer-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+      .list button.active { background: color-mix(in srgb, var(--accent) 9%, var(--panel)); color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+      .list small, .answer-row small { display: block; color: var(--muted); margin-top: 3px; font-weight: 400; }
+      .detail { border-top: 1px solid var(--line); padding-top: 16px; }
+      .answer-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
       .answer-row:last-child { border-bottom: 0; }
       .answer-row input { min-height: 36px; }
-      .inline-check { display: flex; align-items: center; gap: 8px; color: var(--text); margin: 14px 0 5px; }
-      .inline-check input { width: auto; min-height: auto; }
-      .mode-options { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); border: 1px solid var(--line); background: var(--panel); }
-      .mode-options label { margin: 0; padding: 12px; border-right: 1px solid var(--line); color: var(--text); cursor: pointer; }
+      .inline-check { display: flex; align-items: flex-start; gap: 8px; color: var(--text); margin: 12px 0 5px; font-weight: 500; }
+      .inline-check input { width: auto; min-height: auto; margin-top: 3px; }
+      .mode-options { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-input); background: var(--panel); }
+      .mode-options label { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; margin: 0; padding: 8px; border-right: 1px solid var(--line); color: var(--muted); cursor: pointer; font-weight: 600; }
+      .mode-options label:has(input:checked) { background: var(--accent-50); color: var(--accent); }
       .mode-options label:last-child { border-right: 0; }
-      .mode-options input { width: auto; min-height: auto; margin-right: 6px; }
-      .settings-band { border-top: 1px solid var(--line); padding-top: 18px; }
-      .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-      .check-row { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 0; }
-      .check-row label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text); }
-      .check-row input { width: auto; min-height: auto; }
-      .table-scroll { overflow-x: auto; }
+      .mode-options input { width: auto; min-height: auto; margin: 0; }
+      .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+      .check-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+      .check-row label { display: flex; align-items: center; gap: 6px; min-height: 32px; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-input); background: var(--panel); padding: 5px 9px; color: var(--text); font-weight: 500; }
+      .check-row label:has(input:checked) { border-color: var(--accent); background: var(--accent-50); color: var(--accent); }
+      .check-row input { width: auto; min-height: auto; margin: 0; }
       .permission-row { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr) auto; gap: 10px; align-items: end; padding: 12px 0; border-bottom: 1px solid var(--line); }
       .permission-row:last-child { border-bottom: 0; }
       .permission-row label { margin-top: 0; }
-      dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 22px; }
-      dialog::backdrop { background: rgb(0 0 0 / .45); }
-      dialog .actions { justify-content: flex-end; margin-top: 18px; }
-      @media (max-width: 720px) { header { padding: 12px 16px; } main { padding: 16px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .compact-grid, .rule-grid, .permission-row { grid-template-columns: minmax(0, 1fr); } .split { grid-template-columns: minmax(0, 1fr); } .answer-row { grid-template-columns: minmax(0, 1fr) 92px; } .answer-row button { grid-column: 1 / -1; } .mode-options { grid-template-columns: minmax(0, 1fr); } .mode-options label { border-right: 0; border-bottom: 1px solid var(--line); } .mode-options label:last-child { border-bottom: 0; } th { width: 125px; } .actions { flex-wrap: wrap; } .toolbar button { flex: 1 1 120px; } }
+      dialog { width: min(480px, calc(100% - 32px)); border: 1px solid var(--line-strong); border-radius: var(--radius-dialog); background: var(--panel); color: var(--text); padding: 22px; box-shadow: var(--shadow-md); }
+      dialog[open] { animation: dialog-in var(--duration-normal) var(--ease-out); }
+      dialog::backdrop { background: rgb(9 15 13 / .56); backdrop-filter: blur(2px); }
+      dialog h2 { font-size: 17px; }
+      dialog .actions { justify-content: flex-end; margin-top: 20px; }
+      @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+      @media (max-width: 1180px) {
+        :root { --sidebar-width: 196px; }
+        .workspace { padding-inline: 20px; }
+        .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .metric:first-child { grid-column: span 2; }
+        .compact-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      }
+      @media (max-width: 820px) {
+        #nav-toggle { display: grid; place-items: center; }
+        #dashboard { grid-template-columns: minmax(0, 1fr); }
+        .sidebar { position: fixed; z-index: 40; top: var(--header-height); left: 0; width: min(280px, calc(100vw - 48px)); transform: translateX(-102%); box-shadow: var(--shadow-md); transition: transform 240ms var(--ease-out); }
+        body.nav-open { overflow: hidden; }
+        body.nav-open .sidebar { transform: translateX(0); }
+        #nav-backdrop { position: fixed; z-index: 30; inset: var(--header-height) 0 0; width: 100%; height: auto; min-height: 0; border: 0; border-radius: 0; background: rgb(9 15 13 / .48); padding: 0; }
+        body.nav-open #nav-backdrop { display: block; }
+        .workspace { padding-inline: 16px; }
+        .workspace-header { min-height: 82px; }
+        .workspace-state { display: none; }
+        .split { grid-template-columns: minmax(0, 1fr); }
+        .mode-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .mode-options label { border-bottom: 1px solid var(--line); }
+        .mode-options label:nth-child(even) { border-right: 0; }
+      }
+      @media (max-width: 600px) {
+        .app-header { padding: 8px 12px; }
+        .brand-copy p { display: none; }
+        .brand-mark { width: 32px; height: 32px; }
+        .header-actions .beta { display: none; }
+        button { min-height: 44px; }
+        input, select { min-height: 44px; }
+        .workspace { padding: 0 12px 24px; }
+        .workspace-header { align-items: flex-start; min-height: 94px; padding: 16px 0; }
+        .view-content { padding-top: 14px; }
+        .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .metric:first-child { grid-column: 1 / -1; }
+        .metric:last-child { grid-column: 1 / -1; }
+        .metric { min-height: 88px; }
+        .compact-grid, .rule-grid, .permission-row { grid-template-columns: minmax(0, 1fr); }
+        .mode-options { grid-template-columns: minmax(0, 1fr); }
+        .mode-options label { justify-content: flex-start; border-right: 0; }
+        .answer-row { grid-template-columns: minmax(0, 1fr) 92px; }
+        .answer-row button { grid-column: 1 / -1; }
+        .actions { flex-wrap: wrap; }
+        .toolbar > button { flex: 1 1 132px; }
+        .toolbar > .field { flex-basis: 100%; }
+        tbody > tr > th:first-child { width: 124px; }
+        dialog { width: calc(100% - 24px); padding: 18px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+      }
     </style>
   </head>
   <body>
-    <header>
-      <h1>NewChatLearning</h1>
-      <div class="actions"><span class="beta">BETA</span><button id="logout" class="secondary hidden" type="button">退出</button></div>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+      <symbol id="icon-overview" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+      <symbol id="icon-groups" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="icon-library" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
+      <symbol id="icon-filter" viewBox="0 0 24 24"><path d="M4 5h16M7 12h10M10 19h4"/></symbol>
+      <symbol id="icon-permissions" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="m17 11 2 2 4-4"/></symbol>
+      <symbol id="icon-media" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+      <symbol id="icon-migration" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></symbol>
+      <symbol id="icon-tts" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18 5a9 9 0 0 1 0 14"/></symbol>
+      <symbol id="icon-tasks" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M8 15h.01M12 15h.01M16 15h.01"/></symbol>
+      <symbol id="icon-backups" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+      <symbol id="icon-diagnostics" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 16 4-4 3 3 5-7"/></symbol>
+      <symbol id="icon-audit" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+    </svg>
+    <header class="app-header">
+      <div class="brand-lockup">
+        <button id="nav-toggle" class="secondary hidden" type="button" aria-label="打开管理导航" aria-expanded="false" aria-controls="dashboard-sidebar"><svg class="nav-icon" aria-hidden="true"><use href="#icon-menu"/></svg></button>
+        <div class="brand-mark" aria-hidden="true">N</div>
+        <div class="brand-copy"><h1>NewChatLearning</h1><p>QQ 群聊学习与词库控制台</p></div>
+      </div>
+      <div class="header-actions"><span class="beta">BETA</span><button id="logout" class="secondary hidden" type="button">退出</button></div>
     </header>
     <main id="auth" class="auth-shell">
       <form id="auth-form" class="auth-panel">
@@ -99,21 +312,32 @@
       </form>
     </main>
     <main id="dashboard" class="hidden">
+      <aside id="dashboard-sidebar" class="sidebar">
+        <div class="sidebar-label">管理模块</div>
+        <nav class="tabs" aria-label="管理模块">
+          <button id="tab-overview" class="active" type="button" aria-current="page"><svg class="nav-icon" aria-hidden="true"><use href="#icon-overview"/></svg><span>概览</span></button>
+          <button id="tab-groups" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-groups"/></svg><span>群聊</span></button>
+          <button id="tab-library" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-library"/></svg><span>词库</span></button>
+          <button id="tab-filters" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-filter"/></svg><span>过滤</span></button>
+          <button id="tab-permissions" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-permissions"/></svg><span>权限</span></button>
+          <button id="tab-media" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-media"/></svg><span>媒体</span></button>
+          <button id="tab-migration" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-migration"/></svg><span>迁移</span></button>
+          <button id="tab-tts" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tts"/></svg><span>语音</span></button>
+          <button id="tab-tasks" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"/></svg><span>任务</span></button>
+          <button id="tab-backups" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-backups"/></svg><span>备份</span></button>
+          <button id="tab-diagnostics" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-diagnostics"/></svg><span>诊断</span></button>
+          <button id="tab-audit" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-audit"/></svg><span>审计</span></button>
+        </nav>
+        <div class="sidebar-footer"><div class="live-indicator">本地算法在线</div><p>核心学习与文本回复零 LLM Token</p></div>
+      </aside>
+      <button id="nav-backdrop" type="button" aria-label="关闭管理导航"></button>
+      <div class="workspace">
+        <div class="workspace-header">
+          <div><div class="breadcrumb">NewChatLearning / 管理</div><h2 id="view-title">运行概览</h2><p id="view-description">检查插件状态、词库规模与本地资源占用。</p></div>
+          <div class="workspace-state"><span><strong>本机运行</strong><br>一小时管理会话</span></div>
+        </div>
+        <div class="view-content">
       <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
-      <nav class="tabs" aria-label="管理模块">
-        <button id="tab-overview" class="active" type="button">概览</button>
-        <button id="tab-groups" type="button">群聊</button>
-        <button id="tab-library" type="button">词库</button>
-        <button id="tab-filters" type="button">过滤</button>
-        <button id="tab-permissions" type="button">权限</button>
-        <button id="tab-media" type="button">媒体</button>
-        <button id="tab-migration" type="button">迁移</button>
-        <button id="tab-tts" type="button">语音</button>
-        <button id="tab-tasks" type="button">任务</button>
-        <button id="tab-backups" type="button">备份</button>
-        <button id="tab-diagnostics" type="button">诊断</button>
-        <button id="tab-audit" type="button">审计</button>
-      </nav>
       <div id="overview-view">
       <div class="toolbar">
         <button id="overview-refresh" class="secondary" type="button">刷新统计</button>
@@ -383,7 +607,7 @@
         <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
         <div class="split">
           <div><div id="backups-list" class="list"><p style="padding:14px">正在读取备份。</p></div><div id="backups-message" class="result" role="status"></div></div>
-          <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新登录。</p></section></div>
+          <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新进入。</p></section></div>
         </div>
       </div>
       <div id="diagnostics-view" class="hidden">
@@ -402,6 +626,8 @@
         <div class="table-scroll"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标</th><th>摘要</th></tr></thead><tbody id="audit-body"></tbody></table></div>
         <div class="toolbar" style="margin-top:16px"><button id="audit-more" class="secondary" type="button">加载更早记录</button></div>
         <div id="audit-message" class="result" role="status"></div>
+      </div>
+        </div>
       </div>
     </main>
     <dialog id="reauth-dialog">
@@ -511,6 +737,21 @@
       let selectedTask = null;
       let pendingTaskAction = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
+      const viewMeta = {
+        overview: ["运行概览", "检查插件状态、词库规模与本地资源占用。"],
+        groups: ["群聊设置", "按 QQ 群控制学习、回复、静默模式与独立概率。"],
+        library: ["词库管理", "搜索、维护和导出群聊问答，并清理成员贡献。"],
+        filters: ["过滤规则", "配置回复过滤、敏感词黑名单与词库清理策略。"],
+        permissions: ["权限管理", "维护插件管理员与按群隔离的子管理员范围。"],
+        media: ["媒体维护", "检查失效媒体并在完整备份后执行确认清理。"],
+        migration: ["外部词库", "安全扫描旧 .cl 文件，并独立管理导入词库。"],
+        tts: ["语音回复", "配置本地或云端 TTS、额度保护与加密密钥。"],
+        tasks: ["后台任务", "管理受限类型的定时扫描、备份与维护任务。"],
+        backups: ["备份恢复", "校验备份并在二次确认后恢复词库数据库。"],
+        diagnostics: ["运行诊断", "查看不含聊天正文的按群运行计数与词库汇总。"],
+        audit: ["审计日志", "追踪安全、配置、权限、导入与破坏性操作。"],
+      };
+      const viewNames = Object.keys(viewMeta);
       const bridge = window.AstrBotPluginPage;
       const el = (id) => document.getElementById(id);
       const setText = (id, value) => { el(id).textContent = String(value); };
@@ -524,6 +765,8 @@
         el("auth").classList.remove("hidden");
         el("dashboard").classList.add("hidden");
         el("logout").classList.add("hidden");
+        el("nav-toggle").classList.add("hidden");
+        closeNavigation();
         if (authState.entry_mode !== "passwordless") {
           setText("auth-title", "插件版本未完整更新");
           setText("auth-copy", "当前页面与插件后端版本不一致，请重新安装插件并刷新页面。");
@@ -541,8 +784,19 @@
         el("auth").classList.add("hidden");
         el("dashboard").classList.remove("hidden");
         el("logout").classList.remove("hidden");
+        el("nav-toggle").classList.remove("hidden");
         await refreshOverview();
         await loadGroups();
+      }
+
+      function closeNavigation() {
+        document.body.classList.remove("nav-open");
+        el("nav-toggle").setAttribute("aria-expanded", "false");
+      }
+
+      function toggleNavigation() {
+        const open = document.body.classList.toggle("nav-open");
+        el("nav-toggle").setAttribute("aria-expanded", String(open));
       }
 
       async function refreshOverview() {
@@ -597,6 +851,16 @@
         el("tab-backups").classList.toggle("active", backups);
         el("tab-diagnostics").classList.toggle("active", diagnostics);
         el("tab-audit").classList.toggle("active", audit);
+        for (const name of viewNames) {
+          const tab = el(`tab-${name}`);
+          if (tab.classList.contains("active")) tab.setAttribute("aria-current", "page");
+          else tab.removeAttribute("aria-current");
+        }
+        const [title, description] = viewMeta[view] || viewMeta.overview;
+        setText("view-title", title);
+        setText("view-description", description);
+        document.title = `${title} · NewChatLearning Beta`;
+        closeNavigation();
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
         if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
         if (migration) Promise.all([loadMigrationStatus(), loadExternalLibraries()]).catch(error => setText("migration-message", error?.message || "迁移数据读取失败。"));
@@ -1188,6 +1452,10 @@
         try { await bridge.apiPost("api/auth/logout", { csrf_token: authState?.csrf_token || "" }); }
         finally { authState = null; await refreshAuth(); }
       });
+      el("nav-toggle").addEventListener("click", toggleNavigation);
+      el("nav-backdrop").addEventListener("click", closeNavigation);
+      window.addEventListener("keydown", event => { if (event.key === "Escape") closeNavigation(); });
+      window.addEventListener("resize", () => { if (window.innerWidth > 820) closeNavigation(); });
       el("tab-overview").addEventListener("click", () => showView("overview"));
       el("overview-refresh").addEventListener("click", async () => {
         const button = el("overview-refresh");
@@ -1286,14 +1554,14 @@
       el("audit-refresh").addEventListener("click", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
       el("audit-action").addEventListener("change", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
       el("audit-more").addEventListener("click", () => loadAudit(false).catch(error => setText("audit-message", error?.message || "更早记录读取失败。")));
-      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新登录。`); el("backup-restore-dialog").showModal(); });
+      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新进入。`); el("backup-restore-dialog").showModal(); });
       el("backup-restore-cancel").addEventListener("click", () => el("backup-restore-dialog").close());
       el("backup-restore-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!selectedBackup) return;
         try {
           const data = await postSecure("api/backups/restore", { name: selectedBackup.name, confirmed: true });
           el("backup-restore-dialog").close(); authState = null; selectedBackup = null;
-          await refreshAuth(); setText("auth-message", `恢复完成，保险备份：${data.safety_backup_name}。请重新登录。`);
+          await refreshAuth(); setText("auth-message", `恢复完成，保险备份：${data.safety_backup_name}。请重新进入。`);
         } catch (error) { setText("backup-restore-message", error?.message || "恢复未执行。"); }
       });
       el("permission-add-group").addEventListener("click", () => addPermissionGroup());

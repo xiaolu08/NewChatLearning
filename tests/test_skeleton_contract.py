@@ -120,3 +120,26 @@ def test_config_schema_and_dashboard_entry_are_valid():
     )[1].split('el("tab-groups")', 1)[0]
     assert 'refreshAuth()' not in refresh_handler
     assert 'location.reload' not in refresh_handler
+
+
+def test_dashboard_dense_shell_is_accessible_responsive_and_offline():
+    dashboard = (ROOT / "pages" / "dashboard" / "index.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="dashboard-sidebar"' in dashboard
+    assert 'id="nav-toggle"' in dashboard
+    assert 'aria-controls="dashboard-sidebar"' in dashboard
+    assert 'aria-current="page"' in dashboard
+    assert 'tab.setAttribute("aria-current", "page")' in dashboard
+    assert 'id="view-title"' in dashboard
+    assert 'id="view-description"' in dashboard
+    assert "const viewMeta = {" in dashboard
+    assert "@media (max-width: 820px)" in dashboard
+    assert "@media (max-width: 600px)" in dashboard
+    assert "@media (prefers-reduced-motion: reduce)" in dashboard
+    assert "button:focus-visible" in dashboard
+    assert "font-variant-numeric: tabular-nums" in dashboard
+    assert "body.nav-open .sidebar" in dashboard
+    assert "window.addEventListener(\"keydown\"" in dashboard
+    assert "https://cdn" not in dashboard
