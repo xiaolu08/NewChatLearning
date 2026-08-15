@@ -130,9 +130,20 @@ def normalize_group_message(event: Any) -> NormalizedMessage | None:
     timestamp = int(getattr(message_obj, "timestamp", 0) or raw.get("time") or 0)
     if not message_id or timestamp <= 0:
         return None
-    components = tuple(
+    parsed_components = tuple(
         _component_payload(component) for component in getattr(event, "get_messages", list)()
     )
+    # AstrBot may drop media components when its preprocessing downloader cannot
+    # fetch a temporary QQ URL. Keep the original OneBot segments as the source
+    # of truth so the plugin can resolve them through NapCat later.
+    raw_components = tuple(
+        component
+        for segment in raw.get("message", [])
+        if isinstance(segment, Mapping)
+        for component in (_raw_segment_component(segment),)
+        if component is not None
+    )
+    components = _merge_raw_components(parsed_components, raw_components)
     matching = tuple(_matching_payload(component) for component in components)
     message = NormalizedMessage(
         platform=str(getattr(event, "get_platform_name", lambda: "aiocqhttp")()),
@@ -144,6 +155,36 @@ def normalize_group_message(event: Any) -> NormalizedMessage | None:
         matching_components=matching,
     )
     return None if message.is_empty else message
+
+
+def _merge_raw_components(
+    parsed: tuple[dict[str, Any], ...],
+    raw: tuple[dict[str, Any], ...],
+) -> tuple[dict[str, Any], ...]:
+    if not raw:
+        return parsed
+    result = list(parsed)
+    counts: dict[str, int] = {}
+    for component in parsed:
+        key = str(component.get("type", "")).lower()
+        counts[key] = counts.get(key, 0) + 1
+    for component in raw:
+        key = str(component.get("type", "")).lower()
+        if key in {
+            "image",
+            "flashimage",
+            "record",
+            "video",
+            "file",
+            "marketface",
+            "xml",
+            "json",
+            "forward",
+        } and counts.get(key, 0) > 0:
+            counts[key] -= 1
+            continue
+        result.append(component)
+    return tuple(result)
 
 
 async def enrich_long_tail_components(
@@ -198,12 +239,12 @@ async def _resolve_media_component(event: Any, component: dict[str, Any]) -> dic
         return component
     if component_type in {"node", "nodes"}:
         return await _resolve_node_media(event, component, data)
-    if component_type not in {"image", "flashimage"}:
+    if component_type not in {"image", "flashimage", "record", "voice", "video", "file"}:
         return component
     file_id = str(data.get("file") or data.get("file_id") or "").strip()
     if not file_id or _is_local_media_source(str(data.get("path") or "")):
         return component
-    reference = await _fetch_image_reference(event, file_id)
+    reference = await _fetch_media_reference(event, component_type, file_id)
     if reference is None:
         return component
     field, value = reference
@@ -242,7 +283,11 @@ async def _resolve_node_media(
     return {"type": component.get("type", ""), "data": updated_data}
 
 
-async def _fetch_image_reference(event: Any, file_id: str) -> tuple[str, str] | None:
+async def _fetch_media_reference(
+    event: Any,
+    component_type: str,
+    file_id: str,
+) -> tuple[str, str] | None:
     bot = getattr(event, "bot", None)
     call_action = getattr(bot, "call_action", None)
     if not callable(call_action):
@@ -252,15 +297,24 @@ async def _fetch_image_reference(event: Any, file_id: str) -> tuple[str, str] | 
     if stem and stem != file_id:
         candidates.append(stem)
     actions = []
+    preferred = {
+        "image": "get_image",
+        "flashimage": "get_image",
+        "record": "get_record",
+        "voice": "get_record",
+        "video": "get_video",
+        "file": "get_file",
+    }.get(component_type, "get_file")
     for candidate in candidates:
         actions.extend(
             [
-                ("get_image", {"file": candidate}),
-                ("get_image", {"file_id": candidate}),
+                (preferred, {"file": candidate}),
+                (preferred, {"file_id": candidate}),
                 ("get_file", {"file_id": candidate}),
                 ("get_file", {"file": candidate}),
             ]
         )
+    remote_candidate: tuple[str, str] | None = None
     for action, params in actions:
         try:
             payload = await call_action(action, **params)
@@ -278,8 +332,8 @@ async def _fetch_image_reference(event: Any, file_id: str) -> tuple[str, str] | 
             for key in ("url", "download_url"):
                 value = str(target.get(key) or "").strip()
                 if value.startswith(("http://", "https://")):
-                    return "url", value
-    return None
+                    remote_candidate = remote_candidate or ("url", value)
+    return remote_candidate
 
 
 def _is_local_media_source(value: str) -> bool:

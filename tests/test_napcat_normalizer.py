@@ -122,6 +122,46 @@ def test_resolves_image_file_id_through_napcat_cache(tmp_path):
     assert "gchat.qpic.cn" not in repr(enriched.matching_components)
 
 
+def test_uses_raw_onebot_media_when_astrbot_drops_component():
+    event = Event(
+        {
+            "post_type": "message",
+            "message": [
+                {
+                    "type": "image",
+                    "data": {"file": "image-id", "url": "https://gchat.qpic.cn/download?expired=1"},
+                }
+            ],
+        },
+        [],
+    )
+
+    message = normalize_group_message(event)
+
+    assert message is not None
+    assert message.components[0]["type"] == "Image"
+    assert message.components[0]["data"]["file"] == "image-id"
+
+
+def test_resolves_video_through_get_video(tmp_path):
+    cached = tmp_path / "cached-video.mp4"
+    cached.write_bytes(b"video")
+    event = Event(
+        {
+            "post_type": "message",
+            "message": [{"type": "video", "data": {"file": "video-id"}}],
+        },
+        [],
+    )
+    event.bot = Bot({"status": "ok", "data": {"file": str(cached)}})
+
+    message = normalize_group_message(event)
+    enriched = asyncio.run(enrich_long_tail_components(event, message))
+
+    assert enriched.components[0]["data"]["path"] == str(cached)
+    assert event.bot.calls[0] == ("get_video", {"file": "video-id"})
+
+
 def test_image_lookup_failure_keeps_original_component():
     class FailingBot:
         async def call_action(self, _action, **_kwargs):

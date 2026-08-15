@@ -31,6 +31,7 @@
 - [0.1.0-beta.31.post13 Release Notes](./releases/0.1.0-beta.31.post13.md)：补充全局词库跨群命令的完整聊天帮助。
 - [0.1.0-beta.31.post14 Release Notes](./releases/0.1.0-beta.31.post14.md)：处理失效媒体发送失败，避免回复处理异常中断。
 - [0.1.0-beta.31.post15 Release Notes](./releases/0.1.0-beta.31.post15.md)：修复原始 OneBot 组件写入 AstrBot 消息历史时的兼容性错误。
+- [0.1.0-beta.31.post16 Release Notes](./releases/0.1.0-beta.31.post16.md)：补强 NapCat 原始媒体与长尾消息补全，优先使用本地媒体。
 
 ## 研究资料
 
