@@ -15,6 +15,7 @@ def test_parse_legacy_group_commands():
         "reply", ("off",)
     )
     assert parse_legacy_group_command("!grouplist") == CrossGroupCommand("list")
+    assert parse_legacy_group_command("!sharelist") == CrossGroupCommand("share_list")
     assert parse_legacy_group_command("!add learnings 10001 10002") == CrossGroupCommand(
         "add", "learnings", ("10001", "10002")
     )
@@ -60,6 +61,7 @@ def test_parse_legacy_group_commands():
 def test_legacy_parser_does_not_intercept_unrelated_forms():
     assert parse_legacy_group_command("hello !learning on") is None
     assert parse_legacy_group_command("!grouplist extra") is None
+    assert parse_legacy_group_command("!sharelist extra") is None
     assert parse_legacy_group_command("!unknown") is None
     assert parse_legacy_group_command("!globe") is None
     assert parse_legacy_group_command("!globe on") is None

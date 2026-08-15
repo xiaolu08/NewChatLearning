@@ -535,6 +535,7 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl media-cleanup-apply <计划ID> confirm - 备份并执行清理\n"
                 "全局/插件管理员跨群命令：\n"
                 "!grouplist - 查看学习、回复、自主管理和词库范围群列表\n"
+                "!sharelist - 私聊查看联动群聊列表\n"
                 "!add/remove learning|learnings|reply <群号...>\n"
                 "!reply -s <概率> <群号...> - 设置目标群独立回复概率\n"
                 "!reply -d <群号...> - 恢复目标群继承全局回复概率\n"
@@ -1167,6 +1168,13 @@ class NewChatLearningPlugin(star.Star):
                 MessageEventResult().message(text)
             )
             return
+        if command.action == "share_list":
+            if private:
+                text = f"联动群聊列表\n{self._format_share_groups(settings)}"
+            else:
+                text = "联动群聊列表包含跨群信息，请私聊 Bot 使用 !sharelist 查看。"
+            event.set_result(MessageEventResult().message(text))
+            return
 
         group_ids = [self._web_group_id(value) for value in command.group_ids]
         if not group_ids or any(group_id is None for group_id in group_ids):
@@ -1308,7 +1316,7 @@ class NewChatLearningPlugin(star.Star):
             f"不汇入全局词库的群：{joined('excluded_group_ids')}\n"
             f"使用全局词库的群：{joined('global_group_ids')}\n"
             f"仅使用本群词库的群：{joined('local_only_group_ids')}\n"
-            f"群聊联动词库：{NewChatLearningPlugin._format_share_groups(settings)}"
+            "联动群聊列表：使用 !sharelist 查看"
         )
 
     @staticmethod
@@ -1330,20 +1338,13 @@ class NewChatLearningPlugin(star.Star):
             if group_id in probabilities
             else "继承全局"
         )
-        share_group_names = [
-            str(entry.get("name", ""))
-            for entry in settings.get("share_groups", [])
-            if isinstance(entry, dict)
-            and group_id in {str(value) for value in entry.get("group_ids", [])}
-            and str(entry.get("name", ""))
-        ]
         return (
             "当前群跨群设置\n"
             f"学习：{'已开启' if contains('learning_group_ids') else '未开启'}\n"
             f"回复：{'已开启' if contains('reply_group_ids') else '未开启'}\n"
             f"独立回复概率：{probability}\n"
             f"允许查询全局/标签词库：{'是' if contains('global_group_ids') else '否'}\n"
-            f"加入联动词库：{'、'.join(share_group_names) if share_group_names else '无'}\n"
+            "联动群聊列表：使用 !sharelist 查看\n"
             f"不汇入全局词库：{'是' if contains('excluded_group_ids') else '否'}\n"
             f"允许本群管理员自主管理：{'是' if sub_admin else '否'}"
         )

@@ -56,6 +56,8 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
         return GroupSettingsCommand("reply", arguments)
     if command == "!grouplist" and not arguments:
         return CrossGroupCommand("list")
+    if command == "!sharelist" and not arguments:
+        return CrossGroupCommand("share_list")
     if command in {"!add", "!remove"} and arguments:
         action = "add" if command == "!add" else "remove"
         category = arguments[0]

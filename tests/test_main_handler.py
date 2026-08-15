@@ -627,6 +627,7 @@ def test_private_help_aliases_reach_ncl_help_for_plugin_admin(monkeypatch):
         assert "!remove globe <群号...> - 目标群仅使用本群词库" in event.result.text
         assert "!add share <群号...> <联动组名> - 创建或加入群聊联动词库" in event.result.text
         assert "!remove share <群号...> <联动组名> - 移除联动组成员" in event.result.text
+        assert "!sharelist - 私聊查看联动群聊列表" in event.result.text
         assert "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库" in event.result.text
         assert "!reply -s <概率> <群号...> - 设置目标群独立回复概率" in event.result.text
         assert "!reply -d <群号...> - 恢复目标群继承全局回复概率" in event.result.text
@@ -703,7 +704,7 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
                 "global_group_ids": ["10002"],
                 "local_only_group_ids": ["10005"],
                 "share_groups": [
-                    {"name": "联动词库1", "group_ids": ["10001", "10002"]}
+                    {"name": "联动词库1", "group_ids": ["90001", "90002"]}
                 ],
                 "group_sub_admins": [
                     {"group_id": "10004", "admin_ids": ["12345"]}
@@ -728,7 +729,10 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
     assert "不汇入全局词库的群：10003" in event.result.text
     assert "使用全局词库的群：10002" in event.result.text
     assert "仅使用本群词库的群：10005" in event.result.text
-    assert "群聊联动词库：联动词库1（10001、10002）" in event.result.text
+    assert "联动群聊列表：使用 !sharelist 查看" in event.result.text
+    assert "联动词库1" not in event.result.text
+    assert "90001" not in event.result.text
+    assert "90002" not in event.result.text
 
     plugin.config = {
         "permissions": {
@@ -787,7 +791,8 @@ def test_group_cross_group_responses_do_not_disclose_other_group_ids(monkeypatch
     )
     assert "当前群跨群设置" in event.result.text
     assert "独立回复概率：5%" in event.result.text
-    assert "加入联动词库：联动词库1" in event.result.text
+    assert "联动群聊列表：使用 !sharelist 查看" in event.result.text
+    assert "联动词库1" not in event.result.text
     assert "隐藏联动组" not in event.result.text
     for hidden_group in (
         "20001", "30001", "40001", "50001", "60001", "70001", "80001",
@@ -966,7 +971,55 @@ def test_cross_group_share_command_persists_named_memberships(monkeypatch):
     assert plugin.app.calls[0]["category"] == "share"
     assert plugin.app.calls[0]["group_ids"] == ["123456789", "987654321"]
     assert plugin.app.calls[0]["tag"] == "联动词库1"
-    assert "群聊联动词库：联动词库1（123456789、987654321）" in event.result.text
+    assert "联动群聊列表：使用 !sharelist 查看" in event.result.text
+    assert "联动词库1" not in event.result.text
+    assert "123456789" not in event.result.text
+    assert "987654321" not in event.result.text
+
+
+def test_sharelist_discloses_members_only_in_private_chat(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "share_groups": [
+                    {
+                        "name": "联动词库1",
+                        "group_ids": ["123456789", "987654321"],
+                    }
+                ],
+                "revision": "revision-1",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.config = CrossGroupConfig()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+
+    private_event = Event()
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            private_event,
+            main_module.CrossGroupCommand("share_list"),
+            private=True,
+        )
+    )
+    assert private_event.result.text == (
+        "联动群聊列表\n联动词库1（123456789、987654321）"
+    )
+
+    group_event = Event()
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            group_event,
+            main_module.CrossGroupCommand("share_list"),
+        )
+    )
+    assert group_event.result.text == (
+        "联动群聊列表包含跨群信息，请私聊 Bot 使用 !sharelist 查看。"
+    )
+    assert "123456789" not in group_event.result.text
+    assert "987654321" not in group_event.result.text
 
 
 def test_cross_group_subadmin_reads_target_group_managers_before_save(monkeypatch):

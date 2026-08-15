@@ -39,12 +39,13 @@ NewChatLearning 已完整恢复上游群管理命令的主要语义，但尚未�
 | `add/remove unmerge <群号...>` | 命令兼容 | 更新不进入全局词库的群 |
 | `add/remove globe <群号...>` | 扩展命令 | 按目标群允许或禁止查询全局/标签共享词库；与控制来源群的 `unmerge` 独立 |
 | `add/remove share <群号...> <联动组名>` | 扩展命令 | 创建命名联动组或调整成员；仅共享直接成员群的本群词库，不传播其他词库权限 |
+| `sharelist` | 扩展命令 | 管理员私聊查看全部联动组名和成员群号；群聊中不展开跨群信息 |
 | `add/remove autotask <任务名>` | 功能等价 | WebUI 任务页面；仅允许内建安全任务，不执行任意命令或脚本 |
 | `autotaskinfo` | 功能等价 | WebUI 任务列表与运行历史 |
 | `autotaskcommand` | 功能等价 | WebUI 任务页面说明；原版任意特殊命令机制不开放 |
 | `fastdelete` | 功能等价 | `!d`/`!delete` 引用 Bot 回复或按最近序号删除；权限由插件管理员和群子管理员控制 |
 | `check` | 功能等价 | `/ncl status` 与 WebUI 概览/诊断页面 |
-| `grouplist` | 命令兼容 | `!grouplist` 显示学习、回复、自主管理、全局来源排除、仅本群查询群和联动词库；可从管理群或管理员私聊发送 |
+| `grouplist` | 命令兼容 | `!grouplist` 显示学习、回复、自主管理、全局来源排除和仅本群查询群；联动部分仅显示 `!sharelist` 引导 |
 | `globe` | 语义改进 | 不提供容易影响全部群的无参数总开关；使用 `!add/remove globe <群号...>` 按目标群控制共享词库查询 |
 | `setadmin <QQ号>` | 功能等价 | WebUI 权限页中的插件管理员 QQ 号 |
 | `setbotname <昵称>` | 尚未复现 | Bot 身份由 AstrBot 平台配置管理，插件没有独立昵称配置 |
