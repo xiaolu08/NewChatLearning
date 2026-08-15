@@ -4,7 +4,7 @@
 
 将 QQ 群聊里的相邻消息整理成可检索的问答词库，让 AstrBot 用本地算法学习和回复。核心学习、匹配和回复流程不调用 LLM，不主动消耗 Token。
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post13-orange)
+![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post14-orange)
 ![Stage](https://img.shields.io/badge/stage-public%20beta-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
@@ -30,7 +30,7 @@
 4. 点击 **进入** 管理会话。
 5. 建议先关闭自动回复，完成群设置、备份和词库迁移检查后再逐步启用。
 
-> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post13`。
+> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post14`。
 
 ## 常用命令
 

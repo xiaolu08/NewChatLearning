@@ -27,6 +27,14 @@ class Bot:
         return {"data": {"message_id": 88}}
 
 
+class FailingMediaBot(Bot):
+    async def send_group_msg(self, **kwargs):
+        self.sent.append(kwargs)
+        if len(self.sent) == 1:
+            raise RuntimeError("download failed: Bad Request")
+        return {"data": {"message_id": 89}}
+
+
 class Event:
     parser_func = None
 
@@ -44,6 +52,12 @@ class Event:
 
     def get_self_id(self):
         return "9"
+
+
+class FailingMediaEvent(Event):
+    def __init__(self, parser):
+        super().__init__(parser)
+        self.bot = FailingMediaBot()
 
 
 def _install_astrbot_event(monkeypatch):
@@ -91,3 +105,32 @@ def test_media_only_parser_failure_is_silent():
 
     assert result is None
     assert event.bot.sent == []
+
+
+def test_send_failure_retries_without_media(monkeypatch):
+    _install_astrbot_event(monkeypatch)
+
+    async def parser(chain):
+        return [{"type": "text", "data": {"text": "fallback"}}]
+
+    event = FailingMediaEvent(parser)
+    message_id = asyncio.run(send_group_message_with_id(event, Chain([Plain(), Image()])))
+
+    assert message_id == "89"
+    assert len(event.bot.sent) == 2
+    assert event.bot.sent[1]["message"] == [
+        {"type": "text", "data": {"text": "fallback"}}
+    ]
+
+
+def test_media_only_send_failure_is_silent(monkeypatch):
+    _install_astrbot_event(monkeypatch)
+
+    async def parser(chain):
+        return [{"type": "image", "data": {"file": "stale"}}]
+
+    event = FailingMediaEvent(parser)
+    result = asyncio.run(send_group_message_with_id(event, Chain([Image()])))
+
+    assert result is None
+    assert len(event.bot.sent) == 1

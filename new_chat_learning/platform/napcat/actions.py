@@ -48,11 +48,35 @@ async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
     self_id = str(getattr(event, "get_self_id", lambda: "")())
     if self_id:
         routing["self_id"] = int(self_id) if self_id.isdigit() else self_id
-    response = await bot.send_group_msg(
-        group_id=int(group_id),
-        message=messages,
-        **routing,
-    )
+    try:
+        response = await bot.send_group_msg(
+            group_id=int(group_id),
+            message=messages,
+            **routing,
+        )
+    except Exception:  # noqa: BLE001 - OneBot adapters expose platform-specific failures
+        # A stale QQ media reference can parse successfully but fail only when NapCat
+        # tries to download it. Retry once without media so mixed text replies survive.
+        fallback = type(chain)()
+        fallback.chain = [
+            component
+            for component in getattr(chain, "chain", [])
+            if component.__class__.__name__.lower()
+            not in {"image", "record", "video", "file", "marketface"}
+        ]
+        if not fallback.chain:
+            return None
+        try:
+            fallback_messages = await parser(fallback)
+            if not fallback_messages:
+                return None
+            response = await bot.send_group_msg(
+                group_id=int(group_id),
+                message=fallback_messages,
+                **routing,
+            )
+        except Exception:  # noqa: BLE001 - stale media must not break the event pipeline
+            return None
     from astrbot.api.event import AstrMessageEvent
 
     await AstrMessageEvent.send(event, chain)
