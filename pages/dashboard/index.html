@@ -272,8 +272,11 @@
         </section>
         <section class="settings-band">
           <h2>准备导入</h2>
-          <p>转换阶段只生成一小时有效的中立暂存数据，不修改当前词库。目标群用于绑定导入计划。</p>
+          <p>新建会保存为可独立管理的外部词库；更新会完整替换所选词库并保留原绑定。转换计划一小时内有效。</p>
           <div class="toolbar">
+            <div class="field"><label for="migration-operation">操作</label><select id="migration-operation"><option value="create">新建外部词库</option><option value="update">更新已有词库</option></select></div>
+            <div class="field"><label for="migration-name">词库名称</label><input id="migration-name" maxlength="80" placeholder="默认使用文件名"></div>
+            <div class="field hidden" id="migration-library-field"><label for="migration-library">更新目标</label><select id="migration-library"></select></div>
             <div class="field"><label for="migration-group">目标群聊</label><input id="migration-group" list="migration-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="migration-groups"></datalist></div>
             <button id="migration-prepare" class="secondary" type="button" disabled>转换并生成计划</button>
             <button id="migration-apply" class="danger hidden" type="button">确认导入</button>
@@ -281,8 +284,13 @@
           <div id="migration-plan" class="result">尚未生成导入计划。</div>
         </section>
         <section class="settings-band">
-          <div class="toolbar"><div><h2>迁移记录</h2><p>显示当前登录会话创建的待导入计划和已完成记录。</p></div><button id="migration-refresh" class="secondary" type="button">刷新记录</button></div>
-          <div class="table-scroll"><table><thead><tr><th>文件</th><th>目标群</th><th>状态</th><th>问题 / 答案</th><th>备份</th></tr></thead><tbody id="migration-body"></tbody></table></div>
+          <div class="toolbar"><div><h2>外部词库</h2><p>绑定群会在回复检索时使用已启用的外部词库；停用不会删除数据。</p></div><button id="external-library-refresh" class="secondary" type="button">刷新列表</button></div>
+          <div class="table-scroll"><table><thead><tr><th>名称</th><th>状态 / 版本</th><th>绑定群</th><th>问题 / 答案</th><th>操作</th></tr></thead><tbody id="external-library-body"></tbody></table></div>
+          <div id="external-library-message" class="result" role="status"></div>
+        </section>
+        <section class="settings-band">
+          <div class="toolbar"><div><h2>本次会话记录</h2><p>显示当前管理会话创建的待确认计划和已完成操作。</p></div><button id="migration-refresh" class="secondary" type="button">刷新记录</button></div>
+          <div class="table-scroll"><table><thead><tr><th>文件</th><th>外部词库</th><th>状态</th><th>问题 / 答案</th><th>备份</th></tr></thead><tbody id="migration-body"></tbody></table></div>
           <div id="migration-message" class="result" role="status"></div>
         </section>
       </div>
@@ -431,7 +439,7 @@
     <dialog id="migration-dialog">
       <form id="migration-form">
         <h2>确认导入旧词库</h2>
-        <p id="migration-copy">导入前会自动备份数据库，并把旧词库合并到目标群。现有内容不会被整体覆盖，也不会自动开启学习或回复。</p>
+        <p id="migration-copy">导入前会自动备份数据库，并把旧词库保存为独立来源。群聊自产词库不会被修改。</p>
         <div id="migration-confirm-message" class="message" role="status"></div>
         <div class="actions"><button id="migration-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行导入</button></div>
       </form>
@@ -497,6 +505,7 @@
       let contributionPlan = null;
       let migrationUpload = null;
       let migrationPlan = null;
+      let externalLibraries = [];
       let libraryExportFormat = "archive";
       let auditBeforeId = null;
       let selectedTask = null;
@@ -590,7 +599,7 @@
         el("tab-audit").classList.toggle("active", audit);
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
         if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
-        if (migration) loadMigrationStatus().catch(error => setText("migration-message", error?.message || "迁移记录读取失败。"));
+        if (migration) Promise.all([loadMigrationStatus(), loadExternalLibraries()]).catch(error => setText("migration-message", error?.message || "迁移数据读取失败。"));
         if (tts) loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。"));
         if (tasks) loadTasks().catch(error => setText("tasks-message", error?.message || "任务列表读取失败。"));
         if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
@@ -718,7 +727,7 @@
         const rows = (imports || []).map(item => {
           const row = document.createElement("tr");
           const status = item.status === "applied" ? "已导入" : "待确认";
-          for (const value of [item.source_name || "旧词库", item.group_id || "-", status, `${item.question_count || 0} / ${item.answer_count || 0}`, item.backup_name || "-"]) {
+          for (const value of [item.source_name || "旧词库", item.library_name || item.library_id || "历史合并导入", status, `${item.question_count || 0} / ${item.answer_count || 0}`, item.backup_name || "-"]) {
             const cell = document.createElement("td"); cell.textContent = String(value); row.append(cell);
           }
           return row;
@@ -733,6 +742,62 @@
         const data = payloadData(await bridge.apiGet("api/migration/status"));
         renderMigrationRows(data.imports || []);
         setText("migration-message", "迁移记录已更新。");
+      }
+
+      function renderExternalLibraries() {
+        const rows = externalLibraries.map(item => {
+          const row = document.createElement("tr");
+          const name = document.createElement("td"); name.textContent = item.name || item.source_name || item.library_id;
+          const state = document.createElement("td"); state.textContent = `${item.enabled ? "已启用" : "已停用"} / v${item.version}`;
+          const bindings = document.createElement("td");
+          const input = document.createElement("input"); input.value = (item.group_ids || []).join(" "); input.inputMode = "numeric"; input.setAttribute("aria-label", `${item.name} 绑定群`); bindings.append(input);
+          const counts = document.createElement("td"); counts.textContent = `${item.question_count || 0} / ${item.answer_count || 0}`;
+          const actions = document.createElement("td"); actions.className = "actions";
+          const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "secondary"; toggle.textContent = item.enabled ? "停用" : "启用";
+          toggle.addEventListener("click", async () => {
+            toggle.disabled = true;
+            try { await postSecure("api/migration/library/enabled", { library_id: item.library_id, enabled: !item.enabled }); await loadExternalLibraries(); setText("external-library-message", `词库已${item.enabled ? "停用" : "启用"}。`); }
+            catch (error) { setText("external-library-message", error?.message || "词库状态更新失败。"); }
+            finally { toggle.disabled = false; }
+          });
+          const save = document.createElement("button"); save.type = "button"; save.className = "secondary"; save.textContent = "保存绑定";
+          save.addEventListener("click", async () => {
+            const groupIds = input.value.split(/\s+/).map(value => value.trim()).filter(Boolean);
+            try { await postSecure("api/migration/library/bindings", { library_id: item.library_id, group_ids: groupIds }); await loadExternalLibraries(); setText("external-library-message", "绑定群已更新。"); }
+            catch (error) { setText("external-library-message", error?.message || "绑定群更新失败。"); }
+          });
+          const update = document.createElement("button"); update.type = "button"; update.className = "secondary"; update.textContent = "选择更新";
+          update.addEventListener("click", () => { el("migration-operation").value = "update"; el("migration-library").value = item.library_id; el("migration-name").value = item.name || ""; el("migration-group").value = item.group_ids?.[0] || ""; updateMigrationOperation(); el("migration-file").focus(); setText("external-library-message", "请选择新的 .cl 文件并上传扫描，然后生成更新计划。"); });
+          const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger"; remove.textContent = "删除";
+          remove.addEventListener("click", async () => {
+            if (!window.confirm(`确认删除外部词库“${item.name}”吗？执行前会自动备份，群聊自产词库不会受影响。`)) return;
+            remove.disabled = true;
+            try { const data = await postSecure("api/migration/library/delete", { library_id: item.library_id, confirmed: true }); await loadExternalLibraries(); await refreshOverview(); setText("external-library-message", `外部词库已删除，执行前备份：${data.backup_name}`); }
+            catch (error) { setText("external-library-message", error?.message || "外部词库删除失败。"); }
+            finally { remove.disabled = false; }
+          });
+          actions.append(toggle, save, update, remove); row.append(name, state, bindings, counts, actions); return row;
+        });
+        el("external-library-body").replaceChildren(...rows);
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "尚未创建可独立管理的外部词库。此前合并导入的内容不会在此列出。"; row.append(cell); el("external-library-body").append(row); }
+        const options = externalLibraries.map(item => { const option = document.createElement("option"); option.value = item.library_id; option.textContent = `${item.name} / v${item.version}`; return option; });
+        el("migration-library").replaceChildren(...options);
+        updateMigrationOperation();
+      }
+
+      async function loadExternalLibraries() {
+        const data = payloadData(await bridge.apiGet("api/migration/libraries")); externalLibraries = data.libraries || []; renderExternalLibraries();
+      }
+
+      function updateMigrationOperation() {
+        const updating = el("migration-operation").value === "update";
+        el("migration-library-field").classList.toggle("hidden", !updating);
+        el("migration-group").disabled = updating;
+        if (updating && externalLibraries.length) {
+          if (!el("migration-library").value) el("migration-library").value = externalLibraries[0].library_id;
+          const item = externalLibraries.find(candidate => candidate.library_id === el("migration-library").value);
+          if (item) { if (!el("migration-name").value.trim()) el("migration-name").value = item.name || ""; el("migration-group").value = item.group_ids?.[0] || ""; }
+        }
       }
 
       const lines = id => el(id).value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
@@ -1178,6 +1243,12 @@
         finally { button.disabled = false; }
       });
       el("migration-refresh").addEventListener("click", () => loadMigrationStatus().catch(error => setText("migration-message", error?.message || "迁移记录读取失败。")));
+      el("external-library-refresh").addEventListener("click", () => loadExternalLibraries().then(() => setText("external-library-message", "外部词库列表已更新。")).catch(error => setText("external-library-message", error?.message || "外部词库读取失败。")));
+      el("migration-operation").addEventListener("change", updateMigrationOperation);
+      el("migration-library").addEventListener("change", () => {
+        const item = externalLibraries.find(candidate => candidate.library_id === el("migration-library").value);
+        if (item) { el("migration-name").value = item.name || ""; el("migration-group").value = item.group_ids?.[0] || ""; }
+      });
       el("migration-upload").addEventListener("click", async () => {
         const file = el("migration-file").files?.[0];
         if (!file || !file.name.toLowerCase().endsWith(".cl")) { setText("migration-message", "请选择 .cl 词库文件。"); return; }
@@ -1185,7 +1256,7 @@
         try {
           await postSecure("api/migration/upload/authorize", { file_name: file.name, size_bytes: file.size });
           const data = payloadData(await bridge.upload("api/migration/upload", file));
-          migrationUpload = data; renderMigrationScan(data.scan); el("migration-prepare").disabled = false; setText("migration-message", "安全与兼容性扫描通过，可选择目标群生成导入计划。");
+          migrationUpload = data; renderMigrationScan(data.scan); el("migration-prepare").disabled = false; setText("migration-message", "安全与兼容性扫描通过，可生成外部词库导入或更新计划。");
         } catch (error) { setText("migration-message", error?.message || "词库上传或扫描失败。"); }
         finally { button.disabled = false; }
       });
@@ -1193,21 +1264,22 @@
         if (!migrationUpload) return;
         const button = el("migration-prepare"); button.disabled = true; button.classList.add("busy"); setText("migration-message", "正在隔离转换旧词库...");
         try {
-          const data = await postSecure("api/migration/prepare", { upload_id: migrationUpload.upload_id, group_id: selectedMigrationGroup() });
+          const operation = el("migration-operation").value;
+          const data = await postSecure("api/migration/prepare", { upload_id: migrationUpload.upload_id, group_id: selectedMigrationGroup(), operation, library_id: operation === "update" ? el("migration-library").value : "", library_name: el("migration-name").value.trim() });
           migrationPlan = data; migrationUpload = null; el("migration-file").value = ""; el("migration-apply").classList.remove("hidden");
-          setText("migration-plan", `计划 ${data.import_id}：目标群 ${data.group_id}，可导入问题 ${data.question_count}，答案 ${data.answer_count}；跳过问题 ${data.skipped_questions}，答案 ${data.skipped_answers}，未知组件 ${data.unknown_components}。计划一小时内有效。`);
+          setText("migration-plan", `计划 ${data.import_id}：${data.operation === "update" ? "更新" : "新建"}外部词库“${data.library_name}”，绑定群 ${(data.group_ids || [data.group_id]).join("、")}；问题 ${data.question_count}，答案 ${data.answer_count}；跳过问题 ${data.skipped_questions}，答案 ${data.skipped_answers}，未知组件 ${data.unknown_components}。计划一小时内有效。`);
           setText("migration-message", "导入计划已生成，当前词库尚未改变。"); await loadMigrationStatus();
         } catch (error) { setText("migration-message", error?.message || "旧词库转换失败。"); }
         finally { button.classList.remove("busy"); button.disabled = migrationUpload === null; }
       });
-      el("migration-apply").addEventListener("click", () => { if (!migrationPlan) return; setText("migration-confirm-message", ""); setText("migration-copy", `将把 ${migrationPlan.source_name} 合并到群 ${migrationPlan.group_id}。导入前会自动备份数据库，且不会自动开启学习或回复。`); el("migration-dialog").showModal(); });
+      el("migration-apply").addEventListener("click", () => { if (!migrationPlan) return; setText("migration-confirm-message", ""); setText("migration-copy", `${migrationPlan.operation === "update" ? "将完整替换" : "将创建"}外部词库“${migrationPlan.library_name}”。执行前会自动备份数据库，群聊自产词库不会被修改。`); el("migration-dialog").showModal(); });
       el("migration-cancel").addEventListener("click", () => el("migration-dialog").close());
       el("migration-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!migrationPlan) return;
         try {
           const data = await postSecure("api/migration/apply", { import_id: migrationPlan.import_id, group_id: migrationPlan.group_id, confirmed: true });
           el("migration-dialog").close(); migrationPlan = null; el("migration-apply").classList.add("hidden"); el("migration-prepare").disabled = true;
-          setText("migration-plan", `导入完成：合并问题记录 ${data.question_count}，答案记录 ${data.answer_count}。导入前备份：${data.backup_name}`); setText("migration-message", "旧词库已合并到目标群。"); await loadMigrationStatus(); await refreshOverview(); await loadGroups();
+          setText("migration-plan", `操作完成：外部词库 v${data.version}，问题 ${data.question_count}，答案 ${data.answer_count}。执行前备份：${data.backup_name}`); setText("migration-message", "外部词库已经独立保存，可单独启停、更新和删除。"); await loadMigrationStatus(); await loadExternalLibraries(); await refreshOverview(); await loadGroups();
         } catch (error) { setText("migration-confirm-message", error?.message || "旧词库导入未执行。"); }
       });
       el("backups-refresh").addEventListener("click", () => loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。")));

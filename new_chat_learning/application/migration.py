@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,7 +27,11 @@ class MigrationService:
         *,
         actor_id: str | None = None,
         group_id: str | None = None,
+        group_ids: list[str] | None = None,
         source_name: str | None = None,
+        library_id: str | None = None,
+        library_name: str | None = None,
+        operation: str = "create",
     ) -> dict[str, Any]:
         import asyncio
 
@@ -36,11 +41,28 @@ class MigrationService:
             self.staging_dir,
             timeout_seconds=300.0,
         )
-        if report.get("status") == "prepared" and actor_id and group_id:
+        bindings = sorted(
+            {
+                str(value)
+                for value in (group_ids or ([group_id] if group_id else []))
+                if str(value)
+            }
+        )
+        if report.get("status") == "prepared" and actor_id and bindings:
             if source_name:
                 report["source_name"] = Path(source_name).name[:255]
             report["actor_id"] = str(actor_id)
-            report["group_id"] = str(group_id)
+            report["group_id"] = bindings[0]
+            report["group_ids"] = bindings
+            report["operation"] = "update" if operation == "update" else "create"
+            report["library_id"] = (
+                str(library_id) if operation == "update" else secrets.token_hex(12)
+            )
+            report["library_name"] = (
+                str(library_name or "").strip()[:80]
+                or Path(str(report.get("source_name", "legacy.cl"))).stem[:80]
+                or "外部词库"
+            )
             report["created_at"] = int(time.time())
             report["expires_at"] = int(time.time()) + self.PLAN_TTL_SECONDS
             self._write_manifest(report)
@@ -58,7 +80,12 @@ class MigrationService:
             return {"imported": False, "reason": "manifest_not_found"}
         if manifest.get("actor_id") and manifest.get("actor_id") != str(actor_id):
             return {"imported": False, "reason": "wrong_actor"}
-        if manifest.get("group_id") and manifest.get("group_id") != str(group_id):
+        group_ids = [str(value) for value in manifest.get("group_ids", []) if str(value)]
+        if not group_ids and manifest.get("group_id"):
+            group_ids = [str(manifest["group_id"])]
+        if not group_ids:
+            group_ids = [str(group_id)]
+        if manifest.get("group_id") and str(group_id) not in group_ids:
             return {"imported": False, "reason": "wrong_group"}
         if int(manifest.get("expires_at", 0) or 0) and int(manifest["expires_at"]) <= int(
             time.time()
@@ -73,13 +100,16 @@ class MigrationService:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         backup_path = self.backup_dir / f"before-import-{timestamp}-{import_id[:12]}.sqlite3"
         await self.store.backup_to(backup_path)
-        result = await self.store.import_legacy_jsonl(
+        result = await self.store.import_external_library_jsonl(
             import_id=import_id,
-            group_id=group_id,
+            library_id=str(manifest.get("library_id") or import_id[:24]),
+            name=str(manifest.get("library_name", "外部词库")),
+            group_ids=group_ids,
             source_name=str(manifest.get("source_name", "legacy.cl")),
             staging_path=staging_path,
             staging_sha256=str(manifest.get("staging_sha256", "")),
             actor_id=actor_id,
+            replace=manifest.get("operation") == "update",
         )
         result["backup_path"] = str(backup_path)
         if result.get("imported"):
@@ -89,6 +119,49 @@ class MigrationService:
             manifest["backup_name"] = backup_path.name
             manifest["applied_at"] = int(time.time())
             self._write_manifest(manifest)
+        return result
+
+    async def list_libraries(self) -> list[dict[str, Any]]:
+        return await self.store.list_external_libraries()
+
+    async def set_enabled(
+        self,
+        *,
+        library_id: str,
+        enabled: bool,
+        actor_id: str,
+    ) -> dict[str, Any] | None:
+        return await self.store.set_external_library_enabled(
+            library_id=library_id,
+            enabled=enabled,
+            actor_id=actor_id,
+        )
+
+    async def set_bindings(
+        self,
+        *,
+        library_id: str,
+        group_ids: list[str],
+        actor_id: str,
+    ) -> dict[str, Any] | None:
+        return await self.store.set_external_library_bindings(
+            library_id=library_id,
+            group_ids=group_ids,
+            actor_id=actor_id,
+        )
+
+    async def delete(self, *, library_id: str, actor_id: str) -> dict[str, Any] | None:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = self.backup_dir / f"before-external-delete-{timestamp}-{library_id[:12]}.sqlite3"
+        await self.store.backup_to(backup_path)
+        result = await self.store.delete_external_library(
+            library_id=library_id,
+            actor_id=actor_id,
+        )
+        if result is not None:
+            result["backup_path"] = str(backup_path)
+        else:
+            backup_path.unlink(missing_ok=True)
         return result
 
     def list_web_imports(self, *, actor_id: str) -> list[dict[str, Any]]:
@@ -160,6 +233,10 @@ class MigrationService:
             "source_size_bytes",
             "status",
             "group_id",
+            "group_ids",
+            "operation",
+            "library_id",
+            "library_name",
             "created_at",
             "expires_at",
             "applied_at",

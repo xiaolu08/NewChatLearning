@@ -4,7 +4,7 @@
 
 将 QQ 群聊里的相邻消息整理成可检索的问答词库，让 AstrBot 用本地算法学习和回复。核心学习、匹配和回复流程不调用 LLM，不主动消耗 Token。
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post20-orange)
+![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post21-orange)
 ![Stage](https://img.shields.io/badge/stage-public%20beta-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
@@ -18,7 +18,7 @@
 - 为不同群设置学习、回复、仅学习、仅回复或静默学习模式。
 - 通过定向学习，收集指定群成员的回复风格。
 - 保存图片、语音、视频和文件等消息组件，去重并按配额管理媒体。
-- 导入旧版 `.cl` 词库：先隔离扫描，再生成群绑定计划，确认后备份并导入。
+- 导入旧版 `.cl` 词库：先隔离扫描，再保存为可按群绑定、独立启停、更新和删除的外部词库。
 - 在 WebUI 中管理词库、过滤、权限、媒体、任务、备份、诊断和 TTS。
 - 使用 Windows 本地 TTS、GPT-SoVITS、本地 HTTP TTS，或主动配置可选云端 TTS。
 
@@ -30,7 +30,7 @@
 4. 点击 **进入** 管理会话。
 5. 建议先关闭自动回复，完成群设置、备份和词库迁移检查后再逐步启用。
 
-> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post20`。
+> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post21`。
 
 ## 常用命令
 
@@ -146,7 +146,8 @@
 - SQLite schema v5 回复消息追踪、精确答案删除、空问题清理与审计
 - 本群词库搜索、详情、文本/正则问答添加、权重修改和按 ID 删除命令
 - 旧 `.cl` 受限扫描器：独立进程、opcode 拒绝、基础容器结构统计
-- 旧词库隔离转换为 JSONL，并在单个 SQLite 事务中合并频次和原版权重
+- 旧词库隔离转换为 JSONL，并在独立外部词库作用域中保留频次和原版权重
+- 外部词库支持按群绑定、独立启停、完整替换更新和带备份删除，不修改群聊自产词库
 - 2.1 MB 真实共享词库已通过临时 SQLite 完整导入验证，未写入插件运行数据
 - 当前群词库可反向导出原版协议 4 `.cl`，保留频次、正则与答案权重语义
 - SQLite schema v9 定时任务定义与执行历史，插件重载后不会立即重复已认领任务

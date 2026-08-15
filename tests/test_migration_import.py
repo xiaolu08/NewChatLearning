@@ -43,7 +43,12 @@ def test_prepare_and_apply_legacy_library_with_backup(tmp_path):
         await store.open()
         service = MigrationService(data_dir, store)
         try:
-            prepared = await service.prepare(source)
+            prepared = await service.prepare(
+                source,
+                actor_id="7",
+                group_id="10001",
+                source_name="legacy.cl",
+            )
             applied = await service.apply(
                 import_id=prepared["import_id"], group_id="10001", actor_id="7"
             )
@@ -52,20 +57,22 @@ def test_prepare_and_apply_legacy_library_with_backup(tmp_path):
             )
             connection = store._require_connection()
             question = connection.execute(
-                "SELECT frequency FROM questions WHERE group_id = '10001'"
+                "SELECT frequency FROM questions WHERE group_id = ?",
+                (f"external:{prepared['library_id']}",),
             ).fetchone()
             weights = [
                 row[0]
                 for row in connection.execute("SELECT weight FROM answers ORDER BY weight DESC")
             ]
             audits = connection.execute(
-                "SELECT COUNT(*) FROM audit_log WHERE action = 'import_legacy_library'"
+                "SELECT COUNT(*) FROM audit_log WHERE action = 'import_external_library'"
             ).fetchone()[0]
-            return prepared, applied, duplicate, question[0], weights, audits
+            libraries = await service.list_libraries()
+            return prepared, applied, duplicate, question[0], weights, audits, libraries
         finally:
             await store.close()
 
-    prepared, applied, duplicate, frequency, weights, audits = asyncio.run(scenario())
+    prepared, applied, duplicate, frequency, weights, audits, libraries = asyncio.run(scenario())
     assert prepared["status"] == "prepared"
     assert prepared["question_count"] == 1
     assert prepared["answer_count"] == 2
@@ -84,6 +91,9 @@ def test_prepare_and_apply_legacy_library_with_backup(tmp_path):
     assert frequency == 4
     assert weights == [3, 1]
     assert audits == 1
+    assert libraries[0]["library_id"] == prepared["library_id"]
+    assert libraries[0]["group_ids"] == ["10001"]
+    assert libraries[0]["enabled"] is True
     backup = sqlite3.connect(applied["backup_path"])
     try:
         assert backup.execute("PRAGMA quick_check").fetchone()[0] == "ok"
@@ -170,3 +180,90 @@ def test_web_import_plan_is_bound_to_actor_group_and_expires(tmp_path):
     assert wrong_group["reason"] == "wrong_group"
     assert expired["reason"] == "plan_expired"
     assert manifest_exists is False
+
+
+def test_external_library_can_be_disabled_rebound_updated_and_deleted(tmp_path):
+    source = tmp_path / "legacy.cl"
+    _legacy_file(source)
+
+    async def scenario():
+        data_dir = tmp_path / "data"
+        store = SQLiteStore(data_dir / "new_chat_learning.sqlite3")
+        await store.open()
+        service = MigrationService(data_dir, store)
+        try:
+            prepared = await service.prepare(
+                source,
+                actor_id="owner",
+                group_id="10001",
+                source_name="shared.cl",
+                library_name="共享词库",
+            )
+            created = await service.apply(
+                import_id=prepared["import_id"], group_id="10001", actor_id="owner"
+            )
+            library_id = created["library_id"]
+            disabled = await service.set_enabled(
+                library_id=library_id, enabled=False, actor_id="owner"
+            )
+            hidden_scopes = await store.external_library_scopes_for("10001")
+            rebound = await service.set_bindings(
+                library_id=library_id, group_ids=["10002", "10003"], actor_id="owner"
+            )
+            enabled = await service.set_enabled(
+                library_id=library_id, enabled=True, actor_id="owner"
+            )
+            visible_scopes = await store.external_library_scopes_for("10002")
+
+            updated_plan = await service.prepare(
+                source,
+                actor_id="owner",
+                group_ids=rebound["group_ids"],
+                source_name="shared-v2.cl",
+                library_id=library_id,
+                library_name="共享词库",
+                operation="update",
+            )
+            updated = await service.apply(
+                import_id=updated_plan["import_id"], group_id="10002", actor_id="owner"
+            )
+            deleted = await service.delete(library_id=library_id, actor_id="owner")
+            remaining = await service.list_libraries()
+            scope_questions = store._require_connection().execute(
+                "SELECT COUNT(*) FROM questions WHERE group_id = ?",
+                (f"external:{library_id}",),
+            ).fetchone()[0]
+            return (
+                disabled,
+                hidden_scopes,
+                rebound,
+                enabled,
+                visible_scopes,
+                updated,
+                deleted,
+                remaining,
+                scope_questions,
+            )
+        finally:
+            await store.close()
+
+    (
+        disabled,
+        hidden_scopes,
+        rebound,
+        enabled,
+        visible_scopes,
+        updated,
+        deleted,
+        remaining,
+        scope_questions,
+    ) = asyncio.run(scenario())
+    assert disabled["enabled"] is False
+    assert hidden_scopes == ()
+    assert rebound["group_ids"] == ["10002", "10003"]
+    assert enabled["enabled"] is True
+    assert visible_scopes == (f"external:{enabled['library_id']}",)
+    assert updated["version"] == 2
+    assert deleted["backup_path"].endswith(".sqlite3")
+    assert remaining == []
+    assert scope_questions == 0
