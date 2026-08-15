@@ -157,6 +157,19 @@ def test_renderer_does_not_treat_onebot_image_id_as_local_file(monkeypatch):
         "type": "image",
         "data": {"file": "09AD9B554FB83AB4CDAFEA9135AC309B.jpeg"},
     }
+    assert chain.chain[0].type == "image"
+
+
+def test_raw_onebot_xml_component_exposes_astrbot_type(monkeypatch):
+    renderer = load_renderer(monkeypatch)
+
+    chain = renderer.render_message_chain(
+        ({"type": "XML", "data": {"data": "<msg/>"}},),
+        max_plain_length=100,
+    )
+
+    assert chain is not None
+    assert chain.chain[0].type == "xml"
 
 
 def test_renderer_rejects_media_path_outside_data_directory(monkeypatch, tmp_path):

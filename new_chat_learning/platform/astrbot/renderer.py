@@ -9,6 +9,8 @@ from astrbot.api.event import MessageChain
 
 class _RawOneBotComponent:
     def __init__(self, segment_type: str, data: dict[str, Any]) -> None:
+        # AstrBot's history manager reads ``component.type`` before serializing.
+        self.type = segment_type
         self.segment_type = segment_type
         self.data = data
 
