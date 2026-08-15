@@ -27,7 +27,7 @@ async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
         return None
     try:
         messages = await parser(chain)
-    except (OSError, TypeError, ValueError):
+    except Exception:  # noqa: BLE001 - media resolvers use adapter-specific exception types
         # Expired media must not abort an otherwise valid text reply.
         fallback = type(chain)()
         fallback.chain = [
@@ -40,7 +40,7 @@ async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
             return None
         try:
             messages = await parser(fallback)
-        except (OSError, TypeError, ValueError):
+        except Exception:  # noqa: BLE001 - media resolvers use adapter-specific exception types
             return None
     if not messages:
         return None

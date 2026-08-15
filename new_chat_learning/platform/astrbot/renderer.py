@@ -68,8 +68,16 @@ def _render_component(
             return None
         return Comp.At(qq=qq, name=str(data.get("name", "") or ""))
     if component_type in {"image", "flashimage"}:
-        source = _media_source(data, data_dir)
-        return _media_component(Comp.Image, source)
+        source = _media_source(data, data_dir, remote_fallback=False)
+        if source:
+            return _media_component(Comp.Image, source)
+        file_ref = _media_file_reference(data, data_dir)
+        if file_ref:
+            raw = {"file": file_ref}
+            if component_type == "flashimage":
+                raw["type"] = "flash"
+            return _RawOneBotComponent("image", raw)
+        return _media_component(Comp.Image, _media_source(data, data_dir))
     if component_type == "marketface":
         source = _media_source(data, data_dir)
         if source:
@@ -81,11 +89,21 @@ def _render_component(
         }
         return _RawOneBotComponent("mface", raw) if raw else Comp.Plain("[商城表情]")
     if component_type in {"record", "voice"}:
-        source = _media_source(data, data_dir)
-        return _media_component(Comp.Record, source)
+        source = _media_source(data, data_dir, remote_fallback=False)
+        if source:
+            return _media_component(Comp.Record, source)
+        file_ref = _media_file_reference(data, data_dir)
+        if file_ref:
+            return _RawOneBotComponent("record", {"file": file_ref})
+        return _media_component(Comp.Record, _media_source(data, data_dir))
     if component_type == "video":
-        source = _media_source(data, data_dir)
-        return _media_component(Comp.Video, source)
+        source = _media_source(data, data_dir, remote_fallback=False)
+        if source:
+            return _media_component(Comp.Video, source)
+        file_ref = _media_file_reference(data, data_dir)
+        if file_ref:
+            return _RawOneBotComponent("video", {"file": file_ref})
+        return _media_component(Comp.Video, _media_source(data, data_dir))
     if component_type == "json" and isinstance(data.get("data"), (dict, str)):
         try:
             return Comp.Json(data=data["data"])
@@ -126,6 +144,9 @@ def _render_component(
     if component_type == "file":
         file_path = _media_source(data, data_dir, remote_fallback=False)
         url = str(data.get("url") or "")
+        file_ref = _media_file_reference(data, data_dir)
+        if not file_path and not url and file_ref:
+            return _RawOneBotComponent("file", {"file": file_ref})
         if not file_path and not url:
             return None
         return Comp.File(
@@ -176,12 +197,23 @@ def _media_source(
         candidate = (root / relative).resolve()
         if candidate.is_relative_to(root) and candidate.is_file():
             return str(candidate)
-    local = str(data.get("path") or data.get("file_") or data.get("file") or "")
+    local = str(data.get("path") or data.get("file_") or "")
     if local and not local.startswith(("http://", "https://")):
         candidate = Path(local)
         if candidate.is_file():
             return str(candidate)
-    return str(data.get("url") or local or "") if remote_fallback else ""
+    remote = str(data.get("url") or "")
+    return remote if remote_fallback and remote.startswith(("http://", "https://")) else ""
+
+
+def _media_file_reference(data: dict[str, Any], data_dir: Path | None) -> str:
+    value = str(data.get("file") or data.get("file_") or "").strip()
+    if not value or value.startswith(("http://", "https://", "base64://", "file:")):
+        return ""
+    candidate = Path(value)
+    if candidate.is_absolute() or (data_dir is not None and (Path(data_dir) / candidate).is_file()):
+        return ""
+    return value
 
 
 def _media_component(component_type: Any, source: str) -> Any | None:

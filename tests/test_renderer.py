@@ -153,7 +153,10 @@ def test_renderer_does_not_treat_onebot_image_id_as_local_file(monkeypatch):
     )
 
     assert chain is not None
-    assert chain.chain[0].file == "https://gchat.qpic.cn/download?temporary=1"
+    assert chain.chain[0].toDict() == {
+        "type": "image",
+        "data": {"file": "09AD9B554FB83AB4CDAFEA9135AC309B.jpeg"},
+    }
 
 
 def test_renderer_rejects_media_path_outside_data_directory(monkeypatch, tmp_path):
