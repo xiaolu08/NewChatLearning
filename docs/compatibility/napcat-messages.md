@@ -16,7 +16,7 @@ status: 当前有效
 | 原版类型 | NapCat/AstrBot 方向 | 匹配 | 保存 | 重发策略 |
 | --- | --- | --- | --- | --- |
 | `Plain` | Plain | 是 | JSON | 原文发送 |
-| `Image` | Image/CQ image | 是 | 已实现本地下载与 SHA-256 去重 | 本地文件优先，缺失时回退远程 URL |
+| `Image` | Image/CQ image | 是 | 先按 NapCat 文件标识调用 `get_image` / `get_file`，再本地下载与 SHA-256 去重；解析失败仍保留原始组件 | 本地文件优先，缺失时回退远程 URL |
 | `FlashImage` | 闪照或图片降级 | 是 | 已实现本地下载 | 当前按普通图片稳定降级 |
 | `Face` | Face | 是 | ID + 名称 | 按 ID 重发，失败用文本占位 |
 | `MarketFace` | 商城表情/原始 CQ | 是 | 从 NapCat 原始段补回标识并持久化可用媒体 | 图片可用时优先图片，否则原生 `mface` 段或文本降级 |
@@ -47,6 +47,7 @@ status: 当前有效
 ### 当前媒体持久化实现
 
 - 只在启用学习的群保存新媒体，纯回复群不会因查询词库而下载内容。
+- 原版 ChatLearning 保存完整 `messageChain`；NewChatLearning 保留同一语义，图片临时 URL 仅用于兼容匹配和回退，优先通过 NapCat 文件标识恢复本地文件。
 - 支持 HTTP(S)、Base64、本地路径和 Windows `file:` URI；写入时流式检查单文件上限。
 - HTTP(S) 下载拒绝本机、内网、保留地址及指向这些地址的重定向，避免 SSRF。
 - 文件使用 SHA-256 内容寻址并保存相对路径；同一内容即使原扩展名不同也只保留一份。

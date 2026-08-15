@@ -4,6 +4,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import replace
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from new_chat_learning.domain.message import (
@@ -175,14 +176,116 @@ async def enrich_long_tail_components(
         components.append(resolved or _forward_fallback())
         changed = True
     components.extend(additions)
+    resolved_media = []
+    for component in components:
+        resolved = await _resolve_media_component(event, component)
+        resolved_media.append(resolved)
+        changed = changed or resolved is not component
     if not changed:
         return message
-    normalized = tuple(components)
+    normalized = tuple(resolved_media)
     return replace(
         message,
         components=normalized,
         matching_components=tuple(_matching_payload(item) for item in normalized),
     )
+
+
+async def _resolve_media_component(event: Any, component: dict[str, Any]) -> dict[str, Any]:
+    component_type = str(component.get("type", "")).lower()
+    data = component.get("data")
+    if not isinstance(data, Mapping):
+        return component
+    if component_type in {"node", "nodes"}:
+        return await _resolve_node_media(event, component, data)
+    if component_type not in {"image", "flashimage"}:
+        return component
+    file_id = str(data.get("file") or data.get("file_id") or "").strip()
+    if not file_id or _is_local_media_source(str(data.get("path") or "")):
+        return component
+    reference = await _fetch_image_reference(event, file_id)
+    if reference is None:
+        return component
+    field, value = reference
+    updated = {**dict(data), field: value}
+    if field == "path":
+        updated["file"] = value
+    return {"type": component.get("type", ""), "data": updated}
+
+
+async def _resolve_node_media(
+    event: Any,
+    component: dict[str, Any],
+    data: Mapping[str, Any],
+) -> dict[str, Any]:
+    raw_nodes = data.get("nodes") if str(component.get("type", "")).lower() == "nodes" else [data]
+    if not isinstance(raw_nodes, list):
+        return component
+    changed = False
+    nodes = []
+    for node in raw_nodes:
+        if not isinstance(node, Mapping) or not isinstance(node.get("content"), list):
+            nodes.append(node)
+            continue
+        content = []
+        for nested in node["content"]:
+            if not isinstance(nested, dict):
+                content.append(nested)
+                continue
+            resolved = await _resolve_media_component(event, nested)
+            content.append(resolved)
+            changed = changed or resolved is not nested
+        nodes.append({**dict(node), "content": content})
+    if not changed:
+        return component
+    updated_data = {**dict(data), "nodes": nodes} if str(component.get("type", "")).lower() == "nodes" else nodes[0]
+    return {"type": component.get("type", ""), "data": updated_data}
+
+
+async def _fetch_image_reference(event: Any, file_id: str) -> tuple[str, str] | None:
+    bot = getattr(event, "bot", None)
+    call_action = getattr(bot, "call_action", None)
+    if not callable(call_action):
+        return None
+    candidates = [file_id]
+    stem = Path(file_id).stem
+    if stem and stem != file_id:
+        candidates.append(stem)
+    actions = []
+    for candidate in candidates:
+        actions.extend(
+            [
+                ("get_image", {"file": candidate}),
+                ("get_image", {"file_id": candidate}),
+                ("get_file", {"file_id": candidate}),
+                ("get_file", {"file": candidate}),
+            ]
+        )
+    for action, params in actions:
+        try:
+            payload = await call_action(action, **params)
+        except Exception:  # noqa: BLE001 - OneBot implementations expose different action support
+            logger.debug("NapCat media lookup failed for %s.", action)
+            continue
+        targets = (payload.get("data"), payload) if isinstance(payload, Mapping) else ()
+        for target in targets:
+            if not isinstance(target, Mapping):
+                continue
+            for key in ("file", "path", "file_path"):
+                value = str(target.get(key) or "").strip()
+                if _is_local_media_source(value):
+                    return "path", value
+            for key in ("url", "download_url"):
+                value = str(target.get(key) or "").strip()
+                if value.startswith(("http://", "https://")):
+                    return "url", value
+    return None
+
+
+def _is_local_media_source(value: str) -> bool:
+    if value.startswith("file:"):
+        return True
+    return bool(value) and Path(value).is_absolute()
 
 
 async def _resolve_forward_component(

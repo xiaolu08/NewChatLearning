@@ -86,6 +86,60 @@ def test_normalizes_components_and_removes_transient_matching_fields():
     assert result.normalized_key
 
 
+def test_resolves_image_file_id_through_napcat_cache(tmp_path):
+    cached = tmp_path / "cached-image.jpg"
+    cached.write_bytes(b"image")
+    event = Event(
+        {
+            "post_type": "message",
+            "message": [
+                {
+                    "type": "image",
+                    "data": {
+                        "file": "09AD9B554FB83AB4CDAFEA9135AC309B.jpeg",
+                        "url": "https://gchat.qpic.cn/download?expired=1",
+                    },
+                }
+            ],
+        },
+        [
+            Image(
+                "09AD9B554FB83AB4CDAFEA9135AC309B.jpeg",
+                "https://gchat.qpic.cn/download?expired=1",
+            )
+        ],
+    )
+    event.bot = Bot({"status": "ok", "data": {"file": str(cached)}})
+
+    message = normalize_group_message(event)
+    enriched = asyncio.run(enrich_long_tail_components(event, message))
+
+    assert enriched.components[0]["data"]["path"] == str(cached)
+    assert event.bot.calls == [
+        ("get_image", {"file": "09AD9B554FB83AB4CDAFEA9135AC309B.jpeg"})
+    ]
+    assert str(cached) not in repr(enriched.matching_components)
+    assert "gchat.qpic.cn" not in repr(enriched.matching_components)
+
+
+def test_image_lookup_failure_keeps_original_component():
+    class FailingBot:
+        async def call_action(self, _action, **_kwargs):
+            raise RuntimeError("cache miss")
+
+    event = Event(
+        {"post_type": "message"},
+        [Image("image-id", "https://gchat.qpic.cn/download?expired=1")],
+    )
+    event.bot = FailingBot()
+    message = normalize_group_message(event)
+
+    enriched = asyncio.run(enrich_long_tail_components(event, message))
+
+    assert enriched is message
+    assert enriched.components[0]["data"]["file"] == "image-id"
+
+
 def test_excludes_commands_and_own_messages():
     command = Event({"post_type": "message"}, [Plain("/ncl status")], text="/ncl status")
     astrbot_command = Event({"post_type": "message"}, [Plain("/help")], text="/help")
