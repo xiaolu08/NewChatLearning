@@ -595,6 +595,66 @@ def test_tagged_group_queries_only_shared_tag_members(tmp_path):
     assert hidden.reason == "no_match"
 
 
+def test_share_group_exposes_only_direct_member_group_libraries(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "share-groups.sqlite3")
+        await store.open()
+        shared = await seed_group_pair(store, "10002", "联动问题", "联动答案", 1000)
+        indirect = await seed_group_pair(store, "10003", "递归问题", "递归答案", 2000)
+        library_id = "b" * 24
+        external = await seed_group_pair(
+            store,
+            f"external:{library_id}",
+            "外部联动问题",
+            "外部联动答案",
+            3000,
+        )
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO external_libraries(library_id, name, source_name, staging_sha256, "
+            "question_count, answer_count, actor_id) VALUES(?, ?, ?, ?, 1, 1, ?)",
+            (library_id, "成员群外部词库", "member.cl", "1" * 64, "test"),
+        )
+        connection.execute(
+            "INSERT INTO external_library_bindings(library_id, group_id) VALUES(?, ?)",
+            (library_id, "10002"),
+        )
+        connection.commit()
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001", "10004"],
+                    "probability_percent": 100,
+                },
+                "library": {
+                    "mode": "group",
+                    "global_group_ids": ["10002"],
+                    "share_groups": [
+                        {"name": "联动词库1", "group_ids": ["10001", "10002"]},
+                        {"name": "联动词库2", "group_ids": ["10002", "10003"]},
+                    ],
+                },
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            direct = await reply.decide("10001", shared.normalized_key)
+            recursive = await reply.decide("10001", indirect.normalized_key)
+            inherited_external = await reply.decide("10001", external.normalized_key)
+            outsider = await reply.decide("10004", shared.normalized_key)
+        finally:
+            await store.close()
+        return direct, recursive, inherited_external, outsider
+
+    direct, recursive, inherited_external, outsider = asyncio.run(scenario())
+
+    assert direct.candidate.components[0]["data"]["text"] == "联动答案"
+    assert recursive.reason == "no_match"
+    assert inherited_external.reason == "no_match"
+    assert outsider.reason == "no_match"
+
+
 def test_multiple_tags_repeat_candidates_like_upstream_tag_libraries(tmp_path):
     class CapturingRandom(random.Random):
         def __init__(self):

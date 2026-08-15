@@ -542,7 +542,9 @@ class NewChatLearningPlugin(star.Star):
                 "!add/remove subadmin <群号...> - 管理群聊子管理员授权\n"
                 "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库\n"
                 "!add globe <群号...> - 允许目标群使用全局或标签共享词库\n"
-                "!remove globe <群号...> - 目标群仅使用本群词库"
+                "!remove globe <群号...> - 目标群仅使用本群词库\n"
+                "!add share <群号...> <联动组名> - 创建或加入群聊联动词库\n"
+                "!remove share <群号...> <联动组名> - 移除联动组成员"
             )
         )
 
@@ -1305,7 +1307,8 @@ class NewChatLearningPlugin(star.Star):
             f"允许自主管理的群：{'、'.join(sub_admin_groups) if sub_admin_groups else '无'}\n"
             f"不汇入全局词库的群：{joined('excluded_group_ids')}\n"
             f"使用全局词库的群：{joined('global_group_ids')}\n"
-            f"仅使用本群词库的群：{joined('local_only_group_ids')}"
+            f"仅使用本群词库的群：{joined('local_only_group_ids')}\n"
+            f"群聊联动词库：{NewChatLearningPlugin._format_share_groups(settings)}"
         )
 
     @staticmethod
@@ -1327,12 +1330,20 @@ class NewChatLearningPlugin(star.Star):
             if group_id in probabilities
             else "继承全局"
         )
+        share_group_names = [
+            str(entry.get("name", ""))
+            for entry in settings.get("share_groups", [])
+            if isinstance(entry, dict)
+            and group_id in {str(value) for value in entry.get("group_ids", [])}
+            and str(entry.get("name", ""))
+        ]
         return (
             "当前群跨群设置\n"
             f"学习：{'已开启' if contains('learning_group_ids') else '未开启'}\n"
             f"回复：{'已开启' if contains('reply_group_ids') else '未开启'}\n"
             f"独立回复概率：{probability}\n"
             f"允许查询全局/标签词库：{'是' if contains('global_group_ids') else '否'}\n"
+            f"加入联动词库：{'、'.join(share_group_names) if share_group_names else '无'}\n"
             f"不汇入全局词库：{'是' if contains('excluded_group_ids') else '否'}\n"
             f"允许本群管理员自主管理：{'是' if sub_admin else '否'}"
         )
@@ -1347,6 +1358,7 @@ class NewChatLearningPlugin(star.Star):
             "subadmin": "群聊子管理员授权",
             "unmerge": "全局词库来源排除",
             "globe": "全局词库查询范围",
+            "share": "联动词库成员",
             "reply_probability": "独立回复概率",
         }.get(category, "跨群设置")
 
@@ -1360,11 +1372,26 @@ class NewChatLearningPlugin(star.Star):
             "subadmin": "用法：!add/remove subadmin <群号...>",
             "unmerge": "用法：!add/remove unmerge <群号...>",
             "globe": "用法：!add/remove globe <群号...>",
+            "share": "用法：!add/remove share <群号...> <联动组名>",
             "reply_probability": (
                 "用法：!reply -s <0-100> <群号...> 或 !reply -d <群号...>"
             ),
         }
         return usages.get(category, "跨群设置命令无效。")
+
+    @staticmethod
+    def _format_share_groups(settings: dict) -> str:
+        values = []
+        for entry in settings.get("share_groups", []):
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name", "")).strip()
+            group_ids = [
+                str(value) for value in entry.get("group_ids", []) if str(value)
+            ]
+            if name and group_ids:
+                values.append(f"{name}（{'、'.join(group_ids)}）")
+        return "；".join(values) if values else "无"
 
     @staticmethod
     def _format_group_probabilities(settings: dict) -> str:

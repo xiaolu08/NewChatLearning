@@ -42,6 +42,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "global_group_ids": [],
         "local_only_group_ids": [],
         "group_tags": [],
+        "share_groups": [],
     },
     "filters": {
         "enabled": True,
@@ -234,50 +235,70 @@ class ConfigService:
     ) -> tuple[tuple[str, ...], ...]:
         library = self.snapshot()["library"]
         group_id = str(group_id)
+        base_scopes: tuple[tuple[str, ...], ...]
         local_only = {
             str(item).strip()
             for item in library.get("local_only_group_ids", [])
             if str(item).strip()
         }
         if group_id in local_only:
-            return ((group_id,),)
-        global_groups = {
-            str(item).strip()
-            for item in library.get("global_group_ids", [])
-            if str(item).strip()
+            base_scopes = ((group_id,),)
+        else:
+            global_groups = {
+                str(item).strip()
+                for item in library.get("global_group_ids", [])
+                if str(item).strip()
+            }
+            if (
+                group_id not in global_groups
+                and str(library.get("mode", "group")).lower() != "global"
+            ):
+                base_scopes = ((group_id,),)
+            else:
+                group_tags = self._normalized_group_tags(library.get("group_tags"))
+                requested_tags = group_tags.get(group_id, ())
+                if requested_tags:
+                    scopes = []
+                    for tag in requested_tags:
+                        members = tuple(
+                            member
+                            for member, tags in group_tags.items()
+                            if tag in tags and member in available_group_ids
+                        )
+                        if members:
+                            scopes.append(members)
+                    base_scopes = tuple(scopes)
+                else:
+                    excluded = {
+                        str(item).strip()
+                        for item in library.get("excluded_group_ids", [])
+                    }
+                    tagged_groups = set(group_tags)
+                    members = tuple(
+                        candidate
+                        for candidate in available_group_ids
+                        if candidate not in excluded and candidate not in tagged_groups
+                    )
+                    base_scopes = (members,) if members else ()
+
+        share_groups = self._normalized_share_groups(library.get("share_groups"))
+        covered_group_ids = {
+            member for scope in base_scopes for member in scope
         }
-        if (
-            group_id not in global_groups
-            and str(library.get("mode", "group")).lower() != "global"
-        ):
-            return ((group_id,),)
-
-        group_tags = self._normalized_group_tags(library.get("group_tags"))
-        requested_tags = group_tags.get(group_id, ())
-        if requested_tags:
-            scopes = []
-            for tag in requested_tags:
-                members = tuple(
-                    member
-                    for member, tags in group_tags.items()
-                    if tag in tags and member in available_group_ids
-                )
-                if members:
-                    scopes.append(members)
-            return tuple(scopes)
-
-        excluded = {str(item).strip() for item in library.get("excluded_group_ids", [])}
-        tagged_groups = set(group_tags)
-        members = tuple(
+        shared_group_ids = tuple(
             candidate
             for candidate in available_group_ids
-            if candidate not in excluded and candidate not in tagged_groups
+            if candidate not in covered_group_ids
+            and any(group_id in members and candidate in members for members in share_groups.values())
         )
-        return (members,) if members else ()
+        if shared_group_ids:
+            return (*base_scopes, shared_group_ids)
+        return base_scopes
 
     def library_status(self) -> dict[str, Any]:
         library = self.snapshot()["library"]
         group_tags = self._normalized_group_tags(library.get("group_tags"))
+        share_groups = self._normalized_share_groups(library.get("share_groups"))
         return {
             "mode": (
                 "global" if str(library.get("mode", "group")).lower() == "global" else "group"
@@ -297,6 +318,8 @@ class ConfigService:
             ),
             "tagged_groups": len(group_tags),
             "tags": sorted({tag for tags in group_tags.values() for tag in tags}),
+            "share_groups": len(share_groups),
+            "share_group_names": list(share_groups),
         }
 
     def configured_group_ids(self) -> list[str]:
@@ -322,6 +345,10 @@ class ConfigService:
         values.update(
             self._normalized_group_ids(snapshot["library"].get("local_only_group_ids", []))
         )
+        for members in self._normalized_share_groups(
+            snapshot["library"].get("share_groups")
+        ).values():
+            values.update(members)
         values.update(
             str(entry.get("group_id", "")).strip()
             for entry in snapshot["filters"].get("group_rules", [])
@@ -426,6 +453,7 @@ class ConfigService:
         snapshot = self.snapshot()
         library = snapshot["library"]
         tags = self._normalized_group_tags(library.get("group_tags"))
+        share_groups = self._normalized_share_groups(library.get("share_groups"))
         permissions = self._validated_permission_update(snapshot["permissions"])
         reply_group_ids = self._normalized_group_ids(snapshot["reply"].get("group_ids", []))
         local_only_group_ids = self._normalized_group_ids(
@@ -457,6 +485,10 @@ class ConfigService:
             "group_tags": [
                 {"group_id": group_id, "tags": list(group_tags)}
                 for group_id, group_tags in tags.items()
+            ],
+            "share_groups": [
+                {"name": name, "group_ids": list(group_ids)}
+                for name, group_ids in share_groups.items()
             ],
             "group_sub_admins": permissions["group_sub_admins"],
             "revision": self.revision,
@@ -503,7 +535,7 @@ class ConfigService:
         sub_admins: dict[str, list[str]] | None = None,
     ) -> dict[str, Any]:
         if action not in {"add", "remove", "set"} or category not in {
-            "learning", "learnings", "reply", "tag", "subadmin", "unmerge", "globe",
+            "learning", "learnings", "reply", "tag", "share", "subadmin", "unmerge", "globe",
             "reply_probability",
         }:
             raise ValueError("invalid_cross_group_settings")
@@ -514,6 +546,8 @@ class ConfigService:
             raise ValueError("invalid_cross_group_settings")
         normalized_tag = self._bounded_text(tag, 64) if tag is not None else None
         if category == "tag" and action == "add" and not normalized_tag:
+            raise ValueError("invalid_cross_group_settings")
+        if category == "share" and not normalized_tag:
             raise ValueError("invalid_cross_group_settings")
         probability = None
         if category == "reply_probability":
@@ -600,6 +634,22 @@ class ConfigService:
                     library["group_tags"] = [
                         {"group_id": group_id, "tags": list(values)}
                         for group_id, values in tags.items()
+                    ]
+                if category == "share":
+                    share_groups = self._normalized_share_groups(
+                        library.get("share_groups")
+                    )
+                    members = list(share_groups.get(normalized_tag, ()))
+                    members = self._replace_group_memberships(
+                        members, normalized_groups, enabled
+                    )
+                    if members:
+                        share_groups[normalized_tag] = tuple(members)
+                    else:
+                        share_groups.pop(normalized_tag, None)
+                    library["share_groups"] = [
+                        {"name": name, "group_ids": list(group_ids)}
+                        for name, group_ids in share_groups.items()
                     ]
                 if category == "subadmin":
                     current = self._validated_permission_update(
@@ -1056,6 +1106,35 @@ class ConfigService:
             tags = tuple(dict.fromkeys(str(tag).strip() for tag in raw_tags if str(tag).strip()))
             if group_id and tags:
                 result[group_id] = tags
+        return result
+
+    @classmethod
+    def _normalized_share_groups(cls, value: Any) -> dict[str, tuple[str, ...]]:
+        if not isinstance(value, list):
+            return {}
+        result: dict[str, tuple[str, ...]] = {}
+        for entry in value[:100]:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                name = cls._bounded_text(entry.get("name"), 64)
+            except ValueError:
+                continue
+            raw_group_ids = entry.get("group_ids")
+            if not name or not isinstance(raw_group_ids, (list, tuple)):
+                continue
+            group_ids = []
+            for raw_group_id in raw_group_ids[:200]:
+                try:
+                    group_id = cls._validated_qq_id(raw_group_id)
+                except ValueError:
+                    continue
+                if group_id not in group_ids:
+                    group_ids.append(group_id)
+            if not group_ids:
+                continue
+            existing = list(result.get(name, ()))
+            result[name] = tuple(dict.fromkeys((*existing, *group_ids)))
         return result
 
     @classmethod

@@ -625,6 +625,8 @@ def test_private_help_aliases_reach_ncl_help_for_plugin_admin(monkeypatch):
         assert "NewChatLearning Beta" in event.result.text
         assert "!add globe <群号...> - 允许目标群使用全局或标签共享词库" in event.result.text
         assert "!remove globe <群号...> - 目标群仅使用本群词库" in event.result.text
+        assert "!add share <群号...> <联动组名> - 创建或加入群聊联动词库" in event.result.text
+        assert "!remove share <群号...> <联动组名> - 移除联动组成员" in event.result.text
         assert "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库" in event.result.text
         assert "!reply -s <概率> <群号...> - 设置目标群独立回复概率" in event.result.text
         assert "!reply -d <群号...> - 恢复目标群继承全局回复概率" in event.result.text
@@ -700,6 +702,9 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
                 "excluded_group_ids": ["10003"],
                 "global_group_ids": ["10002"],
                 "local_only_group_ids": ["10005"],
+                "share_groups": [
+                    {"name": "联动词库1", "group_ids": ["10001", "10002"]}
+                ],
                 "group_sub_admins": [
                     {"group_id": "10004", "admin_ids": ["12345"]}
                 ],
@@ -723,6 +728,7 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
     assert "不汇入全局词库的群：10003" in event.result.text
     assert "使用全局词库的群：10002" in event.result.text
     assert "仅使用本群词库的群：10005" in event.result.text
+    assert "群聊联动词库：联动词库1（10001、10002）" in event.result.text
 
     plugin.config = {
         "permissions": {
@@ -750,6 +756,10 @@ def test_group_cross_group_responses_do_not_disclose_other_group_ids(monkeypatch
                 "excluded_group_ids": ["40001"],
                 "global_group_ids": ["10001", "50001"],
                 "local_only_group_ids": ["60001"],
+                "share_groups": [
+                    {"name": "联动词库1", "group_ids": ["10001", "90001"]},
+                    {"name": "隐藏联动组", "group_ids": ["20001", "90002"]},
+                ],
                 "group_reply_probabilities": [
                     {"group_id": "10001", "probability_percent": 5},
                     {"group_id": "70001", "probability_percent": 90},
@@ -777,7 +787,12 @@ def test_group_cross_group_responses_do_not_disclose_other_group_ids(monkeypatch
     )
     assert "当前群跨群设置" in event.result.text
     assert "独立回复概率：5%" in event.result.text
-    for hidden_group in ("20001", "30001", "40001", "50001", "60001", "70001", "80001"):
+    assert "加入联动词库：联动词库1" in event.result.text
+    assert "隐藏联动组" not in event.result.text
+    for hidden_group in (
+        "20001", "30001", "40001", "50001", "60001", "70001", "80001",
+        "90001", "90002",
+    ):
         assert hidden_group not in event.result.text
 
     event = Event()
@@ -895,6 +910,63 @@ def test_cross_group_globe_command_persists_target_groups(monkeypatch):
     assert plugin.app.calls[0]["group_ids"] == ["10001", "10002"]
     assert "使用全局词库的群：无" in event.result.text
     assert "仅使用本群词库的群：10001、10002" in event.result.text
+
+
+def test_cross_group_share_command_persists_named_memberships(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": [],
+                "reply_group_ids": [],
+                "excluded_group_ids": [],
+                "global_group_ids": [],
+                "local_only_group_ids": [],
+                "share_groups": [],
+                "group_sub_admins": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_cross_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                **self.config.cross_group_settings(),
+                "share_groups": [
+                    {
+                        "name": "联动词库1",
+                        "group_ids": ["123456789", "987654321"],
+                    }
+                ],
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand(
+                "add",
+                "share",
+                ("123456789", "987654321"),
+                "联动词库1",
+            ),
+            private=True,
+        )
+    )
+
+    assert plugin.app.calls[0]["category"] == "share"
+    assert plugin.app.calls[0]["group_ids"] == ["123456789", "987654321"]
+    assert plugin.app.calls[0]["tag"] == "联动词库1"
+    assert "群聊联动词库：联动词库1（123456789、987654321）" in event.result.text
 
 
 def test_cross_group_subadmin_reads_target_group_managers_before_save(monkeypatch):

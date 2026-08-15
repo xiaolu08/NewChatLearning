@@ -352,6 +352,32 @@
           }
         },
         "default": []
+      },
+      "share_groups": {
+        "description": "群聊联动词库",
+        "type": "template_list",
+        "hint": "同一联动组内的群可查询各成员群的本群词库；不会继承成员群的全局词库、外部导入词库或其他联动组权限。也可使用 !add/remove share 跨群调整。",
+        "templates": {
+          "share_groups": {
+            "name": "联动词库组",
+            "display_item": "name",
+            "hide_hint_in_list": true,
+            "items": {
+              "name": {
+                "description": "联动组名称",
+                "type": "string",
+                "default": ""
+              },
+              "group_ids": {
+                "description": "成员群号",
+                "type": "list",
+                "items": {"type": "string"},
+                "default": []
+              }
+            }
+          }
+        },
+        "default": []
       }
     }
   },

@@ -175,6 +175,77 @@ def test_explicit_global_group_queries_shared_library_in_group_mode():
     assert service.reply_library_scopes("10002", ["10001", "10002"]) == (("10002",),)
 
 
+def test_share_groups_append_only_direct_member_group_libraries():
+    service = ConfigService(
+        {
+            "library": {
+                "mode": "group",
+                "local_only_group_ids": ["10001"],
+                "global_group_ids": ["10002"],
+                "share_groups": [
+                    {"name": "联动词库1", "group_ids": ["10001", "10002"]},
+                    {"name": "联动词库2", "group_ids": ["10002", "10003"]},
+                ],
+            }
+        }
+    )
+
+    available = ["10001", "10002", "10003", "10004"]
+    assert service.reply_library_scopes("10001", available) == (
+        ("10001",),
+        ("10002",),
+    )
+    assert service.reply_library_scopes("10004", available) == (("10004",),)
+
+
+def test_share_group_membership_is_created_updated_and_removed_atomically():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    service = ConfigService(Source())
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="share",
+            group_ids=["123456789", "987654321"],
+            tag="联动词库1",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"] == [
+        {
+            "name": "联动词库1",
+            "group_ids": ["123456789", "987654321"],
+        }
+    ]
+    assert service.configured_group_ids() == ["123456789", "987654321"]
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="remove",
+            category="share",
+            group_ids=["123456789"],
+            tag="联动词库1",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"] == [
+        {"name": "联动词库1", "group_ids": ["987654321"]}
+    ]
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="remove",
+            category="share",
+            group_ids=["987654321"],
+            tag="联动词库1",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"] == []
+
+
 def test_cross_group_settings_lists_effective_global_library_groups():
     service = ConfigService(
         {
@@ -613,6 +684,37 @@ def test_cross_group_globe_update_rolls_back_on_save_failure():
                 action="add",
                 category="globe",
                 group_ids=["10001"],
+                expected_revision=service.revision,
+            )
+        )
+
+    assert source == before
+
+
+def test_cross_group_share_update_rolls_back_on_save_failure():
+    class Source(dict):
+        async def save_config_async(self):
+            raise OSError("disk full")
+
+    source = Source(
+        {
+            "library": {
+                "share_groups": [
+                    {"name": "联动词库1", "group_ids": ["10001"]}
+                ]
+            }
+        }
+    )
+    service = ConfigService(source)
+    before = deepcopy(source)
+
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_cross_group_settings(
+                action="add",
+                category="share",
+                group_ids=["10002"],
+                tag="联动词库1",
                 expected_revision=service.revision,
             )
         )

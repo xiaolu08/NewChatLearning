@@ -39,6 +39,16 @@ def test_parse_legacy_group_commands():
     assert parse_legacy_group_command("!remove globe 10001") == CrossGroupCommand(
         "remove", "globe", ("10001",)
     )
+    assert parse_legacy_group_command(
+        "!add share 123456789 987654321 联动词库1"
+    ) == CrossGroupCommand(
+        "add", "share", ("123456789", "987654321"), "联动词库1"
+    )
+    assert parse_legacy_group_command(
+        '!remove share 123456789 "联动 词库2"'
+    ) == CrossGroupCommand(
+        "remove", "share", ("123456789",), "联动 词库2"
+    )
     assert parse_legacy_group_command("!reply -s 25 10001 10002") == CrossGroupCommand(
         "set", "reply_probability", ("10001", "10002"), "25"
     )
@@ -53,6 +63,9 @@ def test_legacy_parser_does_not_intercept_unrelated_forms():
     assert parse_legacy_group_command("!unknown") is None
     assert parse_legacy_group_command("!globe") is None
     assert parse_legacy_group_command("!globe on") is None
+    assert parse_legacy_group_command("!add share 10001") == CrossGroupCommand(
+        "add", "share"
+    )
 
 
 def test_toggle_transitions_preserve_unrelated_capability():

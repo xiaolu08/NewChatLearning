@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 
 MODES = {"disabled", "learning", "reply", "learning_reply", "silent"}
@@ -27,7 +28,10 @@ class LegacyGlobalCommand:
 
 
 def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCommand | None:
-    parts = text.strip().split()
+    try:
+        parts = shlex.split(text.strip())
+    except ValueError:
+        return None
     if not parts:
         return None
     command = parts[0].lower()
@@ -63,6 +67,7 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
             "subadmin",
             "unmerge",
             "globe",
+            "share",
         }:
             return None
         if category == "tag" and action == "add":
@@ -73,6 +78,15 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
                 category,
                 tuple(raw_arguments[2:]),
                 raw_arguments[1],
+            )
+        if category == "share":
+            if len(raw_arguments) < 3:
+                return CrossGroupCommand(action, category)
+            return CrossGroupCommand(
+                action,
+                category,
+                tuple(raw_arguments[1:-1]),
+                raw_arguments[-1],
             )
         return CrossGroupCommand(action, category, tuple(raw_arguments[1:]))
     return None

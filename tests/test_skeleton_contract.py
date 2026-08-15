@@ -45,6 +45,8 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert schema["library"]["items"]["mode"]["default"] == "group"
     assert schema["library"]["items"]["group_tags"]["type"] == "template_list"
     assert schema["library"]["items"]["group_tags"]["default"] == []
+    assert schema["library"]["items"]["share_groups"]["type"] == "template_list"
+    assert schema["library"]["items"]["share_groups"]["default"] == []
     assert schema["tts"]["items"]["enabled"]["default"] is False
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
@@ -87,9 +89,9 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'id="confirm-password"' not in dashboard
     assert 'apiPost("api/auth/login", { password: "" })' in dashboard
     assert 'authState.entry_mode !== "passwordless"' in dashboard
-    assert "?????????" in dashboard
-    assert '?? NewChatLearning' in dashboard
-    assert '>??</button>' in dashboard
+    assert "插件版本未完整更新" in dashboard
+    assert '进入 NewChatLearning' in dashboard
+    assert '>进入</button>' in dashboard
     assert 'minlength="12"' not in dashboard
     assert 'bridge.upload("api/migration/upload", file)' in dashboard
     assert "api/migration/upload?ticket=" not in dashboard
