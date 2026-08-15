@@ -4,7 +4,7 @@
 
 将 QQ 群聊里的相邻消息整理成可检索的问答词库，让 AstrBot 用本地算法学习和回复。核心学习、匹配和回复流程不调用 LLM，不主动消耗 Token。
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post19-orange)
+![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post20-orange)
 ![Stage](https://img.shields.io/badge/stage-public%20beta-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
@@ -30,7 +30,7 @@
 4. 点击 **进入** 管理会话。
 5. 建议先关闭自动回复，完成群设置、备份和词库迁移检查后再逐步启用。
 
-> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post19`。
+> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post20`。
 
 ## 常用命令
 
@@ -72,7 +72,7 @@
 | `!reply -s <百分比> <群号...>` | 原版跨群概率命令 | 设置目标群独立回复概率（0-100）；未设置的群继承全局概率 |
 | `!reply -d <群号...>` | 原版跨群概率命令 | 删除目标群独立概率，恢复继承全局回复概率 |
 
-跨群写入使用与 WebUI 相同的配置 revision、持久化与审计服务；任一目标群或配置保存失败时不会保留部分修改。管理员可以在任意管理群或私聊 Bot 中发送带群号的跨群命令，不需要进入目标群。`!add subadmin` 需要 Bot 能通过 NapCat 读取目标群资料，并保存执行时的群主和群管理员 QQ 号；群管理成员发生变化后可再次执行该命令刷新授权名单。
+跨群写入使用与 WebUI 相同的配置 revision、持久化与审计服务；任一目标群或配置保存失败时不会保留部分修改。管理员可以在任意管理群或私聊 Bot 中发送带群号的跨群命令，不需要进入目标群。群聊回执只显示操作结果和当前群状态，不展示其他群号或完整配置；管理员私聊才显示完整群列表。`!add subadmin` 需要 Bot 能通过 NapCat 读取目标群资料，并保存执行时的群主和群管理员 QQ 号；群管理成员发生变化后可再次执行该命令刷新授权名单。
 
 ## WebUI
 

@@ -431,7 +431,7 @@ class NewChatLearningPlugin(star.Star):
         if isinstance(parsed, LegacyGlobalCommand):
             await self._handle_global_legacy_command(event, parsed)
         else:
-            await self._handle_cross_group_command(event, parsed)
+            await self._handle_cross_group_command(event, parsed, private=True)
         event.stop_event()
 
     def _record_diagnostic(self, group_id: str, event: str, *, reason: str = "") -> None:
@@ -1118,14 +1118,22 @@ class NewChatLearningPlugin(star.Star):
         self,
         event: AstrMessageEvent,
         command: CrossGroupCommand,
+        *,
+        private: bool = False,
     ) -> None:
         if self.app is None or not is_plugin_admin(event, getattr(self, "config", {})):
             event.stop_event()
             return
         settings = self.app.config.cross_group_settings()
         if command.action == "list":
+            if private:
+                text = self._format_cross_group_settings(settings)
+            else:
+                text = self._format_current_group_cross_settings(
+                    settings, str(event.get_group_id())
+                )
             event.set_result(
-                MessageEventResult().message(self._format_cross_group_settings(settings))
+                MessageEventResult().message(text)
             )
             return
 
@@ -1149,10 +1157,13 @@ class NewChatLearningPlugin(star.Star):
                     group = None
                 admin_ids = self._group_manager_ids(group)
                 if not admin_ids:
+                    text = (
+                        f"无法读取群 {group_id} 的群主或群管理员，未保存任何修改。"
+                        if private
+                        else "无法读取目标群的群主或群管理员，未保存任何修改。"
+                    )
                     event.set_result(
-                        MessageEventResult().message(
-                            f"无法读取群 {group_id} 的群主或群管理员，未保存任何修改。"
-                        )
+                        MessageEventResult().message(text)
                     )
                     return
                 sub_admins[group_id] = admin_ids
@@ -1165,7 +1176,7 @@ class NewChatLearningPlugin(star.Star):
                 sub_admins=sub_admins,
                 expected_revision=settings["revision"],
                 actor_id=event.get_sender_id(),
-                source="legacy_command",
+                source="legacy_private_command" if private else "legacy_group_command",
             )
         except ValueError as exc:
             if str(exc) == "revision_conflict":
@@ -1183,13 +1194,11 @@ class NewChatLearningPlugin(star.Star):
             "remove": "移除",
             "set": "设置",
         }.get(command.action, command.action)
-        event.set_result(
-            MessageEventResult().message(
-                f"跨群设置已保存：{verb} {command.category}，"
-                f"共 {len(normalized_group_ids)} 个群。\n"
-                f"{self._format_cross_group_settings(result)}"
-            )
-        )
+        label = self._cross_group_category_label(command.category)
+        summary = f"跨群设置已保存：{verb}{label}，共 {len(normalized_group_ids)} 个目标群。"
+        if private:
+            summary = f"{summary}\n{self._format_cross_group_settings(result)}"
+        event.set_result(MessageEventResult().message(summary))
 
     async def _handle_global_legacy_command(
         self,
@@ -1269,6 +1278,48 @@ class NewChatLearningPlugin(star.Star):
             f"使用全局词库的群：{joined('global_group_ids')}\n"
             f"仅使用本群词库的群：{joined('local_only_group_ids')}"
         )
+
+    @staticmethod
+    def _format_current_group_cross_settings(settings: dict, group_id: str) -> str:
+        def contains(key: str) -> bool:
+            return group_id in {str(value) for value in settings.get(key, [])}
+
+        sub_admin = any(
+            isinstance(entry, dict) and str(entry.get("group_id", "")) == group_id
+            for entry in settings.get("group_sub_admins", [])
+        )
+        probabilities = {
+            str(entry.get("group_id")): float(entry.get("probability_percent", 0))
+            for entry in settings.get("group_reply_probabilities", [])
+            if isinstance(entry, dict) and entry.get("group_id")
+        }
+        probability = (
+            f"{probabilities[group_id]:g}%"
+            if group_id in probabilities
+            else "继承全局"
+        )
+        return (
+            "当前群跨群设置\n"
+            f"学习：{'已开启' if contains('learning_group_ids') else '未开启'}\n"
+            f"回复：{'已开启' if contains('reply_group_ids') else '未开启'}\n"
+            f"独立回复概率：{probability}\n"
+            f"允许查询全局/标签词库：{'是' if contains('global_group_ids') else '否'}\n"
+            f"不汇入全局词库：{'是' if contains('excluded_group_ids') else '否'}\n"
+            f"允许本群管理员自主管理：{'是' if sub_admin else '否'}"
+        )
+
+    @staticmethod
+    def _cross_group_category_label(category: str) -> str:
+        return {
+            "learning": "学习群",
+            "learnings": "学习与回复群",
+            "reply": "回复群",
+            "tag": "共享标签",
+            "subadmin": "群聊子管理员授权",
+            "unmerge": "全局词库来源排除",
+            "globe": "全局词库查询范围",
+            "reply_probability": "独立回复概率",
+        }.get(category, "跨群设置")
 
     @staticmethod
     def _cross_group_command_usage(category: str) -> str:
