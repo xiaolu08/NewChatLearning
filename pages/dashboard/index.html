@@ -152,6 +152,9 @@
           <label for="target-users">定向学习用户</label>
           <textarea id="target-users" placeholder="每行填写一个目标用户 QQ 号"></textarea>
           <p id="target-hint">留空时学习群内所有合格成员；仅学习、学习并回复或静默学习模式可使用定向用户。</p>
+          <label for="group-probability">本群回复概率（%）</label>
+          <input id="group-probability" type="number" min="0" max="100" step="0.1" placeholder="留空继承全局概率">
+          <p id="group-probability-hint">当前群可覆盖全局回复概率；留空并保存时恢复继承。</p>
           <div class="toolbar" style="margin-top:16px"><button id="group-save" type="button">保存群聊设置</button></div>
           <div id="group-message" class="result" role="status"></div>
         </section>
@@ -620,6 +623,10 @@
         const mode = document.querySelector(`input[name="group-mode"][value="${data.mode}"]`);
         if (mode) mode.checked = true;
         el("target-users").value = (data.target_user_ids || []).join("\n");
+        el("group-probability").value = data.probability_overridden ? data.probability_percent : "";
+        el("group-probability-hint").textContent = data.probability_overridden
+          ? `本群独立概率：${data.probability_percent}%（全局默认 ${data.global_probability_percent}%）`
+          : `当前继承全局概率：${data.global_probability_percent}%。留空并保存时继续继承。`;
         updateTargetState(); setText("group-message", `已读取群 ${data.group_id} 的设置。`);
       }
 
@@ -1336,7 +1343,10 @@
           const mode = document.querySelector('input[name="group-mode"]:checked')?.value;
           if (!mode) throw new Error("请选择群聊运行模式。");
           const targets = el("target-users").value.split(/\s+/).map(value => value.trim()).filter(Boolean);
-          const data = await postSecure("api/groups/settings/update", { group_id: selectedSettingsGroup(), mode, target_user_ids: targets, revision: groupRevision || "" });
+          const probabilityText = el("group-probability").value.trim();
+          const probability = probabilityText === "" ? null : Number(probabilityText);
+          if (probability !== null && (!Number.isFinite(probability) || probability < 0 || probability > 100)) throw new Error("回复概率必须是 0 到 100 之间的数字。");
+          const data = await postSecure("api/groups/settings/update", { group_id: selectedSettingsGroup(), mode, target_user_ids: targets, probability_percent: probability, revision: groupRevision || "" });
           groupRevision = data.revision; setText("group-message", "群聊设置已保存到 AstrBot 插件配置。"); await loadGroups();
         } catch (error) { setText("group-message", error?.message || "设置保存失败。"); }
       });

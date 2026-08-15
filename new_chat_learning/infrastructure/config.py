@@ -23,6 +23,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "group_ids": [],
         "silent_group_ids": [],
         "probability_percent": 50.0,
+        "group_probability_overrides": [],
         "cooldown_seconds": 3.0,
         "wait_seconds": 0.0,
         "wait_jitter_seconds": 0.0,
@@ -89,6 +90,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "daily_characters": 50000,
     },
 }
+
+_UNSET = object()
 
 
 class ConfigService:
@@ -173,12 +176,19 @@ class ConfigService:
             return False
         return group_id in {str(item).strip() for item in reply.get("group_ids", [])}
 
-    def reply_settings(self) -> dict[str, Any]:
+    def reply_settings(self, group_id: str | None = None) -> dict[str, Any]:
         reply = self.snapshot()["reply"]
+        global_probability = self._bounded_float(
+            reply.get("probability_percent"), 50.0, 0.0, 100.0
+        )
+        overrides = self._normalized_reply_probability_overrides(
+            reply.get("group_probability_overrides")
+        )
+        probability = overrides.get(str(group_id), global_probability)
         return {
-            "probability_percent": self._bounded_float(
-                reply.get("probability_percent"), 50.0, 0.0, 100.0
-            ),
+            "probability_percent": probability,
+            "global_probability_percent": global_probability,
+            "probability_overridden": str(group_id) in overrides if group_id is not None else False,
             "cooldown_seconds": self._bounded_float(
                 reply.get("cooldown_seconds"), 3.0, 0.0, 86400.0
             ),
@@ -433,6 +443,12 @@ class ConfigService:
             "silent_group_ids": self._normalized_group_ids(
                 snapshot["reply"].get("silent_group_ids", [])
             ),
+            "group_reply_probabilities": [
+                {"group_id": group_id, "probability_percent": probability}
+                for group_id, probability in self._normalized_reply_probability_overrides(
+                    snapshot["reply"].get("group_probability_overrides")
+                ).items()
+            ],
             "excluded_group_ids": self._normalized_group_ids(
                 library.get("excluded_group_ids", [])
             ),
@@ -486,9 +502,12 @@ class ConfigService:
         tag: str | None = None,
         sub_admins: dict[str, list[str]] | None = None,
     ) -> dict[str, Any]:
-        if action not in {"add", "remove"} or category not in {
-            "learning", "learnings", "reply", "tag", "subadmin", "unmerge", "globe"
+        if action not in {"add", "remove", "set"} or category not in {
+            "learning", "learnings", "reply", "tag", "subadmin", "unmerge", "globe",
+            "reply_probability",
         }:
+            raise ValueError("invalid_cross_group_settings")
+        if action == "set" and category != "reply_probability":
             raise ValueError("invalid_cross_group_settings")
         normalized_groups = self._normalized_group_ids(group_ids)
         if not normalized_groups:
@@ -496,6 +515,17 @@ class ConfigService:
         normalized_tag = self._bounded_text(tag, 64) if tag is not None else None
         if category == "tag" and action == "add" and not normalized_tag:
             raise ValueError("invalid_cross_group_settings")
+        probability = None
+        if category == "reply_probability":
+            if action == "set":
+                try:
+                    probability = float(str(tag))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("invalid_cross_group_settings") from exc
+                if not 0.0 <= probability <= 100.0:
+                    raise ValueError("invalid_cross_group_settings")
+            elif action != "remove":
+                raise ValueError("invalid_cross_group_settings")
 
         async with self._lock:
             if expected_revision != self.revision:
@@ -527,6 +557,19 @@ class ConfigService:
                     )
                     if enabled:
                         reply["enabled"] = True
+                if category == "reply_probability":
+                    overrides = self._normalized_reply_probability_overrides(
+                        reply.get("group_probability_overrides")
+                    )
+                    for group_id in normalized_groups:
+                        if action == "set":
+                            overrides[group_id] = float(probability)
+                        else:
+                            overrides.pop(group_id, None)
+                    reply["group_probability_overrides"] = [
+                        {"group_id": group_id, "probability_percent": value}
+                        for group_id, value in overrides.items()
+                    ]
                 if category == "unmerge":
                     library["excluded_group_ids"] = self._replace_group_memberships(
                         library.get("excluded_group_ids", []), normalized_groups, enabled
@@ -859,6 +902,7 @@ class ConfigService:
             mode = "reply"
         else:
             mode = "disabled"
+        reply_settings = self.reply_settings(group_id)
         return {
             "group_id": group_id,
             "mode": mode,
@@ -866,6 +910,9 @@ class ConfigService:
             "reply_enabled": reply and group_id not in silent_groups,
             "silent": group_id in silent_groups,
             "target_user_ids": list(self.learning_target_users_for(group_id)),
+            "probability_percent": reply_settings["probability_percent"],
+            "global_probability_percent": reply_settings["global_probability_percent"],
+            "probability_overridden": reply_settings["probability_overridden"],
             "revision": self.revision,
         }
 
@@ -876,11 +923,16 @@ class ConfigService:
         mode: str,
         target_user_ids: list[str],
         expected_revision: str,
+        probability_percent: float | None | object = _UNSET,
     ) -> dict[str, Any]:
         if mode not in {"disabled", "learning", "reply", "learning_reply", "silent"}:
             raise ValueError("invalid_mode")
         if mode not in {"learning", "learning_reply", "silent"}:
             target_user_ids = []
+        if probability_percent is not _UNSET and probability_percent is not None:
+            probability_percent = self._bounded_float(
+                probability_percent, 50.0, 0.0, 100.0
+            )
         async with self._lock:
             if expected_revision != self.revision:
                 raise ValueError("revision_conflict")
@@ -917,6 +969,19 @@ class ConfigService:
                 if target_user_ids:
                     targets.append({"group_id": group_id, "user_ids": target_user_ids})
                 learning["target_users"] = targets
+                overrides = self._normalized_reply_probability_overrides(
+                    reply.get("group_probability_overrides")
+                )
+                if probability_percent is _UNSET:
+                    pass
+                elif probability_percent is None:
+                    overrides.pop(str(group_id), None)
+                else:
+                    overrides[str(group_id)] = probability_percent
+                reply["group_probability_overrides"] = [
+                    {"group_id": item, "probability_percent": value}
+                    for item, value in overrides.items()
+                ]
                 await self._persist_source()
             except Exception:
                 self._source.clear()
@@ -991,6 +1056,23 @@ class ConfigService:
             tags = tuple(dict.fromkeys(str(tag).strip() for tag in raw_tags if str(tag).strip()))
             if group_id and tags:
                 result[group_id] = tags
+        return result
+
+    @classmethod
+    def _normalized_reply_probability_overrides(cls, value: Any) -> dict[str, float]:
+        if not isinstance(value, list):
+            return {}
+        result: dict[str, float] = {}
+        for entry in value[:200]:
+            if not isinstance(entry, dict):
+                continue
+            group_id = str(entry.get("group_id", "")).strip()
+            if not group_id.isdigit() or not 5 <= len(group_id) <= 20:
+                continue
+            probability = cls._bounded_float(
+                entry.get("probability_percent"), 50.0, 0.0, 100.0
+            )
+            result[group_id] = probability
         return result
 
     @classmethod

@@ -45,7 +45,7 @@ class ReplyService:
         if not self.config.reply_enabled_for(group_id):
             return ReplyDecision(None, "disabled")
 
-        settings = self.config.reply_settings()
+        settings = self.config.reply_settings(group_id)
         now = self.clock()
         cooldown = float(settings["cooldown_seconds"])
         last_reply = self._last_reply_at.get(str(group_id))

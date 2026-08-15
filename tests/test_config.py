@@ -466,6 +466,40 @@ def test_cross_group_settings_accepts_astrbot_config_wrapper_with_lock():
     assert source["learning"]["group_ids"] == ["399375745"]
 
 
+def test_cross_group_reply_probability_override_and_reset():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    service = ConfigService(Source({"reply": {"probability_percent": 50.0}}))
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="set",
+            category="reply_probability",
+            group_ids=["10001", "10002"],
+            tag="25",
+            expected_revision=service.revision,
+        )
+    )
+
+    assert service.reply_settings("10001")["probability_percent"] == 25.0
+    assert service.reply_settings("10003")["probability_percent"] == 50.0
+    assert result["group_reply_probabilities"] == [
+        {"group_id": "10001", "probability_percent": 25.0},
+        {"group_id": "10002", "probability_percent": 25.0},
+    ]
+
+    asyncio.run(
+        service.update_cross_group_settings(
+            action="remove",
+            category="reply_probability",
+            group_ids=["10001"],
+            expected_revision=service.revision,
+        )
+    )
+    assert service.reply_settings("10001")["probability_percent"] == 50.0
+
+
 def test_global_switch_settings_persist_and_roll_back():
     class Source(dict):
         fail = False

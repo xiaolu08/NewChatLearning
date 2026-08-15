@@ -20,7 +20,7 @@ from new_chat_learning.application.reply import ReplyService
 from new_chat_learning.application.tasks import ScheduledTaskService
 from new_chat_learning.constants import PLUGIN_VERSION
 from new_chat_learning.domain.message import NormalizedMessage, RecallNotice
-from new_chat_learning.infrastructure.config import ConfigService
+from new_chat_learning.infrastructure.config import _UNSET, ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 from new_chat_learning.tts import TTSService
 from new_chat_learning.web.auth import WebAuthService
@@ -108,6 +108,7 @@ class RuntimeApplication:
         target_user_ids: list[str],
         expected_revision: str,
         actor_id: str,
+        probability_percent: float | None | object = _UNSET,
         source: str = "webui",
     ) -> dict[str, Any]:
         before = self.config.group_settings(group_id)
@@ -116,6 +117,7 @@ class RuntimeApplication:
             mode=mode,
             target_user_ids=target_user_ids,
             expected_revision=expected_revision,
+            probability_percent=probability_percent,
         )
         try:
             await self.store.record_audit(

@@ -626,6 +626,8 @@ def test_private_help_aliases_reach_ncl_help_for_plugin_admin(monkeypatch):
         assert "!add globe <群号...> - 允许目标群使用全局或标签共享词库" in event.result.text
         assert "!remove globe <群号...> - 目标群仅使用本群词库" in event.result.text
         assert "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库" in event.result.text
+        assert "!reply -s <概率> <群号...> - 设置目标群独立回复概率" in event.result.text
+        assert "!reply -d <群号...> - 恢复目标群继承全局回复概率" in event.result.text
 
 
 def test_private_help_remains_silent_for_ordinary_member(monkeypatch):

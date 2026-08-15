@@ -39,6 +39,12 @@ def test_parse_legacy_group_commands():
     assert parse_legacy_group_command("!remove globe 10001") == CrossGroupCommand(
         "remove", "globe", ("10001",)
     )
+    assert parse_legacy_group_command("!reply -s 25 10001 10002") == CrossGroupCommand(
+        "set", "reply_probability", ("10001", "10002"), "25"
+    )
+    assert parse_legacy_group_command("!reply -d 10001") == CrossGroupCommand(
+        "remove", "reply_probability", ("10001",)
+    )
 
 
 def test_legacy_parser_does_not_intercept_unrelated_forms():

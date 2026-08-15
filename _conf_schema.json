@@ -134,6 +134,27 @@
         "type": "float",
         "default": 50.0
       },
+      "group_probability_overrides": {
+        "description": "按群回复概率",
+        "type": "template_list",
+        "hint": "指定群使用独立概率；未列出的回复群继承上方全局回复概率。",
+        "templates": {
+          "group_probability_overrides": {
+            "name": "群聊回复概率",
+            "display_item": "group_id",
+            "hide_hint_in_list": true,
+            "items": {
+              "group_id": {"description": "群号", "type": "string", "default": ""},
+              "probability_percent": {
+                "description": "回复概率（%）",
+                "type": "float",
+                "default": 50.0
+              }
+            }
+          }
+        },
+        "default": []
+      },
       "cooldown_seconds": {
         "description": "单群回复冷却（秒）",
         "type": "float",

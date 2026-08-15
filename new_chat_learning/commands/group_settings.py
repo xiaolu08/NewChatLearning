@@ -36,6 +36,19 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
     if command == "!learning":
         return GroupSettingsCommand("learning", arguments)
     if command == "!reply":
+        if arguments and arguments[0] == "-s":
+            return CrossGroupCommand(
+                "set",
+                "reply_probability",
+                tuple(raw_arguments[2:]) if len(raw_arguments) >= 3 else (),
+                raw_arguments[1] if len(raw_arguments) >= 2 else None,
+            )
+        if arguments and arguments[0] == "-d":
+            return CrossGroupCommand(
+                "remove",
+                "reply_probability",
+                tuple(raw_arguments[1:]) if len(raw_arguments) >= 2 else (),
+            )
         return GroupSettingsCommand("reply", arguments)
     if command == "!grouplist" and not arguments:
         return CrossGroupCommand("list")

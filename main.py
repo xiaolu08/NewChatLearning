@@ -512,6 +512,8 @@ class NewChatLearningPlugin(star.Star):
                 "全局/插件管理员跨群命令：\n"
                 "!grouplist - 查看学习、回复、自主管理和词库范围群列表\n"
                 "!add/remove learning|learnings|reply <群号...>\n"
+                "!reply -s <概率> <群号...> - 设置目标群独立回复概率\n"
+                "!reply -d <群号...> - 恢复目标群继承全局回复概率\n"
                 "!add tag <标签> <群号...> / !remove tag <群号...>\n"
                 "!add/remove subadmin <群号...> - 管理群聊子管理员授权\n"
                 "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库\n"
@@ -1176,7 +1178,11 @@ class NewChatLearningPlugin(star.Star):
             self.logger.exception("Failed to persist cross-group settings from command.")
             event.set_result(MessageEventResult().message("跨群设置保存失败，原配置已保留。"))
             return
-        verb = "添加" if command.action == "add" else "移除"
+        verb = {
+            "add": "添加",
+            "remove": "移除",
+            "set": "设置",
+        }.get(command.action, command.action)
         event.set_result(
             MessageEventResult().message(
                 f"跨群设置已保存：{verb} {command.category}，"
@@ -1257,6 +1263,7 @@ class NewChatLearningPlugin(star.Star):
         return (
             f"已开启学习的群：{joined('learning_group_ids')}\n"
             f"已开启回复的群：{joined('reply_group_ids')}\n"
+            f"独立回复概率：{NewChatLearningPlugin._format_group_probabilities(settings)}\n"
             f"允许自主管理的群：{'、'.join(sub_admin_groups) if sub_admin_groups else '无'}\n"
             f"不汇入全局词库的群：{joined('excluded_group_ids')}\n"
             f"使用全局词库的群：{joined('global_group_ids')}\n"
@@ -1273,8 +1280,21 @@ class NewChatLearningPlugin(star.Star):
             "subadmin": "用法：!add/remove subadmin <群号...>",
             "unmerge": "用法：!add/remove unmerge <群号...>",
             "globe": "用法：!add/remove globe <群号...>",
+            "reply_probability": (
+                "用法：!reply -s <0-100> <群号...> 或 !reply -d <群号...>"
+            ),
         }
         return usages.get(category, "跨群设置命令无效。")
+
+    @staticmethod
+    def _format_group_probabilities(settings: dict) -> str:
+        entries = settings.get("group_reply_probabilities", [])
+        values = [
+            f"{entry.get('group_id')}={float(entry.get('probability_percent', 0)):g}%"
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("group_id")
+        ]
+        return "、".join(values) if values else "无（全部继承全局）"
 
     @staticmethod
     def _format_group_settings(settings: dict, *, saved: bool = False) -> str:
@@ -1448,6 +1468,7 @@ class NewChatLearningPlugin(star.Star):
         mode = str(payload.get("mode", "")).strip()
         revision = str(payload.get("revision", "")).strip()
         raw_targets = payload.get("target_user_ids", [])
+        raw_probability = payload.get("probability_percent", "__unset__")
         if group_id is None or not isinstance(raw_targets, list):
             return self._web_json({"status": "error", "message": "群聊设置无效。"}, status_code=400)
         targets = []
@@ -1464,14 +1485,34 @@ class NewChatLearningPlugin(star.Star):
                 {"status": "error", "message": "单群最多配置 100 个定向用户。"},
                 status_code=400,
             )
+        probability = raw_probability
+        if raw_probability != "__unset__":
+            if raw_probability in (None, ""):
+                probability = None
+            else:
+                try:
+                    probability = float(raw_probability)
+                except (TypeError, ValueError):
+                    return self._web_json(
+                        {"status": "error", "message": "回复概率必须是 0 到 100 之间的数字。"},
+                        status_code=400,
+                    )
+                if not 0.0 <= probability <= 100.0:
+                    return self._web_json(
+                        {"status": "error", "message": "回复概率必须是 0 到 100 之间的数字。"},
+                        status_code=400,
+                    )
         try:
-            result = await self.app.update_group_settings(
-                group_id=group_id,
-                mode=mode,
-                target_user_ids=targets,
-                expected_revision=revision,
-                actor_id=self._web_actor_id(),
-            )
+            kwargs = {
+                "group_id": group_id,
+                "mode": mode,
+                "target_user_ids": targets,
+                "expected_revision": revision,
+                "actor_id": self._web_actor_id(),
+            }
+            if raw_probability != "__unset__":
+                kwargs["probability_percent"] = probability
+            result = await self.app.update_group_settings(**kwargs)
         except ValueError as exc:
             if str(exc) == "revision_conflict":
                 return self._web_json(
