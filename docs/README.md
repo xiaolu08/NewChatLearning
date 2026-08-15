@@ -36,6 +36,7 @@
 - [0.1.0-beta.31.post18 Release Notes](./releases/0.1.0-beta.31.post18.md)：整理更新日志时间线并恢复插件管理页的完整版本展示。
 - [0.1.0-beta.31.post19 Release Notes](./releases/0.1.0-beta.31.post19.md)：补齐按群设置独立回复概率的跨群命令与 WebUI 设置。
 - [0.1.0-beta.31.post20 Release Notes](./releases/0.1.0-beta.31.post20.md)：限制群聊跨群管理回执，避免披露其他群配置与群号。
+- [0.1.0-beta.31.post21 Release Notes](./releases/0.1.0-beta.31.post21.md)：导入词库独立管理、按群绑定、启停、替换更新和带备份删除。
 
 ## 研究资料
 

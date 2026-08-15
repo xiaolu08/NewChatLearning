@@ -53,7 +53,9 @@ class ReplyService:
             return ReplyDecision(None, "cooldown")
 
         available_groups = await self.store.list_question_group_ids()
-        scopes = self.config.reply_library_scopes(group_id, available_groups)
+        group_scopes = self.config.reply_library_scopes(group_id, available_groups)
+        external_scopes = await self.store.external_library_scopes_for(group_id)
+        scopes = (*group_scopes, *((scope,) for scope in external_scopes))
         selections: list[tuple[ReplyCandidate, str]] = []
         filtered_any = False
         for scope in scopes:

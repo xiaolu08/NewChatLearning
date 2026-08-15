@@ -1174,8 +1174,13 @@ def test_migrate_prepare_returns_confirmable_import_id(monkeypatch, tmp_path):
     main_module = load_main(monkeypatch)
 
     class Migration:
-        async def prepare(self, path):
+        async def prepare(self, path, **kwargs):
             assert path == tmp_path / "sample.cl"
+            assert kwargs == {
+                "actor_id": "7",
+                "group_id": "10001",
+                "source_name": "sample.cl",
+            }
             return {
                 "status": "prepared",
                 "import_id": "a" * 32,
@@ -1249,9 +1254,9 @@ def test_migrate_apply_targets_current_group_and_reports_backup(monkeypatch):
 
     asyncio.run(plugin.ncl_migrate_apply(event))
 
-    assert "合并问题记录 2，合并答案记录 3" in event.result.text
+    assert "独立外部词库：问题记录 2，答案记录 3" in event.result.text
+    assert "可在 WebUI 中单独启停、更新或删除" in event.result.text
     assert "before-import.sqlite3" in event.result.text
-    assert "不会自动开启" in event.result.text
 
 
 def test_media_scan_reports_read_only_impact(monkeypatch):

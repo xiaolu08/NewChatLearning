@@ -687,3 +687,53 @@ def test_global_scope_supports_cross_group_regex_and_similarity(tmp_path):
     assert regex_result.candidate.components[0]["data"]["text"] == "正则答案"
     assert similarity_result.reason == "similarity"
     assert similarity_result.candidate.components[0]["data"]["text"] == "相似答案"
+
+
+def test_bound_external_library_can_be_toggled_without_changing_group_library(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "external-library.sqlite3")
+        await store.open()
+        library_id = "a" * 24
+        external = await seed_group_pair(
+            store,
+            f"external:{library_id}",
+            "外部问题",
+            "外部答案",
+            1000,
+        )
+        connection = store._require_connection()
+        connection.execute(
+            "INSERT INTO external_libraries(library_id, name, source_name, staging_sha256, "
+            "question_count, answer_count, actor_id) VALUES(?, ?, ?, ?, 1, 1, ?)",
+            (library_id, "测试外部词库", "test.cl", "0" * 64, "test"),
+        )
+        connection.execute(
+            "INSERT INTO external_library_bindings(library_id, group_id) VALUES(?, ?)",
+            (library_id, "10001"),
+        )
+        connection.commit()
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001", "10002"],
+                    "probability_percent": 100,
+                }
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            bound = await reply.decide("10001", external.normalized_key)
+            unbound = await reply.decide("10002", external.normalized_key)
+            await store.set_external_library_enabled(
+                library_id=library_id, enabled=False, actor_id="test"
+            )
+            disabled = await reply.decide("10001", external.normalized_key)
+        finally:
+            await store.close()
+        return bound, unbound, disabled
+
+    bound, unbound, disabled = asyncio.run(scenario())
+    assert bound.candidate.components[0]["data"]["text"] == "外部答案"
+    assert unbound.reason == "no_match"
+    assert disabled.reason == "no_match"

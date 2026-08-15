@@ -209,6 +209,30 @@ class NewChatLearningPlugin(star.Star):
                 ["GET"],
                 "NewChatLearning 旧词库迁移状态",
             ),
+            (
+                "migration/libraries",
+                self.web_external_libraries,
+                ["GET"],
+                "NewChatLearning 外部词库列表",
+            ),
+            (
+                "migration/library/enabled",
+                self.web_external_library_enabled,
+                ["POST"],
+                "NewChatLearning 启停外部词库",
+            ),
+            (
+                "migration/library/bindings",
+                self.web_external_library_bindings,
+                ["POST"],
+                "NewChatLearning 更新外部词库绑定",
+            ),
+            (
+                "migration/library/delete",
+                self.web_external_library_delete,
+                ["POST"],
+                "NewChatLearning 删除外部词库",
+            ),
             ("library/weight", self.web_library_weight, ["POST"], "NewChatLearning 修改权重"),
             (
                 "library/delete-answer",
@@ -813,7 +837,12 @@ class NewChatLearningPlugin(star.Star):
         if path is None or not path.is_file() or path.suffix.lower() != ".cl":
             event.set_result(MessageEventResult().message("用法：/ncl migrate-prepare <.cl 文件>"))
             return
-        report = await self.app.migration.prepare(path)
+        report = await self.app.migration.prepare(
+            path,
+            actor_id=event.get_sender_id(),
+            group_id=event.get_group_id(),
+            source_name=path.name,
+        )
         if report.get("status") != "prepared":
             event.set_result(
                 MessageEventResult().message(
@@ -966,10 +995,10 @@ class NewChatLearningPlugin(star.Star):
             return
         event.set_result(
             MessageEventResult().message(
-                f"旧词库已导入当前群：合并问题记录 {result['question_count']}，"
-                f"合并答案记录 {result['answer_count']}。\n"
+                f"旧词库已建立为独立外部词库：问题记录 {result['question_count']}，"
+                f"答案记录 {result['answer_count']}。\n"
                 f"导入前备份：{Path(result['backup_path']).name}\n"
-                "本次导入不会自动开启学习或词库回复。"
+                "该词库已绑定当前群，可在 WebUI 中单独启停、更新或删除。"
             )
         )
 
@@ -2293,6 +2322,9 @@ class NewChatLearningPlugin(star.Star):
         if error is not None:
             return error
         group_id = self._web_group_id(payload.get("group_id", ""))
+        operation = str(payload.get("operation", "create")).strip().lower()
+        library_id = str(payload.get("library_id", "")).strip().lower()
+        library_name = str(payload.get("library_name", "")).strip()
         upload_id = str(payload.get("upload_id", "")).lower()
         self._prune_migration_uploads()
         upload = self._migration_uploads.get(upload_id)
@@ -2300,6 +2332,23 @@ class NewChatLearningPlugin(star.Star):
             return self._web_json(
                 {"status": "error", "message": "目标群号无效。"}, status_code=400
             )
+        if operation not in {"create", "update"}:
+            return self._web_json(
+                {"status": "error", "message": "导入操作类型无效。"}, status_code=400
+            )
+        existing_library = None
+        if operation == "update":
+            parsed_library_id = self._web_external_library_id(library_id)
+            existing_library = (
+                await self.app.store.external_library(parsed_library_id)
+                if parsed_library_id is not None
+                else None
+            )
+            if existing_library is None:
+                return self._web_json(
+                    {"status": "error", "message": "要更新的外部词库不存在。"},
+                    status_code=404,
+                )
         if (
             upload is None
             or upload.get("session") != self._web_actor_id()
@@ -2314,7 +2363,11 @@ class NewChatLearningPlugin(star.Star):
                 Path(upload["path"]),
                 actor_id=self._web_actor_id(),
                 group_id=group_id,
+                group_ids=(existing_library or {}).get("group_ids") or [group_id],
                 source_name=str(upload["file_name"]),
+                library_id=library_id or None,
+                library_name=library_name or (existing_library or {}).get("name"),
+                operation=operation,
             )
         except (OSError, RuntimeError):
             self.logger.exception("Failed to prepare legacy library import from WebUI.")
@@ -2367,6 +2420,8 @@ class NewChatLearningPlugin(star.Star):
                 "plan_expired": "导入计划已过期，请重新上传并准备。",
                 "staging_not_found": "导入暂存数据不存在。",
                 "already_imported": "该旧词库导入计划已经执行。",
+                "library_not_found": "要更新的外部词库已不存在。",
+                "library_exists": "外部词库标识冲突，请重新生成计划。",
             }
             return self._web_json(
                 {"status": "error", "message": reasons.get(result.get("reason"), "导入未执行。")},
@@ -2391,6 +2446,86 @@ class NewChatLearningPlugin(star.Star):
                 },
             }
         )
+
+    async def web_external_libraries(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        return self._web_json(
+            {"status": "ok", "data": {"libraries": await self.app.migration.list_libraries()}}
+        )
+
+    async def web_external_library_enabled(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        library_id = self._web_external_library_id(payload.get("library_id", ""))
+        if library_id is None or not isinstance(payload.get("enabled"), bool):
+            return self._web_json(
+                {"status": "error", "message": "外部词库状态参数无效。"}, status_code=400
+            )
+        result = await self.app.migration.set_enabled(
+            library_id=library_id,
+            enabled=bool(payload["enabled"]),
+            actor_id=self._web_actor_id(),
+        )
+        if result is None:
+            return self._web_json(
+                {"status": "error", "message": "外部词库不存在。"}, status_code=404
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_external_library_bindings(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        library_id = self._web_external_library_id(payload.get("library_id", ""))
+        raw_group_ids = payload.get("group_ids", [])
+        group_ids = []
+        if isinstance(raw_group_ids, list):
+            group_ids = [
+                group_id
+                for value in raw_group_ids
+                if (group_id := self._web_group_id(value)) is not None
+            ]
+        if library_id is None or not group_ids or len(group_ids) != len(raw_group_ids):
+            return self._web_json(
+                {"status": "error", "message": "请至少填写一个有效的绑定群号。"},
+                status_code=400,
+            )
+        result = await self.app.migration.set_bindings(
+            library_id=library_id,
+            group_ids=group_ids,
+            actor_id=self._web_actor_id(),
+        )
+        if result is None:
+            return self._web_json(
+                {"status": "error", "message": "外部词库不存在。"}, status_code=404
+            )
+        return self._web_json({"status": "ok", "data": result})
+
+    async def web_external_library_delete(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        library_id = self._web_external_library_id(payload.get("library_id", ""))
+        if library_id is None or payload.get("confirmed") is not True:
+            return self._web_json(
+                {"status": "error", "message": "请确认删除有效的外部词库。"},
+                status_code=400,
+            )
+        result = await self.app.migration.delete(
+            library_id=library_id,
+            actor_id=self._web_actor_id(),
+        )
+        if result is None:
+            return self._web_json(
+                {"status": "error", "message": "外部词库不存在。"}, status_code=404
+            )
+        public_result = dict(result)
+        public_result["backup_name"] = Path(str(result["backup_path"])).name
+        public_result.pop("backup_path", None)
+        return self._web_json({"status": "ok", "data": public_result})
 
     def _prune_migration_uploads(self) -> None:
         now = time.monotonic()
@@ -2917,6 +3052,15 @@ class NewChatLearningPlugin(star.Star):
     def _web_group_id(value) -> str | None:
         group_id = str(value).strip()
         return group_id if group_id.isdigit() and 5 <= len(group_id) <= 20 else None
+
+    @staticmethod
+    def _web_external_library_id(value) -> str | None:
+        library_id = str(value).strip().lower()
+        if len(library_id) != 24 or any(
+            character not in "0123456789abcdef" for character in library_id
+        ):
+            return None
+        return library_id
 
     @staticmethod
     def _qq_id(value) -> str | None:

@@ -137,6 +137,26 @@ CREATE TABLE IF NOT EXISTS legacy_imports (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS external_libraries (
+    library_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    staging_sha256 TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+    question_count INTEGER NOT NULL DEFAULT 0,
+    answer_count INTEGER NOT NULL DEFAULT 0,
+    actor_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS external_library_bindings (
+    library_id TEXT NOT NULL REFERENCES external_libraries(library_id) ON DELETE CASCADE,
+    group_id TEXT NOT NULL,
+    PRIMARY KEY(library_id, group_id)
+);
+
 CREATE TABLE IF NOT EXISTS blacklist_state (
     scope TEXT NOT NULL,
     group_id TEXT NOT NULL DEFAULT '',
@@ -207,6 +227,8 @@ ON scheduled_tasks(enabled, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_recent
 ON scheduled_task_runs(task_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tts_usage_updated ON tts_usage(updated_at);
+CREATE INDEX IF NOT EXISTS idx_external_library_bindings_group
+ON external_library_bindings(group_id, library_id);
 """
 
 
@@ -256,6 +278,8 @@ class SQLiteStore:
                 "audit_log",
                 "reply_records",
                 "legacy_imports",
+                "external_libraries",
+                "external_library_bindings",
                 "blacklist_state",
                 "filter_hits",
                 "scheduled_tasks",
@@ -277,6 +301,7 @@ class SQLiteStore:
             rows = self._require_connection().execute(
                 "WITH group_ids AS ("
                 "SELECT group_id FROM groups UNION SELECT group_id FROM questions "
+                "WHERE group_id NOT LIKE 'external:%' "
                 "UNION SELECT group_id FROM pending_messages UNION SELECT group_id FROM reply_records"
                 ") SELECT g.group_id, "
                 "(SELECT COUNT(*) FROM questions q WHERE q.group_id = g.group_id) AS questions, "
@@ -810,6 +835,201 @@ class SQLiteStore:
                 actor_id=str(actor_id),
             )
 
+    async def import_external_library_jsonl(
+        self,
+        *,
+        import_id: str,
+        library_id: str,
+        name: str,
+        group_ids: list[str],
+        source_name: str,
+        staging_path: Path,
+        staging_sha256: str,
+        actor_id: str,
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            return await asyncio.to_thread(
+                self._import_external_library_jsonl_sync,
+                connection,
+                import_id=str(import_id),
+                library_id=str(library_id),
+                name=str(name),
+                group_ids=[str(group_id) for group_id in group_ids],
+                source_name=str(source_name),
+                staging_path=Path(staging_path),
+                staging_sha256=str(staging_sha256),
+                actor_id=str(actor_id),
+                replace=bool(replace),
+            )
+
+    async def list_external_libraries(self) -> list[dict[str, Any]]:
+        async with self._lock:
+            rows = self._require_connection().execute(
+                "SELECT l.library_id, l.name, l.source_name, l.staging_sha256, l.enabled, "
+                "l.version, l.question_count, l.answer_count, l.created_at, l.updated_at, "
+                "GROUP_CONCAT(b.group_id, ',') AS group_ids "
+                "FROM external_libraries AS l LEFT JOIN external_library_bindings AS b "
+                "ON b.library_id = l.library_id GROUP BY l.library_id ORDER BY l.updated_at DESC"
+            ).fetchall()
+            return [
+                {
+                    "library_id": str(row["library_id"]),
+                    "name": str(row["name"]),
+                    "source_name": str(row["source_name"]),
+                    "sha256": str(row["staging_sha256"]),
+                    "enabled": bool(row["enabled"]),
+                    "version": int(row["version"]),
+                    "question_count": int(row["question_count"]),
+                    "answer_count": int(row["answer_count"]),
+                    "group_ids": sorted(
+                        value for value in str(row["group_ids"] or "").split(",") if value
+                    ),
+                    "created_at": str(row["created_at"]),
+                    "updated_at": str(row["updated_at"]),
+                }
+                for row in rows
+            ]
+
+    async def external_library(self, library_id: str) -> dict[str, Any] | None:
+        libraries = await self.list_external_libraries()
+        return next(
+            (item for item in libraries if item["library_id"] == str(library_id)),
+            None,
+        )
+
+    async def external_library_scopes_for(self, group_id: str) -> tuple[str, ...]:
+        async with self._lock:
+            rows = self._require_connection().execute(
+                "SELECT l.library_id FROM external_libraries AS l "
+                "JOIN external_library_bindings AS b ON b.library_id = l.library_id "
+                "WHERE l.enabled = 1 AND b.group_id = ? ORDER BY l.library_id",
+                (str(group_id),),
+            ).fetchall()
+            return tuple(f"external:{row['library_id']}" for row in rows)
+
+    async def set_external_library_enabled(
+        self,
+        *,
+        library_id: str,
+        enabled: bool,
+        actor_id: str,
+    ) -> dict[str, Any] | None:
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    "UPDATE external_libraries SET enabled = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE library_id = ?",
+                    (int(bool(enabled)), str(library_id)),
+                )
+                if cursor.rowcount == 0:
+                    connection.rollback()
+                    return None
+                self._insert_audit(
+                    connection,
+                    actor_id=str(actor_id),
+                    action="set_external_library_enabled",
+                    target=f"external_library:{library_id}",
+                    details={"enabled": bool(enabled)},
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return await self.external_library(library_id)
+
+    async def set_external_library_bindings(
+        self,
+        *,
+        library_id: str,
+        group_ids: list[str],
+        actor_id: str,
+    ) -> dict[str, Any] | None:
+        normalized = sorted({str(group_id) for group_id in group_ids if str(group_id)})
+        if not normalized:
+            raise ValueError("external_library_bindings_empty")
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                if connection.execute(
+                    "SELECT 1 FROM external_libraries WHERE library_id = ?", (str(library_id),)
+                ).fetchone() is None:
+                    connection.rollback()
+                    return None
+                connection.execute(
+                    "DELETE FROM external_library_bindings WHERE library_id = ?",
+                    (str(library_id),),
+                )
+                connection.executemany(
+                    "INSERT INTO external_library_bindings(library_id, group_id) VALUES(?, ?)",
+                    [(str(library_id), group_id) for group_id in normalized],
+                )
+                connection.execute(
+                    "UPDATE external_libraries SET updated_at = CURRENT_TIMESTAMP "
+                    "WHERE library_id = ?",
+                    (str(library_id),),
+                )
+                self._insert_audit(
+                    connection,
+                    actor_id=str(actor_id),
+                    action="update_external_library_bindings",
+                    target=f"external_library:{library_id}",
+                    details={"group_count": len(normalized)},
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return await self.external_library(library_id)
+
+    async def delete_external_library(
+        self,
+        *,
+        library_id: str,
+        actor_id: str,
+    ) -> dict[str, Any] | None:
+        scope = f"external:{library_id}"
+        async with self._lock:
+            connection = self._require_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT name, question_count, answer_count FROM external_libraries "
+                    "WHERE library_id = ?",
+                    (str(library_id),),
+                ).fetchone()
+                if row is None:
+                    connection.rollback()
+                    return None
+                connection.execute("DELETE FROM questions WHERE group_id = ?", (scope,))
+                connection.execute(
+                    "DELETE FROM external_libraries WHERE library_id = ?", (str(library_id),)
+                )
+                self._insert_audit(
+                    connection,
+                    actor_id=str(actor_id),
+                    action="delete_external_library",
+                    target=f"external_library:{library_id}",
+                    details={
+                        "question_count": int(row["question_count"]),
+                        "answer_count": int(row["answer_count"]),
+                    },
+                )
+                connection.commit()
+                return {
+                    "library_id": str(library_id),
+                    "name": str(row["name"]),
+                    "question_count": int(row["question_count"]),
+                    "answer_count": int(row["answer_count"]),
+                }
+            except Exception:
+                connection.rollback()
+                raise
+
     async def backup_to(self, destination: Path) -> Path:
         async with self._lock:
             connection = self._require_connection()
@@ -1011,6 +1231,156 @@ class SQLiteStore:
                 "imported": True,
                 "question_count": question_count,
                 "answer_count": answer_count,
+            }
+        except Exception:
+            connection.rollback()
+            raise
+
+    def _import_external_library_jsonl_sync(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        import_id: str,
+        library_id: str,
+        name: str,
+        group_ids: list[str],
+        source_name: str,
+        staging_path: Path,
+        staging_sha256: str,
+        actor_id: str,
+        replace: bool,
+    ) -> dict[str, Any]:
+        import hashlib
+        import json
+
+        if not library_id or any(character not in "0123456789abcdef" for character in library_id):
+            raise ValueError("invalid_external_library_id")
+        bindings = sorted({str(group_id) for group_id in group_ids if str(group_id)})
+        if not bindings:
+            raise ValueError("external_library_bindings_empty")
+        digest = hashlib.sha256()
+        with staging_path.open("rb") as stream:
+            for raw_line in stream:
+                digest.update(raw_line)
+        if digest.hexdigest() != staging_sha256:
+            raise ValueError("staging_checksum_mismatch")
+
+        scope = f"external:{library_id}"
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            if connection.execute(
+                "SELECT 1 FROM legacy_imports WHERE import_id = ?", (import_id,)
+            ).fetchone():
+                connection.rollback()
+                return {"imported": False, "reason": "already_imported"}
+            existing = connection.execute(
+                "SELECT version FROM external_libraries WHERE library_id = ?", (library_id,)
+            ).fetchone()
+            if replace and existing is None:
+                connection.rollback()
+                return {"imported": False, "reason": "library_not_found"}
+            if not replace and existing is not None:
+                connection.rollback()
+                return {"imported": False, "reason": "library_exists"}
+            if replace:
+                connection.execute("DELETE FROM questions WHERE group_id = ?", (scope,))
+
+            question_count = 0
+            answer_count = 0
+            with staging_path.open("rb") as stream:
+                for raw_line in stream:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    record = json.loads(line)
+                    if not isinstance(record, dict) or not isinstance(
+                        record.get("answers"), list
+                    ):
+                        raise TypeError("invalid_staging_record")
+                    question_id = self._merge_legacy_question(connection, scope, record)
+                    question_count += 1
+                    for answer in record["answers"]:
+                        if not isinstance(answer, dict):
+                            raise TypeError("invalid_staging_answer")
+                        self._merge_legacy_answer(connection, question_id, answer)
+                        answer_count += 1
+
+            if replace:
+                version = int(existing["version"]) + 1
+                connection.execute(
+                    "UPDATE external_libraries SET name = ?, source_name = ?, "
+                    "staging_sha256 = ?, version = ?, question_count = ?, answer_count = ?, "
+                    "actor_id = ?, updated_at = CURRENT_TIMESTAMP WHERE library_id = ?",
+                    (
+                        name,
+                        source_name,
+                        staging_sha256,
+                        version,
+                        question_count,
+                        answer_count,
+                        actor_id,
+                        library_id,
+                    ),
+                )
+            else:
+                version = 1
+                connection.execute(
+                    "INSERT INTO external_libraries(library_id, name, source_name, "
+                    "staging_sha256, question_count, answer_count, actor_id) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        library_id,
+                        name,
+                        source_name,
+                        staging_sha256,
+                        question_count,
+                        answer_count,
+                        actor_id,
+                    ),
+                )
+            connection.execute(
+                "DELETE FROM external_library_bindings WHERE library_id = ?", (library_id,)
+            )
+            connection.executemany(
+                "INSERT INTO external_library_bindings(library_id, group_id) VALUES(?, ?)",
+                [(library_id, group_id) for group_id in bindings],
+            )
+            connection.execute(
+                "INSERT INTO legacy_imports(import_id, group_id, source_name, staging_sha256, "
+                "question_count, answer_count, actor_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (
+                    import_id,
+                    bindings[0],
+                    source_name,
+                    staging_sha256,
+                    question_count,
+                    answer_count,
+                    actor_id,
+                ),
+            )
+            action = "update_external_library" if replace else "import_external_library"
+            self._insert_audit(
+                connection,
+                actor_id=actor_id,
+                action=action,
+                target=f"external_library:{library_id}",
+                details={
+                    "import_id": import_id,
+                    "source_name": source_name,
+                    "version": version,
+                    "group_count": len(bindings),
+                    "question_count": question_count,
+                    "answer_count": answer_count,
+                },
+            )
+            connection.commit()
+            return {
+                "imported": True,
+                "library_id": library_id,
+                "version": version,
+                "question_count": question_count,
+                "answer_count": answer_count,
+                "group_ids": bindings,
             }
         except Exception:
             connection.rollback()
@@ -2061,7 +2431,8 @@ class SQLiteStore:
         async with self._lock:
             connection = self._require_connection()
             rows = connection.execute(
-                "SELECT DISTINCT group_id FROM questions ORDER BY group_id"
+                "SELECT DISTINCT group_id FROM questions "
+                "WHERE group_id NOT LIKE 'external:%' ORDER BY group_id"
             ).fetchall()
             return [str(row["group_id"]) for row in rows]
 
@@ -2350,6 +2721,24 @@ class SQLiteStore:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tts_usage_updated ON tts_usage(updated_at)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS external_libraries (library_id TEXT PRIMARY KEY, "
+            "name TEXT NOT NULL, source_name TEXT NOT NULL, staging_sha256 TEXT NOT NULL, "
+            "enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)), "
+            "version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0), "
+            "question_count INTEGER NOT NULL DEFAULT 0, answer_count INTEGER NOT NULL DEFAULT 0, "
+            "actor_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+            "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS external_library_bindings (library_id TEXT NOT NULL "
+            "REFERENCES external_libraries(library_id) ON DELETE CASCADE, group_id TEXT NOT NULL, "
+            "PRIMARY KEY(library_id, group_id))"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_external_library_bindings_group "
+            "ON external_library_bindings(group_id, library_id)"
         )
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"
