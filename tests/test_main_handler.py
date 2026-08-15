@@ -713,7 +713,7 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
 
     asyncio.run(
         plugin._handle_cross_group_command(
-            event, main_module.CrossGroupCommand("list")
+            event, main_module.CrossGroupCommand("list"), private=True
         )
     )
 
@@ -737,6 +737,61 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
     )
     assert event.stopped is True
     assert event.result is None
+
+
+def test_group_cross_group_responses_do_not_disclose_other_group_ids(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": ["10001", "20001"],
+                "reply_group_ids": ["10001", "30001"],
+                "excluded_group_ids": ["40001"],
+                "global_group_ids": ["10001", "50001"],
+                "local_only_group_ids": ["60001"],
+                "group_reply_probabilities": [
+                    {"group_id": "10001", "probability_percent": 5},
+                    {"group_id": "70001", "probability_percent": 90},
+                ],
+                "group_sub_admins": [
+                    {"group_id": "80001", "admin_ids": ["12345"]}
+                ],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+
+        async def update_cross_group_settings(self, **_kwargs):
+            return self.config.cross_group_settings()
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+
+    event = Event()
+    asyncio.run(
+        plugin._handle_cross_group_command(event, main_module.CrossGroupCommand("list"))
+    )
+    assert "当前群跨群设置" in event.result.text
+    assert "独立回复概率：5%" in event.result.text
+    for hidden_group in ("20001", "30001", "40001", "50001", "60001", "70001", "80001"):
+        assert hidden_group not in event.result.text
+
+    event = Event()
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand(
+                "set", "reply_probability", ("927788658",), "5"
+            ),
+        )
+    )
+    assert event.result.text == "跨群设置已保存：设置独立回复概率，共 1 个目标群。"
+    assert "927788658" not in event.result.text
+    assert "20001" not in event.result.text
 
 
 def test_cross_group_learning_command_persists_all_target_groups(monkeypatch):
@@ -789,10 +844,10 @@ def test_cross_group_learning_command_persists_all_target_groups(monkeypatch):
             "sub_admins": None,
             "expected_revision": "revision-1",
             "actor_id": "7",
-            "source": "legacy_command",
+                "source": "legacy_group_command",
         }
     ]
-    assert "共 2 个群" in event.result.text
+    assert "共 2 个目标群" in event.result.text
 
 
 def test_cross_group_globe_command_persists_target_groups(monkeypatch):
@@ -832,6 +887,7 @@ def test_cross_group_globe_command_persists_target_groups(monkeypatch):
         plugin._handle_cross_group_command(
             event,
             main_module.CrossGroupCommand("remove", "globe", ("10001", "10002")),
+            private=True,
         )
     )
 
