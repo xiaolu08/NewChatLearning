@@ -33,6 +33,7 @@
 - [0.1.0-beta.31.post15 Release Notes](./releases/0.1.0-beta.31.post15.md)：修复原始 OneBot 组件写入 AstrBot 消息历史时的兼容性错误。
 - [0.1.0-beta.31.post16 Release Notes](./releases/0.1.0-beta.31.post16.md)：补强 NapCat 原始媒体与长尾消息补全，优先使用本地媒体。
 - [0.1.0-beta.31.post17 Release Notes](./releases/0.1.0-beta.31.post17.md)：修复原始消息补全导致文本与 QQ 表情组件重复的问题。
+- [0.1.0-beta.31.post18 Release Notes](./releases/0.1.0-beta.31.post18.md)：整理更新日志时间线并恢复插件管理页的完整版本展示。
 
 ## 研究资料
 
