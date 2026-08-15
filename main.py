@@ -509,11 +509,14 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl media-preview - 预览本群失效媒体影响\n"
                 "/ncl media-cleanup-prepare [prune|drop-answer] - 准备清理\n"
                 "/ncl media-cleanup-apply <计划ID> confirm - 备份并执行清理\n"
-                "全局/插件管理员旧版跨群命令：\n"
-                "!grouplist - 查看学习、回复、自主管理和词库范围\n"
+                "全局/插件管理员跨群命令：\n"
+                "!grouplist - 查看学习、回复、自主管理和词库范围群列表\n"
                 "!add/remove learning|learnings|reply <群号...>\n"
                 "!add tag <标签> <群号...> / !remove tag <群号...>\n"
-                "!add/remove subadmin|unmerge|globe <群号...>"
+                "!add/remove subadmin <群号...> - 管理群聊子管理员授权\n"
+                "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库\n"
+                "!add globe <群号...> - 允许目标群使用全局或标签共享词库\n"
+                "!remove globe <群号...> - 目标群仅使用本群词库"
             )
         )
 

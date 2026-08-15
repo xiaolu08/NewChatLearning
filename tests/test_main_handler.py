@@ -623,6 +623,9 @@ def test_private_help_aliases_reach_ncl_help_for_plugin_admin(monkeypatch):
         assert event.stopped is True
         assert event.result is not None
         assert "NewChatLearning Beta" in event.result.text
+        assert "!add globe <群号...> - 允许目标群使用全局或标签共享词库" in event.result.text
+        assert "!remove globe <群号...> - 目标群仅使用本群词库" in event.result.text
+        assert "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库" in event.result.text
 
 
 def test_private_help_remains_silent_for_ordinary_member(monkeypatch):

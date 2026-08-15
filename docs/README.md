@@ -28,6 +28,7 @@
 - [0.1.0-beta.31.post5 Release Notes](./releases/0.1.0-beta.31.post5.md)：跨群管理命令与私聊全局开关更新。
 - [0.1.0-beta.31.post6 Release Notes](./releases/0.1.0-beta.31.post6.md)：AstrBot 4.27.2 私聊事件过滤器加载热修复。
 - [0.1.0-beta.31.post12 Release Notes](./releases/0.1.0-beta.31.post12.md)：按群控制全局词库查询范围及群列表展示更新。
+- [0.1.0-beta.31.post13 Release Notes](./releases/0.1.0-beta.31.post13.md)：补充全局词库跨群命令的完整聊天帮助。
 
 ## 研究资料
 
