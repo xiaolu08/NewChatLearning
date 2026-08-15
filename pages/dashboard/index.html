@@ -297,118 +297,118 @@
     </svg>
     <header class="app-header">
       <div class="brand-lockup">
-        <button id="nav-toggle" class="secondary hidden" type="button" aria-label="??????" aria-expanded="false" aria-controls="dashboard-sidebar"><svg class="nav-icon" aria-hidden="true"><use href="#icon-menu"/></svg></button>
+        <button id="nav-toggle" class="secondary hidden" type="button" aria-label="打开管理导航" aria-expanded="false" aria-controls="dashboard-sidebar"><svg class="nav-icon" aria-hidden="true"><use href="#icon-menu"/></svg></button>
         <div class="brand-mark" aria-hidden="true">N</div>
-        <div class="brand-copy"><h1>NewChatLearning</h1><p>QQ ??????????</p></div>
+        <div class="brand-copy"><h1>NewChatLearning</h1><p>QQ 群聊学习与词库控制台</p></div>
       </div>
-      <div class="header-actions"><span class="beta">BETA</span><button id="logout" class="secondary hidden" type="button">??</button></div>
+      <div class="header-actions"><span class="beta">BETA</span><button id="logout" class="secondary hidden" type="button">退出</button></div>
     </header>
     <main id="auth" class="auth-shell">
       <form id="auth-form" class="auth-panel">
-        <h2 id="auth-title">?? NewChatLearning</h2>
-        <p id="auth-copy">???????????</p>
-        <button id="submit" type="submit">??</button>
+        <h2 id="auth-title">进入 NewChatLearning</h2>
+        <p id="auth-copy">点击进入插件管理页面。</p>
+        <button id="submit" type="submit">进入</button>
         <div id="auth-message" class="message" role="status"></div>
       </form>
     </main>
     <main id="dashboard" class="hidden">
       <aside id="dashboard-sidebar" class="sidebar">
-        <div class="sidebar-label">????</div>
-        <nav class="tabs" aria-label="????">
-          <button id="tab-overview" class="active" type="button" aria-current="page"><svg class="nav-icon" aria-hidden="true"><use href="#icon-overview"/></svg><span>??</span></button>
-          <button id="tab-groups" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-groups"/></svg><span>??</span></button>
-          <button id="tab-library" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-library"/></svg><span>??</span></button>
-          <button id="tab-filters" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-filter"/></svg><span>??</span></button>
-          <button id="tab-permissions" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-permissions"/></svg><span>??</span></button>
-          <button id="tab-media" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-media"/></svg><span>??</span></button>
-          <button id="tab-migration" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-migration"/></svg><span>??</span></button>
-          <button id="tab-tts" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tts"/></svg><span>??</span></button>
-          <button id="tab-tasks" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"/></svg><span>??</span></button>
-          <button id="tab-backups" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-backups"/></svg><span>??</span></button>
-          <button id="tab-diagnostics" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-diagnostics"/></svg><span>??</span></button>
-          <button id="tab-audit" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-audit"/></svg><span>??</span></button>
+        <div class="sidebar-label">管理模块</div>
+        <nav class="tabs" aria-label="管理模块">
+          <button id="tab-overview" class="active" type="button" aria-current="page"><svg class="nav-icon" aria-hidden="true"><use href="#icon-overview"/></svg><span>概览</span></button>
+          <button id="tab-groups" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-groups"/></svg><span>群聊</span></button>
+          <button id="tab-library" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-library"/></svg><span>词库</span></button>
+          <button id="tab-filters" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-filter"/></svg><span>过滤</span></button>
+          <button id="tab-permissions" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-permissions"/></svg><span>权限</span></button>
+          <button id="tab-media" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-media"/></svg><span>媒体</span></button>
+          <button id="tab-migration" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-migration"/></svg><span>迁移</span></button>
+          <button id="tab-tts" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tts"/></svg><span>语音</span></button>
+          <button id="tab-tasks" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"/></svg><span>任务</span></button>
+          <button id="tab-backups" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-backups"/></svg><span>备份</span></button>
+          <button id="tab-diagnostics" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-diagnostics"/></svg><span>诊断</span></button>
+          <button id="tab-audit" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-audit"/></svg><span>审计</span></button>
         </nav>
-        <div class="sidebar-footer"><div class="live-indicator">??????</div><p>?????????? LLM Token</p></div>
+        <div class="sidebar-footer"><div class="live-indicator">本地算法在线</div><p>核心学习与文本回复零 LLM Token</p></div>
       </aside>
-      <button id="nav-backdrop" type="button" aria-label="??????"></button>
+      <button id="nav-backdrop" type="button" aria-label="关闭管理导航"></button>
       <div class="workspace">
         <div class="workspace-header">
-          <div><div class="breadcrumb">NewChatLearning / ??</div><h2 id="view-title">????</h2><p id="view-description">???????????????????</p></div>
-          <div class="workspace-state"><span><strong>????</strong><br>???????</span></div>
+          <div><div class="breadcrumb">NewChatLearning / 管理</div><h2 id="view-title">运行概览</h2><p id="view-description">检查插件状态、词库规模与本地资源占用。</p></div>
+          <div class="workspace-state"><span><strong>本机运行</strong><br>一小时管理会话</span></div>
         </div>
         <div class="view-content">
-      <div class="notice">??? Beta ?????????????????????????? LLM?</div>
+      <div class="notice">当前为 Beta 开发版本。核心学习和词库回复完全使用本地算法，不调用 LLM。</div>
       <div id="overview-view">
       <div class="toolbar">
-        <button id="overview-refresh" class="secondary" type="button">????</button>
+        <button id="overview-refresh" class="secondary" type="button">刷新统计</button>
         <div id="overview-message" class="result" role="status"></div>
       </div>
       <div class="grid">
-        <div class="metric"><span>????</span><strong id="state">???</strong></div>
-        <div class="metric"><span>???</span><strong id="questions">-</strong></div>
-        <div class="metric"><span>???</span><strong id="answers">-</strong></div>
-        <div class="metric"><span>?????</span><strong id="pending">-</strong></div>
-        <div class="metric"><span>????</span><strong id="media-count">-</strong></div>
-        <div class="metric"><span>????</span><strong id="media-size">-</strong></div>
+        <div class="metric"><span>运行状态</span><strong id="state">读取中</strong></div>
+        <div class="metric"><span>问题数</span><strong id="questions">-</strong></div>
+        <div class="metric"><span>答案数</span><strong id="answers">-</strong></div>
+        <div class="metric"><span>待固化消息</span><strong id="pending">-</strong></div>
+        <div class="metric"><span>媒体文件</span><strong id="media-count">-</strong></div>
+        <div class="metric"><span>媒体占用</span><strong id="media-size">-</strong></div>
       </div>
       <section><table><tbody>
-        <tr><th>????</th><td id="version">-</td></tr>
-        <tr><th>???</th><td id="database">-</td></tr>
-        <tr><th>????</th><td id="revision">-</td></tr>
-        <tr><th>????</th><td id="library">-</td></tr>
-        <tr><th>????</th><td>?????? LLM Token</td></tr>
-        <tr><th>????</th><td id="data-dir">-</td></tr>
+        <tr><th>插件版本</th><td id="version">-</td></tr>
+        <tr><th>数据库</th><td id="database">-</td></tr>
+        <tr><th>配置版本</th><td id="revision">-</td></tr>
+        <tr><th>词库范围</th><td id="library">-</td></tr>
+        <tr><th>核心策略</th><td>本地算法，零 LLM Token</td></tr>
+        <tr><th>数据目录</th><td id="data-dir">-</td></tr>
       </tbody></table></section></div>
       <div id="groups-view" class="hidden">
         <div class="toolbar">
-          <div class="field"><label for="settings-group">??</label><input id="settings-group" list="settings-groups" inputmode="numeric" placeholder="?? QQ ??"><datalist id="settings-groups"></datalist></div>
-          <button id="group-load" class="secondary" type="button">????</button>
+          <div class="field"><label for="settings-group">群聊</label><input id="settings-group" list="settings-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="settings-groups"></datalist></div>
+          <button id="group-load" class="secondary" type="button">读取设置</button>
         </div>
         <section class="settings-band">
-          <h2>????</h2>
-          <div class="mode-options" role="radiogroup" aria-label="??????">
-            <label><input type="radio" name="group-mode" value="disabled">??</label>
-            <label><input type="radio" name="group-mode" value="learning">???</label>
-            <label><input type="radio" name="group-mode" value="reply">???</label>
-            <label><input type="radio" name="group-mode" value="learning_reply">?????</label>
-            <label><input type="radio" name="group-mode" value="silent">????</label>
+          <h2>运行模式</h2>
+          <div class="mode-options" role="radiogroup" aria-label="群聊运行模式">
+            <label><input type="radio" name="group-mode" value="disabled">停用</label>
+            <label><input type="radio" name="group-mode" value="learning">仅学习</label>
+            <label><input type="radio" name="group-mode" value="reply">仅回复</label>
+            <label><input type="radio" name="group-mode" value="learning_reply">学习并回复</label>
+            <label><input type="radio" name="group-mode" value="silent">静默学习</label>
           </div>
-          <label for="target-users">??????</label>
-          <textarea id="target-users" placeholder="?????????? QQ ?"></textarea>
-          <p id="target-hint">??????????????????????????????????????</p>
-          <label for="group-probability">???????%?</label>
-          <input id="group-probability" type="number" min="0" max="100" step="0.1" placeholder="????????">
-          <p id="group-probability-hint">????????????????????????</p>
-          <div class="toolbar" style="margin-top:16px"><button id="group-save" type="button">??????</button></div>
+          <label for="target-users">定向学习用户</label>
+          <textarea id="target-users" placeholder="每行填写一个目标用户 QQ 号"></textarea>
+          <p id="target-hint">留空时学习群内所有合格成员；仅学习、学习并回复或静默学习模式可使用定向用户。</p>
+          <label for="group-probability">本群回复概率（%）</label>
+          <input id="group-probability" type="number" min="0" max="100" step="0.1" placeholder="留空继承全局概率">
+          <p id="group-probability-hint">当前群可覆盖全局回复概率；留空并保存时恢复继承。</p>
+          <div class="toolbar" style="margin-top:16px"><button id="group-save" type="button">保存群聊设置</button></div>
           <div id="group-message" class="result" role="status"></div>
         </section>
       </div>
       <div id="library-view" class="hidden">
         <div class="toolbar">
-          <div class="field"><label for="library-group">??</label><input id="library-group" list="library-groups" inputmode="numeric" placeholder="?? QQ ??"><datalist id="library-groups"></datalist></div>
-          <div class="field"><label for="library-query">????</label><input id="library-query" maxlength="200" placeholder="?????????"></div>
-          <button id="library-search" type="button">??</button>
-          <button id="library-export" class="secondary" type="button">????</button>
-          <button id="library-export-legacy" class="secondary" type="button">???? .cl</button>
+          <div class="field"><label for="library-group">群聊</label><input id="library-group" list="library-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="library-groups"></datalist></div>
+          <div class="field"><label for="library-query">搜索问题</label><input id="library-query" maxlength="200" placeholder="留空可查看最近问题"></div>
+          <button id="library-search" type="button">搜索</button>
+          <button id="library-export" class="secondary" type="button">导出词库</button>
+          <button id="library-export-legacy" class="secondary" type="button">导出旧版 .cl</button>
         </div>
         <div class="split">
-          <div><div id="library-results" class="list"><p style="padding:14px">??????????</p></div><div id="library-message" class="result" role="status"></div></div>
+          <div><div id="library-results" class="list"><p style="padding:14px">选择群聊后搜索词库。</p></div><div id="library-message" class="result" role="status"></div></div>
           <div>
-            <section style="margin-top:0"><h2>????</h2>
-              <label for="add-question">??</label><textarea id="add-question" maxlength="4000"></textarea>
-              <label for="add-answer">??</label><textarea id="add-answer" maxlength="4000"></textarea>
-              <label class="inline-check"><input id="add-regex" type="checkbox"> ??????????</label>
-              <button id="library-add" type="button">????</button>
+            <section style="margin-top:0"><h2>添加问答</h2>
+              <label for="add-question">问题</label><textarea id="add-question" maxlength="4000"></textarea>
+              <label for="add-answer">答案</label><textarea id="add-answer" maxlength="4000"></textarea>
+              <label class="inline-check"><input id="add-regex" type="checkbox"> 将问题作为正则表达式</label>
+              <button id="library-add" type="button">添加问答</button>
             </section>
-            <section><h2>??????</h2>
-              <p>????????????????????????????????????????????????????????</p>
-              <label for="contribution-user">?? QQ ?</label>
-              <input id="contribution-user" inputmode="numeric" placeholder="???? QQ ?">
-              <div class="toolbar" style="margin-top:16px"><button id="contribution-prepare" class="secondary" type="button">??????</button><button id="contribution-apply" class="danger hidden" type="button">??????</button></div>
-              <div id="contribution-plan" class="result">?????????????</div>
+            <section><h2>成员贡献清理</h2>
+              <p>只处理当前群中可追踪到该成员的已固化答案贡献和待固化消息。旧词库导入及管理员自定义问答没有成员归属，不会被删除。</p>
+              <label for="contribution-user">成员 QQ 号</label>
+              <input id="contribution-user" inputmode="numeric" placeholder="输入成员 QQ 号">
+              <div class="toolbar" style="margin-top:16px"><button id="contribution-prepare" class="secondary" type="button">生成删除预览</button><button id="contribution-apply" class="danger hidden" type="button">确认删除贡献</button></div>
+              <div id="contribution-plan" class="result">尚未生成成员贡献删除计划。</div>
             </section>
             <section id="question-detail" class="detail hidden">
-              <div class="actions" style="justify-content:space-between;align-items:center"><h2 id="question-title">????</h2><button id="delete-question" class="danger" type="button">????</button></div>
+              <div class="actions" style="justify-content:space-between;align-items:center"><h2 id="question-title">问题详情</h2><button id="delete-question" class="danger" type="button">删除问题</button></div>
               <p id="question-copy"></p><div id="answer-list"></div>
             </section>
           </div>
@@ -416,215 +416,215 @@
       </div>
       <div id="media-view" class="hidden">
         <div class="toolbar">
-          <div class="field"><label for="media-group">??</label><input id="media-group" list="media-groups" inputmode="numeric" placeholder="?? QQ ??"><datalist id="media-groups"></datalist></div>
-          <button id="media-preview" class="secondary" type="button">????</button>
-          <button id="media-scan" type="button">????</button>
+          <div class="field"><label for="media-group">群聊</label><input id="media-group" list="media-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="media-groups"></datalist></div>
+          <button id="media-preview" class="secondary" type="button">读取预览</button>
+          <button id="media-scan" type="button">扫描媒体</button>
         </div>
         <div class="compact-grid">
-          <div class="summary"><span>????</span><strong id="invalid-components">-</strong></div>
-          <div class="summary"><span>?????</span><strong id="affected-answers">-</strong></div>
-          <div class="summary"><span>?????</span><strong id="affected-questions">-</strong></div>
-          <div class="summary"><span>???????</span><strong id="empty-answers">-</strong></div>
-          <div class="summary"><span>????</span><strong id="media-states">-</strong></div>
+          <div class="summary"><span>失效组件</span><strong id="invalid-components">-</strong></div>
+          <div class="summary"><span>受影响答案</span><strong id="affected-answers">-</strong></div>
+          <div class="summary"><span>受影响问题</span><strong id="affected-questions">-</strong></div>
+          <div class="summary"><span>清理后可能为空</span><strong id="empty-answers">-</strong></div>
+          <div class="summary"><span>状态分布</span><strong id="media-states">-</strong></div>
         </div>
         <section>
           <div class="toolbar">
-            <div class="field"><label for="cleanup-mode">????</label><select id="cleanup-mode"><option value="prune">???????</option><option value="drop-answer">????????????</option></select></div>
-            <button id="cleanup-prepare" class="secondary" type="button">??????</button>
-            <button id="cleanup-apply" class="hidden" type="button">?????</button>
+            <div class="field"><label for="cleanup-mode">清理模式</label><select id="cleanup-mode"><option value="prune">仅移除失效组件</option><option value="drop-answer">删除含失效媒体的整条答案</option></select></div>
+            <button id="cleanup-prepare" class="secondary" type="button">生成清理计划</button>
+            <button id="cleanup-apply" class="hidden" type="button">确认并执行</button>
           </div>
-          <div id="cleanup-plan" class="result">?????????</div>
+          <div id="cleanup-plan" class="result">尚未生成清理计划。</div>
           <div id="media-message" class="result" role="status"></div>
         </section>
       </div>
       <div id="filters-view" class="hidden">
         <div class="toolbar">
-          <label class="inline-check"><input id="filters-enabled" type="checkbox"> ?????????????</label>
-          <div class="field"><label for="blacklist-threshold">????</label><input id="blacklist-threshold" type="number" min="1" max="1000000"></div>
-          <div class="field"><label for="blacklist-scope">?????</label><select id="blacklist-scope"><option value="global">??</option><option value="group">????</option></select></div>
-          <div class="field"><label for="filter-timeout">????????</label><input id="filter-timeout" type="number" min="1" max="1000"></div>
+          <label class="inline-check"><input id="filters-enabled" type="checkbox"> 启用回复过滤与敏感词黑名单</label>
+          <div class="field"><label for="blacklist-threshold">拉黑阈值</label><input id="blacklist-threshold" type="number" min="1" max="1000000"></div>
+          <div class="field"><label for="blacklist-scope">黑名单范围</label><select id="blacklist-scope"><option value="global">全局</option><option value="group">按群隔离</option></select></div>
+          <div class="field"><label for="filter-timeout">正则超时（毫秒）</label><input id="filter-timeout" type="number" min="1" max="1000"></div>
         </div>
-        <section class="settings-band"><h2>????</h2>
+        <section class="settings-band"><h2>全局规则</h2>
           <div class="rule-grid">
-            <div><label for="filter-contains">?????</label><textarea id="filter-contains" placeholder="????"></textarea></div>
-            <div><label for="filter-exact">??????</label><textarea id="filter-exact" placeholder="????"></textarea></div>
-            <div><label for="filter-regex">?????</label><textarea id="filter-regex" placeholder="????"></textarea></div>
-            <div><label for="filter-sensitive">?????</label><textarea id="filter-sensitive" placeholder="??????????????"></textarea></div>
+            <div><label for="filter-contains">包含关键词</label><textarea id="filter-contains" placeholder="每行一条"></textarea></div>
+            <div><label for="filter-exact">完全匹配文本</label><textarea id="filter-exact" placeholder="每行一条"></textarea></div>
+            <div><label for="filter-regex">正则表达式</label><textarea id="filter-regex" placeholder="每行一条"></textarea></div>
+            <div><label for="filter-sensitive">敏感关键词</label><textarea id="filter-sensitive" placeholder="命中达到阈值后停止学习该用户"></textarea></div>
           </div>
-          <label>???????</label><div id="filter-components" class="check-row"></div>
+          <label>屏蔽的消息组件</label><div id="filter-components" class="check-row"></div>
         </section>
-        <section class="settings-band"><h2>??????</h2>
-          <div class="toolbar"><div class="field"><label for="filter-group">??</label><input id="filter-group" list="filter-groups" inputmode="numeric" placeholder="?? QQ ??"><datalist id="filter-groups"></datalist></div><button id="filter-group-load" class="secondary" type="button">?????</button><button id="filter-group-clear" class="secondary" type="button">?????</button></div>
+        <section class="settings-band"><h2>群聊附加规则</h2>
+          <div class="toolbar"><div class="field"><label for="filter-group">群聊</label><input id="filter-group" list="filter-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="filter-groups"></datalist></div><button id="filter-group-load" class="secondary" type="button">读取群规则</button><button id="filter-group-clear" class="secondary" type="button">清空群规则</button></div>
           <div class="rule-grid">
-            <div><label for="group-filter-contains">?????</label><textarea id="group-filter-contains" placeholder="????"></textarea></div>
-            <div><label for="group-filter-exact">??????</label><textarea id="group-filter-exact" placeholder="????"></textarea></div>
-            <div><label for="group-filter-regex">?????</label><textarea id="group-filter-regex" placeholder="????"></textarea></div>
-            <div><label for="group-filter-sensitive">?????</label><textarea id="group-filter-sensitive" placeholder="????"></textarea></div>
+            <div><label for="group-filter-contains">包含关键词</label><textarea id="group-filter-contains" placeholder="每行一条"></textarea></div>
+            <div><label for="group-filter-exact">完全匹配文本</label><textarea id="group-filter-exact" placeholder="每行一条"></textarea></div>
+            <div><label for="group-filter-regex">正则表达式</label><textarea id="group-filter-regex" placeholder="每行一条"></textarea></div>
+            <div><label for="group-filter-sensitive">敏感关键词</label><textarea id="group-filter-sensitive" placeholder="每行一条"></textarea></div>
           </div>
-          <label>??????</label><div id="group-filter-components" class="check-row"></div>
+          <label>附加屏蔽组件</label><div id="group-filter-components" class="check-row"></div>
         </section>
-        <section class="settings-band"><div class="actions"><button id="filters-save" type="button">??????</button></div><div id="filters-message" class="result" role="status"></div></section>
-        <section class="settings-band"><h2>????</h2><div class="toolbar"><div class="field"><label for="filter-test-text">????</label><input id="filter-test-text" maxlength="4000"></div><div class="field"><label for="filter-test-type">????</label><select id="filter-test-type"><option>Plain</option><option>Image</option><option>At</option><option>AtAll</option><option>Quote</option><option>Poke</option><option>Record</option><option>Video</option><option>File</option></select></div><button id="filters-test" class="secondary" type="button">??</button></div><div id="filter-test-result" class="result"></div></section>
-        <section class="settings-band"><h2>????</h2><p>???????????????????????????????????????????</p><div class="toolbar" style="margin-top:14px"><button id="filter-cleanup-prepare" class="secondary" type="button">??????</button><button id="filter-cleanup-apply" class="danger hidden" type="button">????????</button></div><div id="filter-cleanup-plan" class="result">???????????</div></section>
-        <section class="settings-band"><h2>???</h2><div class="toolbar"><div class="field"><label for="blacklist-user">?? QQ ?</label><input id="blacklist-user" inputmode="numeric"></div><div class="field"><label for="blacklist-group">?????????</label><input id="blacklist-group" inputmode="numeric"></div><div class="field"><label for="manual-scope">??</label><select id="manual-scope"><option value="global">??</option><option value="group">??</option></select></div><button id="blacklist-block" type="button">????</button><button id="blacklist-refresh" class="secondary" type="button">??</button></div><div class="table-scroll"><table><thead><tr><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th></tr></thead><tbody id="blacklist-body"></tbody></table></div></section>
+        <section class="settings-band"><div class="actions"><button id="filters-save" type="button">保存过滤设置</button></div><div id="filters-message" class="result" role="status"></div></section>
+        <section class="settings-band"><h2>规则测试</h2><div class="toolbar"><div class="field"><label for="filter-test-text">测试内容</label><input id="filter-test-text" maxlength="4000"></div><div class="field"><label for="filter-test-type">组件类型</label><select id="filter-test-type"><option>Plain</option><option>Image</option><option>At</option><option>AtAll</option><option>Quote</option><option>Poke</option><option>Record</option><option>Video</option><option>File</option></select></div><button id="filters-test" class="secondary" type="button">测试</button></div><div id="filter-test-result" class="result"></div></section>
+        <section class="settings-band"><h2>词库清理</h2><p>扫描当前群词库中命中过滤规则的答案。准备阶段只生成一小时有效的预览计划，不会删除内容。</p><div class="toolbar" style="margin-top:14px"><button id="filter-cleanup-prepare" class="secondary" type="button">生成清理计划</button><button id="filter-cleanup-apply" class="danger hidden" type="button">确认删除命中答案</button></div><div id="filter-cleanup-plan" class="result">尚未生成过滤清理计划。</div></section>
+        <section class="settings-band"><h2>黑名单</h2><div class="toolbar"><div class="field"><label for="blacklist-user">用户 QQ 号</label><input id="blacklist-user" inputmode="numeric"></div><div class="field"><label for="blacklist-group">群号（按群时必填）</label><input id="blacklist-group" inputmode="numeric"></div><div class="field"><label for="manual-scope">范围</label><select id="manual-scope"><option value="global">全局</option><option value="group">按群</option></select></div><button id="blacklist-block" type="button">人工封禁</button><button id="blacklist-refresh" class="secondary" type="button">刷新</button></div><div class="table-scroll"><table><thead><tr><th>范围</th><th>群号</th><th>用户</th><th>命中</th><th>状态</th><th>操作</th></tr></thead><tbody id="blacklist-body"></tbody></table></div></section>
       </div>
       <div id="permissions-view" class="hidden">
         <section style="margin-top:0">
-          <h2>?????</h2>
-          <p>AstrBot ??????????????????????????</p>
-          <label for="plugin-admin-ids">??? QQ ?</label>
-          <textarea id="plugin-admin-ids" placeholder="?????? QQ ?"></textarea>
+          <h2>插件管理员</h2>
+          <p>AstrBot 全局管理员始终拥有最高权限，不会被此页面移除或覆盖。</p>
+          <label for="plugin-admin-ids">管理员 QQ 号</label>
+          <textarea id="plugin-admin-ids" placeholder="每行填写一个 QQ 号"></textarea>
         </section>
         <section class="settings-band">
-          <div class="toolbar"><div><h2>?????</h2><p>?????????? QQ ???????????????????</p></div><button id="permission-add-group" class="secondary" type="button">????</button></div>
+          <div class="toolbar"><div><h2>群子管理员</h2><p>子管理员只可管理对应 QQ 群；普通成员不会收到插件管理命令回复。</p></div><button id="permission-add-group" class="secondary" type="button">添加群聊</button></div>
           <div id="permission-groups"></div>
         </section>
         <section class="settings-band">
-          <div class="actions"><button id="permissions-refresh" class="secondary" type="button">????</button><button id="permissions-save" type="button">??????</button></div>
+          <div class="actions"><button id="permissions-refresh" class="secondary" type="button">刷新设置</button><button id="permissions-save" type="button">保存权限设置</button></div>
           <div id="permissions-message" class="result" role="status"></div>
         </section>
       </div>
       <div id="migration-view" class="hidden">
-        <div class="notice">? `.cl` ????????????????????????????????????????????????????????</div>
+        <div class="notice">旧 `.cl` 文件会先进入插件临时目录并在独立进程完成安全与兼容性扫描。页面不展示词库原文，未通过扫描的文件不会进入导入流程。</div>
         <section style="margin-top:0">
-          <h2>?????</h2>
+          <h2>选择旧词库</h2>
           <div class="toolbar">
-            <div class="field"><label for="migration-file">ChatLearning ????</label><input id="migration-file" type="file" accept=".cl"></div>
-            <button id="migration-upload" type="button">?????</button>
+            <div class="field"><label for="migration-file">ChatLearning 词库文件</label><input id="migration-file" type="file" accept=".cl"></div>
+            <button id="migration-upload" type="button">上传并扫描</button>
           </div>
-          <div id="migration-scan" class="result">????????</div>
+          <div id="migration-scan" class="result">尚未选择旧词库。</div>
         </section>
         <section class="settings-band">
-          <h2>????</h2>
-          <p>??????????????????????????????????????????????</p>
+          <h2>准备导入</h2>
+          <p>新建会保存为可独立管理的外部词库；更新会完整替换所选词库并保留原绑定。转换计划一小时内有效。</p>
           <div class="toolbar">
-            <div class="field"><label for="migration-operation">??</label><select id="migration-operation"><option value="create">??????</option><option value="update">??????</option></select></div>
-            <div class="field"><label for="migration-name">????</label><input id="migration-name" maxlength="80" placeholder="???????"></div>
-            <div class="field hidden" id="migration-library-field"><label for="migration-library">????</label><select id="migration-library"></select></div>
-            <div class="field"><label for="migration-group">????</label><input id="migration-group" list="migration-groups" inputmode="numeric" placeholder="?? QQ ??"><datalist id="migration-groups"></datalist></div>
-            <button id="migration-prepare" class="secondary" type="button" disabled>???????</button>
-            <button id="migration-apply" class="danger hidden" type="button">????</button>
+            <div class="field"><label for="migration-operation">操作</label><select id="migration-operation"><option value="create">新建外部词库</option><option value="update">更新已有词库</option></select></div>
+            <div class="field"><label for="migration-name">词库名称</label><input id="migration-name" maxlength="80" placeholder="默认使用文件名"></div>
+            <div class="field hidden" id="migration-library-field"><label for="migration-library">更新目标</label><select id="migration-library"></select></div>
+            <div class="field"><label for="migration-group">目标群聊</label><input id="migration-group" list="migration-groups" inputmode="numeric" placeholder="输入 QQ 群号"><datalist id="migration-groups"></datalist></div>
+            <button id="migration-prepare" class="secondary" type="button" disabled>转换并生成计划</button>
+            <button id="migration-apply" class="danger hidden" type="button">确认导入</button>
           </div>
-          <div id="migration-plan" class="result">?????????</div>
+          <div id="migration-plan" class="result">尚未生成导入计划。</div>
         </section>
         <section class="settings-band">
-          <div class="toolbar"><div><h2>????</h2><p>??????????????????????????????</p></div><button id="external-library-refresh" class="secondary" type="button">????</button></div>
-          <div class="table-scroll"><table><thead><tr><th>??</th><th>?? / ??</th><th>???</th><th>?? / ??</th><th>??</th></tr></thead><tbody id="external-library-body"></tbody></table></div>
+          <div class="toolbar"><div><h2>外部词库</h2><p>绑定群会在回复检索时使用已启用的外部词库；停用不会删除数据。</p></div><button id="external-library-refresh" class="secondary" type="button">刷新列表</button></div>
+          <div class="table-scroll"><table><thead><tr><th>名称</th><th>状态 / 版本</th><th>绑定群</th><th>问题 / 答案</th><th>操作</th></tr></thead><tbody id="external-library-body"></tbody></table></div>
           <div id="external-library-message" class="result" role="status"></div>
         </section>
         <section class="settings-band">
-          <div class="toolbar"><div><h2>??????</h2><p>???????????????????????</p></div><button id="migration-refresh" class="secondary" type="button">????</button></div>
-          <div class="table-scroll"><table><thead><tr><th>??</th><th>????</th><th>??</th><th>?? / ??</th><th>??</th></tr></thead><tbody id="migration-body"></tbody></table></div>
+          <div class="toolbar"><div><h2>本次会话记录</h2><p>显示当前管理会话创建的待确认计划和已完成操作。</p></div><button id="migration-refresh" class="secondary" type="button">刷新记录</button></div>
+          <div class="table-scroll"><table><thead><tr><th>文件</th><th>外部词库</th><th>状态</th><th>问题 / 答案</th><th>备份</th></tr></thead><tbody id="migration-body"></tbody></table></div>
           <div id="migration-message" class="result" role="status"></div>
         </section>
       </div>
       <div id="tts-view" class="hidden">
-        <div class="notice">?????????Windows ????????????????????????????????????????????????????????? LLM?</div>
+        <div class="notice">语音回复默认关闭。Windows 与本地驱动不产生云端费用；云端驱动可能计费，并受每分钟、每日请求数和每日字符额度保护。核心学习与文本回复始终不调用 LLM。</div>
         <section style="margin-top:0">
           <div class="toolbar">
-            <label class="inline-check"><input id="tts-enabled" type="checkbox"> ???????????</label>
-            <div class="field"><label for="tts-driver">??</label><select id="tts-driver"><option value="windows">Windows ????</option><option value="gpt_sovits">GPT-SoVITS</option><option value="local_http">???? HTTP</option><option value="volcengine">????</option><option value="aliyun">???</option><option value="tencent">???</option><option value="azure">Azure Speech</option><option value="openai">OpenAI</option><option value="openai_compatible">OpenAI ????</option><option value="custom_http">??? HTTPS HTTP</option></select></div>
-            <div class="field"><label for="tts-probability">?????%?</label><input id="tts-probability" type="number" min="0" max="100" step="0.1"></div>
-            <div class="field"><label for="tts-max-length">??????</label><input id="tts-max-length" type="number" min="1" max="1000"></div>
+            <label class="inline-check"><input id="tts-enabled" type="checkbox"> 启用纯文本词库语音回复</label>
+            <div class="field"><label for="tts-driver">驱动</label><select id="tts-driver"><option value="windows">Windows 系统语音</option><option value="gpt_sovits">GPT-SoVITS</option><option value="local_http">通用本地 HTTP</option><option value="volcengine">火山引擎</option><option value="aliyun">阿里云</option><option value="tencent">腾讯云</option><option value="azure">Azure Speech</option><option value="openai">OpenAI</option><option value="openai_compatible">OpenAI 风格接口</option><option value="custom_http">自定义 HTTPS HTTP</option></select></div>
+            <div class="field"><label for="tts-probability">触发概率（%）</label><input id="tts-probability" type="number" min="0" max="100" step="0.1"></div>
+            <div class="field"><label for="tts-max-length">最大文本长度</label><input id="tts-max-length" type="number" min="1" max="1000"></div>
           </div>
           <div class="rule-grid">
-            <div><label for="tts-voice">???????</label><input id="tts-voice" maxlength="200" placeholder="??????????"></div>
-            <div><label for="tts-endpoint">????</label><input id="tts-endpoint" maxlength="1000" placeholder="??????????????????? HTTPS"></div>
-            <div><label for="tts-timeout">???????</label><input id="tts-timeout" type="number" min="1" max="120" step="0.1"></div>
-            <div><label for="tts-reference">GPT-SoVITS ??????</label><input id="tts-reference" maxlength="1000" placeholder="????????"></div>
-            <div><label for="tts-text-lang">????</label><input id="tts-text-lang" maxlength="20"></div>
-            <div><label for="tts-prompt-lang">????</label><input id="tts-prompt-lang" maxlength="20"></div>
-            <div><label for="tts-rate">Windows ??</label><input id="tts-rate" type="number" min="-10" max="10"></div>
-            <div><label for="tts-volume">Windows ??</label><input id="tts-volume" type="number" min="0" max="100"></div>
+            <div><label for="tts-voice">音色或声音名称</label><input id="tts-voice" maxlength="200" placeholder="留空使用驱动默认音色"></div>
+            <div><label for="tts-endpoint">接口地址</label><input id="tts-endpoint" maxlength="1000" placeholder="本地驱动使用环回地址，云端驱动必须使用 HTTPS"></div>
+            <div><label for="tts-timeout">合成超时（秒）</label><input id="tts-timeout" type="number" min="1" max="120" step="0.1"></div>
+            <div><label for="tts-reference">GPT-SoVITS 参考音频路径</label><input id="tts-reference" maxlength="1000" placeholder="留空保留当前配置"></div>
+            <div><label for="tts-text-lang">文本语言</label><input id="tts-text-lang" maxlength="20"></div>
+            <div><label for="tts-prompt-lang">参考语言</label><input id="tts-prompt-lang" maxlength="20"></div>
+            <div><label for="tts-rate">Windows 语速</label><input id="tts-rate" type="number" min="-10" max="10"></div>
+            <div><label for="tts-volume">Windows 音量</label><input id="tts-volume" type="number" min="0" max="100"></div>
           </div>
-          <label for="tts-prompt-text">GPT-SoVITS ????</label><textarea id="tts-prompt-text" maxlength="1000"></textarea>
-          <label class="inline-check"><input id="tts-clear-reference" type="checkbox"> ????????????</label>
-          <p id="tts-reference-state">???????????</p>
+          <label for="tts-prompt-text">GPT-SoVITS 参考文本</label><textarea id="tts-prompt-text" maxlength="1000"></textarea>
+          <label class="inline-check"><input id="tts-clear-reference" type="checkbox"> 清除已保存的参考音频路径</label>
+          <p id="tts-reference-state">尚未读取参考音频状态。</p>
           <div id="tts-cloud-settings" class="hidden">
-            <h2>????</h2>
+            <h2>云端驱动</h2>
             <div class="rule-grid">
-              <div><label for="tts-model">??</label><input id="tts-model" maxlength="200" placeholder="?????????"></div>
-              <div><label for="tts-region">??</label><input id="tts-region" maxlength="100" placeholder="?? eastasia ? ap-guangzhou"></div>
+              <div><label for="tts-model">模型</label><input id="tts-model" maxlength="200" placeholder="留空使用厂商默认值"></div>
+              <div><label for="tts-region">区域</label><input id="tts-region" maxlength="100" placeholder="例如 eastasia 或 ap-guangzhou"></div>
               <div><label for="tts-app-id">App ID</label><input id="tts-app-id" maxlength="200"></div>
               <div><label for="tts-app-key">AppKey</label><input id="tts-app-key" maxlength="200"></div>
-              <div><label for="tts-response-mode">????</label><select id="tts-response-mode"><option value="audio">????</option><option value="json_base64">JSON Base64</option></select></div>
-              <div><label for="tts-minute-quota">???????</label><input id="tts-minute-quota" type="number" min="1" max="10000"></div>
-              <div><label for="tts-daily-quota">??????</label><input id="tts-daily-quota" type="number" min="1" max="1000000"></div>
-              <div><label for="tts-character-quota">??????</label><input id="tts-character-quota" type="number" min="1" max="10000000"></div>
+              <div><label for="tts-response-mode">响应模式</label><select id="tts-response-mode"><option value="audio">直接音频</option><option value="json_base64">JSON Base64</option></select></div>
+              <div><label for="tts-minute-quota">每分钟请求上限</label><input id="tts-minute-quota" type="number" min="1" max="10000"></div>
+              <div><label for="tts-daily-quota">每日请求上限</label><input id="tts-daily-quota" type="number" min="1" max="1000000"></div>
+              <div><label for="tts-character-quota">每日字符上限</label><input id="tts-character-quota" type="number" min="1" max="10000000"></div>
             </div>
             <div id="tts-custom-fields" class="hidden">
-              <label for="tts-custom-headers">??????JSON?</label><textarea id="tts-custom-headers" spellcheck="false" placeholder='{"Authorization":"Bearer ${secret.api_key}"}'></textarea>
-              <label for="tts-custom-body">??????JSON?</label><textarea id="tts-custom-body" spellcheck="false" placeholder='{"text":"${text}","voice":"${voice}"}'></textarea>
-              <label for="tts-custom-response">Base64 ????</label><input id="tts-custom-response" maxlength="100" placeholder="audio_base64">
+              <label for="tts-custom-headers">请求头映射（JSON）</label><textarea id="tts-custom-headers" spellcheck="false" placeholder='{"Authorization":"Bearer ${secret.api_key}"}'></textarea>
+              <label for="tts-custom-body">请求体映射（JSON）</label><textarea id="tts-custom-body" spellcheck="false" placeholder='{"text":"${text}","voice":"${voice}"}'></textarea>
+              <label for="tts-custom-response">Base64 响应字段</label><input id="tts-custom-response" maxlength="100" placeholder="audio_base64">
             </div>
           </div>
-          <div class="actions" style="margin-top:16px"><button id="tts-refresh" class="secondary" type="button">????</button><button id="tts-save" type="button">??????</button></div>
+          <div class="actions" style="margin-top:16px"><button id="tts-refresh" class="secondary" type="button">刷新设置</button><button id="tts-save" type="button">保存语音设置</button></div>
           <div id="tts-message" class="result" role="status"></div>
         </section>
         <section id="tts-secret-section" class="settings-band hidden">
-          <h2>????</h2>
-          <p>?????? Windows ??? DPAPI ?????????????????????????????</p>
+          <h2>云端密钥</h2>
+          <p>密钥使用当前 Windows 用户的 DPAPI 加密保存，页面不会回显明文。留空字段不会覆盖已经保存的值。</p>
           <div class="rule-grid">
             <div id="tts-api-key-field"><label for="tts-secret-api-key">API Key / Token</label><input id="tts-secret-api-key" type="password" autocomplete="new-password" maxlength="4096"></div>
-            <div id="tts-secret-id-field"><label for="tts-secret-id">??? SecretId</label><input id="tts-secret-id" type="password" autocomplete="new-password" maxlength="4096"></div>
-            <div id="tts-secret-key-field"><label for="tts-secret-key">??? SecretKey</label><input id="tts-secret-key" type="password" autocomplete="new-password" maxlength="4096"></div>
-            <div id="tts-access-key-id-field"><label for="tts-access-key-id">??? AccessKey ID</label><input id="tts-access-key-id" type="password" autocomplete="new-password" maxlength="4096"></div>
-            <div id="tts-access-key-secret-field"><label for="tts-access-key-secret">??? AccessKey Secret</label><input id="tts-access-key-secret" type="password" autocomplete="new-password" maxlength="4096"></div>
-            <div id="tts-aliyun-token-field"><label for="tts-aliyun-token">????? Token</label><input id="tts-aliyun-token" type="password" autocomplete="new-password" maxlength="4096"></div>
+            <div id="tts-secret-id-field"><label for="tts-secret-id">腾讯云 SecretId</label><input id="tts-secret-id" type="password" autocomplete="new-password" maxlength="4096"></div>
+            <div id="tts-secret-key-field"><label for="tts-secret-key">腾讯云 SecretKey</label><input id="tts-secret-key" type="password" autocomplete="new-password" maxlength="4096"></div>
+            <div id="tts-access-key-id-field"><label for="tts-access-key-id">阿里云 AccessKey ID</label><input id="tts-access-key-id" type="password" autocomplete="new-password" maxlength="4096"></div>
+            <div id="tts-access-key-secret-field"><label for="tts-access-key-secret">阿里云 AccessKey Secret</label><input id="tts-access-key-secret" type="password" autocomplete="new-password" maxlength="4096"></div>
+            <div id="tts-aliyun-token-field"><label for="tts-aliyun-token">阿里云临时 Token</label><input id="tts-aliyun-token" type="password" autocomplete="new-password" maxlength="4096"></div>
           </div>
-          <p id="tts-secret-state">?????????</p>
-          <div class="actions"><button id="tts-secret-refresh" class="secondary" type="button">????</button><button id="tts-secret-save" type="button">????</button><button id="tts-secret-clear" class="danger" type="button">??????</button></div>
+          <p id="tts-secret-state">尚未读取密钥状态。</p>
+          <div class="actions"><button id="tts-secret-refresh" class="secondary" type="button">刷新状态</button><button id="tts-secret-save" type="button">保存密钥</button><button id="tts-secret-clear" class="danger" type="button">清除全部密钥</button></div>
           <div id="tts-secret-message" class="result" role="status"></div>
         </section>
         <section class="settings-band">
-          <h2>????</h2>
-          <div class="toolbar"><div class="field"><label for="tts-test-text">????</label><input id="tts-test-text" maxlength="1000" value="NewChatLearning ????"></div><button id="tts-test" class="secondary" type="button">????</button></div>
+          <h2>测试合成</h2>
+          <div class="toolbar"><div class="field"><label for="tts-test-text">测试文本</label><input id="tts-test-text" maxlength="1000" value="NewChatLearning 语音测试"></div><button id="tts-test" class="secondary" type="button">执行测试</button></div>
           <div id="tts-test-result" class="result" role="status"></div>
         </section>
       </div>
       <div id="tasks-view" class="hidden">
-        <div class="notice">??????????????????????????????????????????????????????????????????</div>
-        <div class="toolbar"><button id="tasks-refresh" class="secondary" type="button">????</button><button id="task-new" type="button">????</button><div id="tasks-message" class="result" role="status"></div></div>
+        <div class="notice">后台任务只执行内建操作，不接受命令、脚本或任意路径。过滤词库自动删除默认不创建，启用前需要明确确认，并在每次执行时先备份再复核候选。</div>
+        <div class="toolbar"><button id="tasks-refresh" class="secondary" type="button">刷新任务</button><button id="task-new" type="button">新建任务</button><div id="tasks-message" class="result" role="status"></div></div>
         <div class="split">
-          <div><div id="tasks-list" class="list"><p style="padding:14px">???????</p></div></div>
+          <div><div id="tasks-list" class="list"><p style="padding:14px">正在读取任务。</p></div></div>
           <div>
-            <section style="margin-top:0"><h2 id="task-editor-title">????</h2>
-              <label for="task-name">????</label><input id="task-name" maxlength="80" placeholder="???????????">
+            <section style="margin-top:0"><h2 id="task-editor-title">新建任务</h2>
+              <label for="task-name">任务名称</label><input id="task-name" maxlength="80" placeholder="例如：每日媒体健康扫描">
               <div class="rule-grid">
-                <div><label for="task-type">????</label><select id="task-type"><option value="media_scan">??????</option><option value="database_backup">?????</option><option value="artifact_cleanup">??????</option><option value="filter_cleanup">??????</option></select></div>
-                <div><label for="task-interval">????????</label><input id="task-interval" type="number" min="15" max="43200" value="1440"></div>
-                <div id="task-group-field"><label for="task-group">?? QQ ?</label><input id="task-group" inputmode="numeric" maxlength="20" placeholder="?? QQ ??"></div>
-                <div id="task-cleanup-field" class="hidden"><label for="task-cleanup-mode">??????</label><select id="task-cleanup-mode"><option value="preview">?????</option><option value="apply">???????</option></select></div>
+                <div><label for="task-type">任务类型</label><select id="task-type"><option value="media_scan">媒体健康扫描</option><option value="database_backup">数据库备份</option><option value="artifact_cleanup">过期产物清理</option><option value="filter_cleanup">过滤词库清理</option></select></div>
+                <div><label for="task-interval">执行间隔（分钟）</label><input id="task-interval" type="number" min="15" max="43200" value="1440"></div>
+                <div id="task-group-field"><label for="task-group">目标 QQ 群</label><input id="task-group" inputmode="numeric" maxlength="20" placeholder="输入 QQ 群号"></div>
+                <div id="task-cleanup-field" class="hidden"><label for="task-cleanup-mode">过滤清理策略</label><select id="task-cleanup-mode"><option value="preview">仅预演统计</option><option value="apply">备份后自动删除</option></select></div>
               </div>
-              <label class="inline-check"><input id="task-enabled" type="checkbox"> ????????</label>
-              <div class="toolbar" style="margin-top:16px"><button id="task-save" type="button">????</button><button id="task-run" class="secondary" type="button" disabled>????</button><button id="task-delete" class="danger" type="button" disabled>????</button></div>
+              <label class="inline-check"><input id="task-enabled" type="checkbox"> 启用后台自动执行</label>
+              <div class="toolbar" style="margin-top:16px"><button id="task-save" type="button">保存任务</button><button id="task-run" class="secondary" type="button" disabled>立即执行</button><button id="task-delete" class="danger" type="button" disabled>删除任务</button></div>
             </section>
-            <section><h2>????</h2><div class="table-scroll"><table><thead><tr><th>????</th><th>??</th><th>??</th><th>????</th></tr></thead><tbody id="task-history"></tbody></table></div></section>
+            <section><h2>最近执行</h2><div class="table-scroll"><table><thead><tr><th>开始时间</th><th>触发</th><th>状态</th><th>结果摘要</th></tr></thead><tbody id="task-history"></tbody></table></div></section>
           </div>
         </div>
       </div>
       <div id="backups-view" class="hidden">
-        <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">????</button></div>
+        <div class="toolbar"><button id="backups-refresh" class="secondary" type="button">刷新列表</button></div>
         <div class="split">
-          <div><div id="backups-list" class="list"><p style="padding:14px">???????</p></div><div id="backups-message" class="result" role="status"></div></div>
-          <div><section style="margin-top:0"><h2>????</h2><table><tbody><tr><th>??</th><td id="backup-name">???</td></tr><tr><th>???</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>?? / ??</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>?????</button></div><p>?????????????????????? WebUI ????????????</p></section></div>
+          <div><div id="backups-list" class="list"><p style="padding:14px">正在读取备份。</p></div><div id="backups-message" class="result" role="status"></div></div>
+          <div><section style="margin-top:0"><h2>备份校验</h2><table><tbody><tr><th>文件</th><td id="backup-name">未选择</td></tr><tr><th>完整性</th><td id="backup-integrity">-</td></tr><tr><th>Schema</th><td id="backup-schema">-</td></tr><tr><th>问题 / 答案</th><td id="backup-counts">-</td></tr></tbody></table><div class="toolbar" style="margin-top:16px"><button id="backup-restore" class="danger" type="button" disabled>恢复此备份</button></div><p>恢复会先为当前数据库创建保险备份。成功后所有 WebUI 会话失效，需要重新进入。</p></section></div>
         </div>
       </div>
       <div id="diagnostics-view" class="hidden">
-        <div class="notice">???????????????????????????????????? QQ??? ID ??????</div>
+        <div class="notice">运行计数仅保存在内存中，插件重载后会归零。页面不展示或保存消息正文、用户 QQ、消息 ID 和组件内容。</div>
         <div class="toolbar">
-          <button id="diagnostics-refresh" class="secondary" type="button">????</button>
+          <button id="diagnostics-refresh" class="secondary" type="button">刷新诊断</button>
           <div id="diagnostics-message" class="result" role="status"></div>
         </div>
-        <div class="table-scroll"><table><thead><tr><th>?? / ??</th><th>??</th><th>???</th><th>??</th><th>??</th><th>????</th></tr></thead><tbody id="diagnostics-body"></tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>群聊 / 模式</th><th>词库</th><th>学习链</th><th>撤回</th><th>回复</th><th>最后活动</th></tr></thead><tbody id="diagnostics-body"></tbody></table></div>
       </div>
       <div id="audit-view" class="hidden">
         <div class="toolbar">
-          <div class="field"><label for="audit-action">??</label><select id="audit-action"><option value="">????</option></select></div>
-          <button id="audit-refresh" class="secondary" type="button">????</button>
+          <div class="field"><label for="audit-action">动作</label><select id="audit-action"><option value="">全部动作</option></select></div>
+          <button id="audit-refresh" class="secondary" type="button">刷新日志</button>
         </div>
-        <div class="table-scroll"><table><thead><tr><th>??</th><th>??</th><th>???</th><th>??</th><th>??</th></tr></thead><tbody id="audit-body"></tbody></table></div>
-        <div class="toolbar" style="margin-top:16px"><button id="audit-more" class="secondary" type="button">??????</button></div>
+        <div class="table-scroll"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标</th><th>摘要</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+        <div class="toolbar" style="margin-top:16px"><button id="audit-more" class="secondary" type="button">加载更早记录</button></div>
         <div id="audit-message" class="result" role="status"></div>
       </div>
         </div>
@@ -632,74 +632,74 @@
     </main>
     <dialog id="reauth-dialog">
       <form id="reauth-form">
-        <h2>????????</h2>
-        <p>???????????????????????????????????</p>
+        <h2>确认执行媒体清理</h2>
+        <p>执行前会自动备份数据库，并按当前清理计划修改词库。此操作无法直接撤销。</p>
         <div id="reauth-message" class="message" role="status"></div>
-        <div class="actions"><button id="reauth-cancel" class="secondary" type="button">??</button><button type="submit">????</button></div>
+        <div class="actions"><button id="reauth-cancel" class="secondary" type="button">取消</button><button type="submit">执行清理</button></div>
       </form>
     </dialog>
     <dialog id="library-delete-dialog">
       <form id="library-delete-form">
-        <h2 id="library-delete-title">????????</h2>
-        <p id="library-delete-copy">????????????</p>
+        <h2 id="library-delete-title">确认删除词库记录</h2>
+        <p id="library-delete-copy">执行前会自动备份数据库。</p>
         <div id="library-delete-message" class="message" role="status"></div>
-        <div class="actions"><button id="library-delete-cancel" class="secondary" type="button">??</button><button class="danger" type="submit">????</button></div>
+        <div class="actions"><button id="library-delete-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">确认删除</button></div>
       </form>
     </dialog>
     <dialog id="library-export-dialog">
       <form id="library-export-form">
-        <h2 id="library-export-title">???????</h2>
-        <p id="library-export-copy">?????????? XLSX ?????????? JSONL??????????????????????</p>
+        <h2 id="library-export-title">导出当前群词库</h2>
+        <p id="library-export-copy">导出包包含便于查看的 XLSX 和保留完整问答组件的 JSONL。文件可能含群聊原文与个人信息，请妥善保管。</p>
         <div id="library-export-message" class="message" role="status"></div>
-        <div class="actions"><button id="library-export-cancel" class="secondary" type="button">??</button><button type="submit">????</button></div>
+        <div class="actions"><button id="library-export-cancel" class="secondary" type="button">取消</button><button type="submit">确认导出</button></div>
       </form>
     </dialog>
     <dialog id="filter-cleanup-dialog">
       <form id="filter-cleanup-form">
-        <h2>?????????????</h2>
-        <p>?????????????????????????</p>
+        <h2>确认删除命中过滤规则的答案</h2>
+        <p>执行前会自动备份数据库，并重新检查词库与过滤规则。</p>
         <div id="filter-cleanup-message" class="message" role="status"></div>
-        <div class="actions"><button id="filter-cleanup-cancel" class="secondary" type="button">??</button><button class="danger" type="submit">????</button></div>
+        <div class="actions"><button id="filter-cleanup-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行清理</button></div>
       </form>
     </dialog>
     <dialog id="migration-dialog">
       <form id="migration-form">
-        <h2>???????</h2>
-        <p id="migration-copy">?????????????????????????????????????</p>
+        <h2>确认导入旧词库</h2>
+        <p id="migration-copy">导入前会自动备份数据库，并把旧词库保存为独立来源。群聊自产词库不会被修改。</p>
         <div id="migration-confirm-message" class="message" role="status"></div>
-        <div class="actions"><button id="migration-cancel" class="secondary" type="button">??</button><button class="danger" type="submit">????</button></div>
+        <div class="actions"><button id="migration-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行导入</button></div>
       </form>
     </dialog>
     <dialog id="backup-restore-dialog">
       <form id="backup-restore-form">
-        <h2>?????????</h2>
-        <p id="backup-restore-copy">???????????????????????????</p>
+        <h2>确认恢复数据库备份</h2>
+        <p id="backup-restore-copy">恢复会替换当前词库数据库，并先创建当前状态的保险备份。</p>
         <div id="backup-restore-message" class="message" role="status"></div>
-        <div class="actions"><button id="backup-restore-cancel" class="secondary" type="button">??</button><button class="danger" type="submit">????</button></div>
+        <div class="actions"><button id="backup-restore-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行恢复</button></div>
       </form>
     </dialog>
     <dialog id="contribution-dialog">
       <form id="contribution-form">
-        <h2>??????????</h2>
-        <p id="contribution-copy">??????????????????????</p>
+        <h2>确认删除成员学习贡献</h2>
+        <p id="contribution-copy">执行前会自动备份数据库，并重新检查成员贡献。</p>
         <div id="contribution-message" class="message" role="status"></div>
-        <div class="actions"><button id="contribution-cancel" class="secondary" type="button">??</button><button class="danger" type="submit">????</button></div>
+        <div class="actions"><button id="contribution-cancel" class="secondary" type="button">取消</button><button class="danger" type="submit">执行删除</button></div>
       </form>
     </dialog>
     <dialog id="permissions-dialog">
       <form id="permissions-form">
-        <h2>????????</h2>
-        <p>???????????????????????????AstrBot ??????????</p>
+        <h2>确认修改管理权限</h2>
+        <p>保存后，插件管理员和群子管理员权限会立即按新配置生效。AstrBot 全局管理员不受影响。</p>
         <div id="permissions-confirm-message" class="message" role="status"></div>
-        <div class="actions"><button id="permissions-cancel" class="secondary" type="button">??</button><button type="submit">????</button></div>
+        <div class="actions"><button id="permissions-cancel" class="secondary" type="button">取消</button><button type="submit">确认保存</button></div>
       </form>
     </dialog>
     <dialog id="task-confirm-dialog">
       <form id="task-confirm-form">
-        <h2 id="task-confirm-title">??????</h2>
+        <h2 id="task-confirm-title">确认任务操作</h2>
         <p id="task-confirm-copy"></p>
         <div id="task-confirm-message" class="message" role="status"></div>
-        <div class="actions"><button id="task-confirm-cancel" class="secondary" type="button">??</button><button id="task-confirm-submit" class="danger" type="submit">??</button></div>
+        <div class="actions"><button id="task-confirm-cancel" class="secondary" type="button">取消</button><button id="task-confirm-submit" class="danger" type="submit">确认</button></div>
       </form>
     </dialog>
     <script src="/api/plugin/page/bridge-sdk.js"></script>
@@ -738,18 +738,18 @@
       let pendingTaskAction = null;
       const componentTypes = ["At", "AtAll", "Quote", "Poke", "Image", "Record", "Video", "File", "Json"];
       const viewMeta = {
-        overview: ["????", "???????????????????"],
-        groups: ["????", "? QQ ???????????????????"],
-        library: ["????", "?????????????????????"],
-        filters: ["????", "?????????????????????"],
-        permissions: ["????", "????????????????????"],
-        media: ["????", "????????????????????"],
-        migration: ["????", "????? .cl ?????????????"],
-        tts: ["????", "??????? TTS???????????"],
-        tasks: ["????", "????????????????????"],
-        backups: ["????", "???????????????????"],
-        diagnostics: ["????", "?????????????????????"],
-        audit: ["????", "????????????????????"],
+        overview: ["运行概览", "检查插件状态、词库规模与本地资源占用。"],
+        groups: ["群聊设置", "按 QQ 群控制学习、回复、静默模式与独立概率。"],
+        library: ["词库管理", "搜索、维护和导出群聊问答，并清理成员贡献。"],
+        filters: ["过滤规则", "配置回复过滤、敏感词黑名单与词库清理策略。"],
+        permissions: ["权限管理", "维护插件管理员与按群隔离的子管理员范围。"],
+        media: ["媒体维护", "检查失效媒体并在完整备份后执行确认清理。"],
+        migration: ["外部词库", "安全扫描旧 .cl 文件，并独立管理导入词库。"],
+        tts: ["语音回复", "配置本地或云端 TTS、额度保护与加密密钥。"],
+        tasks: ["后台任务", "管理受限类型的定时扫描、备份与维护任务。"],
+        backups: ["备份恢复", "校验备份并在二次确认后恢复词库数据库。"],
+        diagnostics: ["运行诊断", "查看不含聊天正文的按群运行计数与词库汇总。"],
+        audit: ["审计日志", "追踪安全、配置、权限、导入与破坏性操作。"],
       };
       const viewNames = Object.keys(viewMeta);
       const bridge = window.AstrBotPluginPage;
@@ -768,15 +768,15 @@
         el("nav-toggle").classList.add("hidden");
         closeNavigation();
         if (authState.entry_mode !== "passwordless") {
-          setText("auth-title", "?????????");
-          setText("auth-copy", "????????????????????????????");
-          setText("submit", "?????");
+          setText("auth-title", "插件版本未完整更新");
+          setText("auth-copy", "当前页面与插件后端版本不一致，请重新安装插件并刷新页面。");
+          setText("submit", "暂不可进入");
           el("submit").disabled = true;
           return;
         }
-        setText("auth-title", "?? NewChatLearning");
-        setText("auth-copy", "???????????");
-        setText("submit", "??");
+        setText("auth-title", "进入 NewChatLearning");
+        setText("auth-copy", "点击进入插件管理页面。");
+        setText("submit", "进入");
         el("submit").disabled = false;
       }
 
@@ -801,7 +801,7 @@
 
       async function refreshOverview() {
         const status = payloadData(await bridge.apiGet("api/status"));
-        setText("state", status.state === "running" ? "???" : status.state);
+        setText("state", status.state === "running" ? "运行中" : status.state);
         el("state").className = "ok";
         setText("questions", status.statistics.questions);
         setText("answers", status.statistics.answers);
@@ -811,7 +811,7 @@
         setText("version", `${status.version} (${status.release_stage})`);
         setText("database", `schema v${status.database.schema_version}, ${status.database.integrity}`);
         setText("revision", status.config_revision);
-        setText("library", status.library.mode === "global" ? `??/???${status.library.tagged_groups} ???${status.library.tags.length} ????` : "???");
+        setText("library", status.library.mode === "global" ? `全局/标签（${status.library.tagged_groups} 个群，${status.library.tags.length} 个标签）` : "仅本群");
         setText("data-dir", status.data_dir);
       }
 
@@ -859,16 +859,16 @@
         const [title, description] = viewMeta[view] || viewMeta.overview;
         setText("view-title", title);
         setText("view-description", description);
-        document.title = `${title} ? NewChatLearning Beta`;
+        document.title = `${title} · NewChatLearning Beta`;
         closeNavigation();
-        if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "?????????"));
-        if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "?????????"));
-        if (migration) Promise.all([loadMigrationStatus(), loadExternalLibraries()]).catch(error => setText("migration-message", error?.message || "?????????"));
-        if (tts) loadTtsSettings().catch(error => setText("tts-message", error?.message || "?????????"));
-        if (tasks) loadTasks().catch(error => setText("tasks-message", error?.message || "?????????"));
-        if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "?????????"));
-        if (diagnostics) loadDiagnostics().catch(error => setText("diagnostics-message", error?.message || "?????????"));
-        if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "?????????"));
+        if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
+        if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
+        if (migration) Promise.all([loadMigrationStatus(), loadExternalLibraries()]).catch(error => setText("migration-message", error?.message || "迁移数据读取失败。"));
+        if (tts) loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。"));
+        if (tasks) loadTasks().catch(error => setText("tasks-message", error?.message || "任务列表读取失败。"));
+        if (backups) loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。"));
+        if (diagnostics) loadDiagnostics().catch(error => setText("diagnostics-message", error?.message || "运行诊断读取失败。"));
+        if (audit) loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。"));
       }
 
       async function loadGroups() {
@@ -886,7 +886,7 @@
 
       function selectedSettingsGroup() {
         const groupId = el("settings-group").value.trim();
-        if (!/^\d{5,20}$/.test(groupId)) throw new Error("?????? QQ ???");
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
         return groupId;
       }
 
@@ -898,27 +898,27 @@
         el("target-users").value = (data.target_user_ids || []).join("\n");
         el("group-probability").value = data.probability_overridden ? data.probability_percent : "";
         el("group-probability-hint").textContent = data.probability_overridden
-          ? `???????${data.probability_percent}%????? ${data.global_probability_percent}%?`
-          : `?????????${data.global_probability_percent}%????????????`;
-        updateTargetState(); setText("group-message", `???? ${data.group_id} ????`);
+          ? `本群独立概率：${data.probability_percent}%（全局默认 ${data.global_probability_percent}%）`
+          : `当前继承全局概率：${data.global_probability_percent}%。留空并保存时继续继承。`;
+        updateTargetState(); setText("group-message", `已读取群 ${data.group_id} 的设置。`);
       }
 
       function updateTargetState() {
         const mode = document.querySelector('input[name="group-mode"]:checked')?.value || "disabled";
         const enabled = ["learning", "learning_reply", "silent"].includes(mode);
         el("target-users").disabled = !enabled;
-        el("target-hint").textContent = enabled ? "?????????????????????????????????????" : "?????????????????????";
+        el("target-hint").textContent = enabled ? "留空时学习群内所有合格成员；填写后只固化这些用户紧随上一条消息给出的答案。" : "当前模式不学习消息，定向用户设置会被清空。";
       }
 
       function selectedGroup() {
         const groupId = el("media-group").value.trim();
-        if (!/^\d{5,20}$/.test(groupId)) throw new Error("?????? QQ ???");
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
         return groupId;
       }
 
       function selectedLibraryGroup() {
         const groupId = el("library-group").value.trim();
-        if (!/^\d{5,20}$/.test(groupId)) throw new Error("?????? QQ ???");
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
         return groupId;
       }
 
@@ -926,31 +926,31 @@
         const buttons = rows.map(row => {
           const button = document.createElement("button"); button.type = "button";
           button.dataset.questionId = row.question_id;
-          button.textContent = `Q${row.question_id} ${row.plain_text || "[???]"}`;
-          const meta = document.createElement("small"); meta.textContent = `${row.is_regex ? "??" : "??"} ? ${row.answer_count} ??? ? ??? ${row.total_weight}`;
+          button.textContent = `Q${row.question_id} ${row.plain_text || "[空消息]"}`;
+          const meta = document.createElement("small"); meta.textContent = `${row.is_regex ? "正则" : "文本"} · ${row.answer_count} 个答案 · 总权重 ${row.total_weight}`;
           button.append(meta); button.addEventListener("click", () => loadQuestion(row.question_id)); return button;
         });
-        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "???????"; buttons.push(p); }
+        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "没有匹配问题。"; buttons.push(p); }
         el("library-results").replaceChildren(...buttons);
       }
 
       async function searchLibrary() {
         const data = payloadData(await bridge.apiGet("api/library/search", { group_id: selectedLibraryGroup(), query: el("library-query").value.trim() }));
-        renderLibraryResults(data.questions || []); setText("library-message", `?? ${(data.questions || []).length} ????`);
+        renderLibraryResults(data.questions || []); setText("library-message", `找到 ${(data.questions || []).length} 条问题。`);
       }
 
       async function loadQuestion(questionId) {
         const data = payloadData(await bridge.apiGet("api/library/question", { group_id: selectedLibraryGroup(), question_id: questionId }));
         currentQuestion = data; el("question-detail").classList.remove("hidden");
-        setText("question-title", `Q${data.question_id} ? ${data.is_regex ? "????" : "????"}`);
-        setText("question-copy", `${data.preview} ? ???? ${data.frequency}`);
+        setText("question-title", `Q${data.question_id} · ${data.is_regex ? "正则问题" : "文本问题"}`);
+        setText("question-copy", `${data.preview} · 记录频次 ${data.frequency}`);
         document.querySelectorAll("#library-results button").forEach(button => button.classList.toggle("active", Number(button.dataset.questionId) === Number(questionId)));
         const rows = (data.answers || []).map(answer => {
           const row = document.createElement("div"); row.className = "answer-row";
           const copy = document.createElement("div"); copy.textContent = answer.preview; const meta = document.createElement("small"); meta.textContent = `A${answer.answer_id}`; copy.append(meta);
-          const weight = document.createElement("input"); weight.type = "number"; weight.min = "1"; weight.max = "1000000000"; weight.value = answer.weight; weight.setAttribute("aria-label", `?? A${answer.answer_id} ??`);
-          weight.addEventListener("change", async () => { try { await postSecure("api/library/weight", { group_id: selectedLibraryGroup(), answer_id: answer.answer_id, weight: Number(weight.value) }); setText("library-message", `A${answer.answer_id} ??????`); } catch (error) { weight.value = answer.weight; setText("library-message", error?.message || "???????"); } });
-          const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger"; remove.textContent = "??"; remove.addEventListener("click", () => openLibraryDelete("answer", answer.answer_id));
+          const weight = document.createElement("input"); weight.type = "number"; weight.min = "1"; weight.max = "1000000000"; weight.value = answer.weight; weight.setAttribute("aria-label", `答案 A${answer.answer_id} 权重`);
+          weight.addEventListener("change", async () => { try { await postSecure("api/library/weight", { group_id: selectedLibraryGroup(), answer_id: answer.answer_id, weight: Number(weight.value) }); setText("library-message", `A${answer.answer_id} 权重已更新。`); } catch (error) { weight.value = answer.weight; setText("library-message", error?.message || "权重更新失败。"); } });
+          const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger"; remove.textContent = "删除"; remove.addEventListener("click", () => openLibraryDelete("answer", answer.answer_id));
           row.append(copy, weight, remove); return row;
         });
         el("answer-list").replaceChildren(...rows);
@@ -958,8 +958,8 @@
 
       function openLibraryDelete(target, id) {
         pendingLibraryDelete = { target, id };
-        setText("library-delete-title", target === "question" ? `???? Q${id}` : `???? A${id}`);
-        setText("library-delete-copy", target === "question" ? "?????????????????????????" : "???????????????????????????????");
+        setText("library-delete-title", target === "question" ? `删除问题 Q${id}` : `删除答案 A${id}`);
+        setText("library-delete-copy", target === "question" ? "这会删除问题及其全部答案。执行前会自动备份数据库。" : "执行前会自动备份数据库；若这是最后一个答案，空问题也会被删除。");
         setText("library-delete-message", ""); el("library-delete-dialog").showModal();
       }
 
@@ -969,7 +969,7 @@
         setText("affected-questions", preview.affected_questions ?? 0);
         setText("empty-answers", preview.answers_becoming_empty ?? 0);
         const states = Object.entries(preview.states || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
-        setText("media-states", states || "???");
+        setText("media-states", states || "无记录");
       }
 
       async function postSecure(path, body) {
@@ -978,72 +978,72 @@
 
       function selectedMigrationGroup() {
         const groupId = el("migration-group").value.trim();
-        if (!/^\d{5,20}$/.test(groupId)) throw new Error("???????? QQ ???");
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的目标 QQ 群号。");
         return groupId;
       }
 
       function renderMigrationScan(scan) {
         const types = Object.entries(scan.component_types || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
-        setText("migration-scan", `?? ${scan.file_name}?${formatBytes(scan.size_bytes)}????? ${scan.question_count}??? ${scan.answer_count}??????? ${scan.malformed_questions}????${types || "???"}?`);
+        setText("migration-scan", `文件 ${scan.file_name}，${formatBytes(scan.size_bytes)}。识别问题 ${scan.question_count}，答案 ${scan.answer_count}，结构异常问题 ${scan.malformed_questions}。组件：${types || "未统计"}。`);
       }
 
       function renderMigrationRows(imports) {
         const rows = (imports || []).map(item => {
           const row = document.createElement("tr");
-          const status = item.status === "applied" ? "???" : "???";
-          for (const value of [item.source_name || "???", item.library_name || item.library_id || "??????", status, `${item.question_count || 0} / ${item.answer_count || 0}`, item.backup_name || "-"]) {
+          const status = item.status === "applied" ? "已导入" : "待确认";
+          for (const value of [item.source_name || "旧词库", item.library_name || item.library_id || "历史合并导入", status, `${item.question_count || 0} / ${item.answer_count || 0}`, item.backup_name || "-"]) {
             const cell = document.createElement("td"); cell.textContent = String(value); row.append(cell);
           }
           return row;
         });
         el("migration-body").replaceChildren(...rows);
         if (!rows.length) {
-          const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "???????????"; row.append(cell); el("migration-body").append(row);
+          const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "当前会话没有迁移记录。"; row.append(cell); el("migration-body").append(row);
         }
       }
 
       async function loadMigrationStatus() {
         const data = payloadData(await bridge.apiGet("api/migration/status"));
         renderMigrationRows(data.imports || []);
-        setText("migration-message", "????????");
+        setText("migration-message", "迁移记录已更新。");
       }
 
       function renderExternalLibraries() {
         const rows = externalLibraries.map(item => {
           const row = document.createElement("tr");
           const name = document.createElement("td"); name.textContent = item.name || item.source_name || item.library_id;
-          const state = document.createElement("td"); state.textContent = `${item.enabled ? "???" : "???"} / v${item.version}`;
+          const state = document.createElement("td"); state.textContent = `${item.enabled ? "已启用" : "已停用"} / v${item.version}`;
           const bindings = document.createElement("td");
-          const input = document.createElement("input"); input.value = (item.group_ids || []).join(" "); input.inputMode = "numeric"; input.setAttribute("aria-label", `${item.name} ???`); bindings.append(input);
+          const input = document.createElement("input"); input.value = (item.group_ids || []).join(" "); input.inputMode = "numeric"; input.setAttribute("aria-label", `${item.name} 绑定群`); bindings.append(input);
           const counts = document.createElement("td"); counts.textContent = `${item.question_count || 0} / ${item.answer_count || 0}`;
           const actions = document.createElement("td"); actions.className = "actions";
-          const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "secondary"; toggle.textContent = item.enabled ? "??" : "??";
+          const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "secondary"; toggle.textContent = item.enabled ? "停用" : "启用";
           toggle.addEventListener("click", async () => {
             toggle.disabled = true;
-            try { await postSecure("api/migration/library/enabled", { library_id: item.library_id, enabled: !item.enabled }); await loadExternalLibraries(); setText("external-library-message", `???${item.enabled ? "??" : "??"}?`); }
-            catch (error) { setText("external-library-message", error?.message || "?????????"); }
+            try { await postSecure("api/migration/library/enabled", { library_id: item.library_id, enabled: !item.enabled }); await loadExternalLibraries(); setText("external-library-message", `词库已${item.enabled ? "停用" : "启用"}。`); }
+            catch (error) { setText("external-library-message", error?.message || "词库状态更新失败。"); }
             finally { toggle.disabled = false; }
           });
-          const save = document.createElement("button"); save.type = "button"; save.className = "secondary"; save.textContent = "????";
+          const save = document.createElement("button"); save.type = "button"; save.className = "secondary"; save.textContent = "保存绑定";
           save.addEventListener("click", async () => {
             const groupIds = input.value.split(/\s+/).map(value => value.trim()).filter(Boolean);
-            try { await postSecure("api/migration/library/bindings", { library_id: item.library_id, group_ids: groupIds }); await loadExternalLibraries(); setText("external-library-message", "???????"); }
-            catch (error) { setText("external-library-message", error?.message || "????????"); }
+            try { await postSecure("api/migration/library/bindings", { library_id: item.library_id, group_ids: groupIds }); await loadExternalLibraries(); setText("external-library-message", "绑定群已更新。"); }
+            catch (error) { setText("external-library-message", error?.message || "绑定群更新失败。"); }
           });
-          const update = document.createElement("button"); update.type = "button"; update.className = "secondary"; update.textContent = "????";
-          update.addEventListener("click", () => { el("migration-operation").value = "update"; el("migration-library").value = item.library_id; el("migration-name").value = item.name || ""; el("migration-group").value = item.group_ids?.[0] || ""; updateMigrationOperation(); el("migration-file").focus(); setText("external-library-message", "????? .cl ?????????????????"); });
-          const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger"; remove.textContent = "??";
+          const update = document.createElement("button"); update.type = "button"; update.className = "secondary"; update.textContent = "选择更新";
+          update.addEventListener("click", () => { el("migration-operation").value = "update"; el("migration-library").value = item.library_id; el("migration-name").value = item.name || ""; el("migration-group").value = item.group_ids?.[0] || ""; updateMigrationOperation(); el("migration-file").focus(); setText("external-library-message", "请选择新的 .cl 文件并上传扫描，然后生成更新计划。"); });
+          const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger"; remove.textContent = "删除";
           remove.addEventListener("click", async () => {
-            if (!window.confirm(`?????????${item.name}????????????????????????`)) return;
+            if (!window.confirm(`确认删除外部词库“${item.name}”吗？执行前会自动备份，群聊自产词库不会受影响。`)) return;
             remove.disabled = true;
-            try { const data = await postSecure("api/migration/library/delete", { library_id: item.library_id, confirmed: true }); await loadExternalLibraries(); await refreshOverview(); setText("external-library-message", `??????????????${data.backup_name}`); }
-            catch (error) { setText("external-library-message", error?.message || "?????????"); }
+            try { const data = await postSecure("api/migration/library/delete", { library_id: item.library_id, confirmed: true }); await loadExternalLibraries(); await refreshOverview(); setText("external-library-message", `外部词库已删除，执行前备份：${data.backup_name}`); }
+            catch (error) { setText("external-library-message", error?.message || "外部词库删除失败。"); }
             finally { remove.disabled = false; }
           });
           actions.append(toggle, save, update, remove); row.append(name, state, bindings, counts, actions); return row;
         });
         el("external-library-body").replaceChildren(...rows);
-        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "???????????????????????????????"; row.append(cell); el("external-library-body").append(row); }
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "尚未创建可独立管理的外部词库。此前合并导入的内容不会在此列出。"; row.append(cell); el("external-library-body").append(row); }
         const options = externalLibraries.map(item => { const option = document.createElement("option"); option.value = item.library_id; option.textContent = `${item.name} / v${item.version}`; return option; });
         el("migration-library").replaceChildren(...options);
         updateMigrationOperation();
@@ -1078,7 +1078,7 @@
 
       function selectedFilterGroup() {
         const groupId = el("filter-group").value.trim();
-        if (!/^\d{5,20}$/.test(groupId)) throw new Error("?????? QQ ???");
+        if (!/^\d{5,20}$/.test(groupId)) throw new Error("请输入有效的 QQ 群号。");
         return groupId;
       }
 
@@ -1099,21 +1099,21 @@
         renderComponentChecks("filter-components", data.component_types);
         if (el("filter-group").value) renderGroupFilterRule(el("filter-group").value.trim());
         const statistics = Object.entries(data.statistics || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
-        setText("filters-message", statistics ? `?????${statistics}` : "?????????");
+        setText("filters-message", statistics ? `命中统计：${statistics}` : "尚无过滤命中记录。");
         await loadBlacklist();
       }
 
       function addPermissionGroup(groupId = "", adminIds = []) {
         const row = document.createElement("div"); row.className = "permission-row";
         const groupField = document.createElement("div");
-        const groupLabel = document.createElement("label"); groupLabel.textContent = "QQ??";
-        const groupInput = document.createElement("input"); groupInput.inputMode = "numeric"; groupInput.value = groupId; groupInput.placeholder = "?? QQ ??";
+        const groupLabel = document.createElement("label"); groupLabel.textContent = "QQ群号";
+        const groupInput = document.createElement("input"); groupInput.inputMode = "numeric"; groupInput.value = groupId; groupInput.placeholder = "输入 QQ 群号";
         groupField.append(groupLabel, groupInput);
         const adminField = document.createElement("div");
-        const adminLabel = document.createElement("label"); adminLabel.textContent = "???? QQ ?";
-        const adminInput = document.createElement("textarea"); adminInput.value = adminIds.join("\n"); adminInput.placeholder = "?????? QQ ?";
+        const adminLabel = document.createElement("label"); adminLabel.textContent = "子管理员 QQ 号";
+        const adminInput = document.createElement("textarea"); adminInput.value = adminIds.join("\n"); adminInput.placeholder = "每行填写一个 QQ 号";
         adminField.append(adminLabel, adminInput);
-        const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary"; remove.textContent = "??"; remove.addEventListener("click", () => row.remove());
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary"; remove.textContent = "移除"; remove.addEventListener("click", () => row.remove());
         row.append(groupField, adminField, remove); el("permission-groups").append(row);
       }
 
@@ -1123,7 +1123,7 @@
         setLines("plugin-admin-ids", data.plugin_admin_ids);
         el("permission-groups").replaceChildren();
         for (const entry of data.group_sub_admins || []) addPermissionGroup(entry.group_id, entry.admin_ids || []);
-        setText("permissions-message", `??? ${data.plugin_admin_ids?.length || 0} ???????${data.group_sub_admins?.length || 0} ??????????`);
+        setText("permissions-message", `已读取 ${data.plugin_admin_ids?.length || 0} 位插件管理员、${data.group_sub_admins?.length || 0} 个群的子管理员设置。`);
       }
 
       function permissionPayload() {
@@ -1133,8 +1133,8 @@
           const adminIds = row.querySelector("textarea").value.split(/\s+/).map(value => value.trim()).filter(Boolean);
           return { group_id: groupId, admin_ids: adminIds };
         });
-        if (pluginAdmins.some(value => !/^\d{5,20}$/.test(value))) throw new Error("????? QQ ????");
-        if (groups.some(entry => !/^\d{5,20}$/.test(entry.group_id) || entry.admin_ids.some(value => !/^\d{5,20}$/.test(value)))) throw new Error("???????? QQ ????");
+        if (pluginAdmins.some(value => !/^\d{5,20}$/.test(value))) throw new Error("插件管理员 QQ 号无效。");
+        if (groups.some(entry => !/^\d{5,20}$/.test(entry.group_id) || entry.admin_ids.some(value => !/^\d{5,20}$/.test(value)))) throw new Error("群号或群子管理员 QQ 号无效。");
         return { plugin_admin_ids: pluginAdmins, group_sub_admins: groups, revision: permissionRevision || "" };
       }
 
@@ -1163,15 +1163,15 @@
         const source = el(id).value.trim();
         if (!source) return fallback;
         const value = JSON.parse(source);
-        if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("??? HTTP ????? JSON ???");
+        if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("自定义 HTTP 映射必须是 JSON 对象。");
         return value;
       }
 
       async function loadTtsSecrets() {
         const data = payloadData(await bridge.apiGet("api/tts/secrets"));
         const keys = data.keys || [];
-        setText("tts-secret-state", data.configured ? `??? DPAPI ???${keys.join("?")}??? ${data.mask || "****"}` : "?????????");
-        setText("tts-secret-message", "?????????????????");
+        setText("tts-secret-state", data.configured ? `已通过 DPAPI 保存：${keys.join("、")}；掩码 ${data.mask || "****"}` : "尚未保存云端密钥。");
+        setText("tts-secret-message", "密钥状态已刷新，明文不会返回页面。");
       }
 
       async function loadTtsSettings() {
@@ -1204,9 +1204,9 @@
         el("tts-character-quota").value = data.daily_characters ?? 50000;
         updateTtsDriverFields();
         if (cloudTtsDrivers.has(data.driver)) await loadTtsSecrets();
-        setText("tts-reference-state", data.reference_audio_configured ? `????????${data.reference_audio_name}` : "????????");
+        setText("tts-reference-state", data.reference_audio_configured ? `已配置参考音频：${data.reference_audio_name}` : "未配置参考音频。");
         const runtime = data.runtime || {};
-        setText("tts-message", `?????${runtime.available ? "??????" : "???????"}??????${data.enabled ? "???" : "???"}?`);
+        setText("tts-message", `驱动状态：${runtime.available ? "当前环境可用" : "当前环境未就绪"}；语音回复：${data.enabled ? "已启用" : "已关闭"}。`);
       }
 
       function ttsPayload() {
@@ -1244,24 +1244,24 @@
         const data = payloadData(await bridge.apiGet("api/filters/blacklist"));
         const rows = (data.entries || []).map(entry => {
           const row = document.createElement("tr");
-          for (const value of [entry.scope === "global" ? "??" : "??", entry.group_id || "-", entry.user_id, entry.hit_count, entry.blocked ? (entry.manual ? "????" : "????") : "???"]) {
+          for (const value of [entry.scope === "global" ? "全局" : "按群", entry.group_id || "-", entry.user_id, entry.hit_count, entry.blocked ? (entry.manual ? "人工封禁" : "自动封禁") : "未封禁"]) {
             const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
           }
           const actionCell = document.createElement("td"); const button = document.createElement("button");
-          button.type = "button"; button.className = entry.blocked ? "secondary" : "danger"; button.textContent = entry.blocked ? "??" : "??";
+          button.type = "button"; button.className = entry.blocked ? "secondary" : "danger"; button.textContent = entry.blocked ? "解封" : "封禁";
           button.addEventListener("click", async () => { await updateBlacklist(entry.scope, entry.group_id, entry.user_id, !entry.blocked); });
           actionCell.append(button); row.append(actionCell); return row;
         });
-        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6; cell.textContent = "?????"; row.append(cell); rows.push(row); }
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6; cell.textContent = "暂无记录。"; row.append(cell); rows.push(row); }
         el("blacklist-body").replaceChildren(...rows);
       }
 
-      const taskTypeNames = { media_scan: "??????", database_backup: "?????", artifact_cleanup: "??????", filter_cleanup: "??????" };
-      const taskStatusNames = { never: "????", running: "???", success: "??", failed: "??", interrupted: "???" };
+      const taskTypeNames = { media_scan: "媒体健康扫描", database_backup: "数据库备份", artifact_cleanup: "过期产物清理", filter_cleanup: "过滤词库清理" };
+      const taskStatusNames = { never: "尚未执行", running: "执行中", success: "成功", failed: "失败", interrupted: "被中断" };
 
       function taskSummary(summary) {
         const entries = Object.entries(summary || {});
-        return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" ? ") : "-";
+        return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ") : "-";
       }
 
       function updateTaskFields() {
@@ -1273,18 +1273,18 @@
       function renderTaskHistory(history) {
         const rows = (history || []).map(entry => {
           const row = document.createElement("tr");
-          for (const value of [new Date(entry.started_at).toLocaleString(), entry.trigger_type === "manual" ? "??" : "??", taskStatusNames[entry.status] || entry.status, taskSummary(entry.summary)]) {
+          for (const value of [new Date(entry.started_at).toLocaleString(), entry.trigger_type === "manual" ? "手动" : "计划", taskStatusNames[entry.status] || entry.status, taskSummary(entry.summary)]) {
             const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
           }
           return row;
         });
-        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 4; cell.textContent = "???????"; row.append(cell); rows.push(row); }
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 4; cell.textContent = "暂无执行记录。"; row.append(cell); rows.push(row); }
         el("task-history").replaceChildren(...rows);
       }
 
       function editTask(task = null) {
         selectedTask = task;
-        setText("task-editor-title", task ? "????" : "????");
+        setText("task-editor-title", task ? "编辑任务" : "新建任务");
         el("task-name").value = task?.name || "";
         el("task-type").value = task?.task_type || "media_scan";
         el("task-group").value = task?.group_id || "";
@@ -1303,17 +1303,17 @@
           const button = document.createElement("button"); button.type = "button";
           button.textContent = task.name;
           const status = taskStatusNames[task.last_status] || task.last_status;
-          const nextRun = task.next_run_at ? new Date(task.next_run_at).toLocaleString() : "???";
-          const meta = document.createElement("small"); meta.textContent = `${taskTypeNames[task.task_type] || task.task_type} ? ${task.enabled ? "???" : "???"} ? ${status} ? ?? ${nextRun}`;
+          const nextRun = task.next_run_at ? new Date(task.next_run_at).toLocaleString() : "未安排";
+          const meta = document.createElement("small"); meta.textContent = `${taskTypeNames[task.task_type] || task.task_type} · ${task.enabled ? "已启用" : "已停用"} · ${status} · 下次 ${nextRun}`;
           button.append(meta); button.addEventListener("click", () => { document.querySelectorAll("#tasks-list button").forEach(item => item.classList.toggle("active", item === button)); editTask(task); });
           if (task.task_id === selectId) { button.classList.add("active"); selectedTask = task; }
           return button;
         });
-        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "?????????"; buttons.push(p); }
+        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "尚未创建后台任务。"; buttons.push(p); }
         el("tasks-list").replaceChildren(...buttons);
         const selected = tasks.find(task => task.task_id === selectId) || null;
         editTask(selected);
-        setText("tasks-message", `? ${tasks.length} ??????????`);
+        setText("tasks-message", `共 ${tasks.length} 个任务，列表已刷新。`);
       }
 
       function taskPayload(confirmed = false) {
@@ -1332,7 +1332,7 @@
 
       async function saveTask(confirmed = false) {
         const data = await postSecure("api/tasks/save", taskPayload(confirmed));
-        await loadTasks(data.task_id); setText("tasks-message", "?????? ");
+        await loadTasks(data.task_id); setText("tasks-message", "任务已保存。 ");
       }
 
       function confirmTaskAction(title, copy, action) {
@@ -1342,21 +1342,21 @@
       async function loadBackups() {
         const data = payloadData(await bridge.apiGet("api/backups"));
         selectedBackup = null; el("backup-restore").disabled = true;
-        setText("backup-name", "???"); setText("backup-integrity", "-"); setText("backup-schema", "-"); setText("backup-counts", "-");
-        const kindNames = { restore_safety: "????", media_cleanup: "????", filter_cleanup: "????", library_delete: "????", contribution_delete: "??????", legacy_import: "?????", scheduled: "????", other: "??" };
+        setText("backup-name", "未选择"); setText("backup-integrity", "-"); setText("backup-schema", "-"); setText("backup-counts", "-");
+        const kindNames = { restore_safety: "恢复保险", media_cleanup: "媒体清理", filter_cleanup: "过滤清理", library_delete: "词库删除", contribution_delete: "成员贡献删除", legacy_import: "旧词库导入", scheduled: "定时备份", other: "其他" };
         const buttons = (data.backups || []).map(entry => {
           const button = document.createElement("button"); button.type = "button";
           button.textContent = entry.name;
-          const meta = document.createElement("small"); meta.textContent = `${kindNames[entry.kind] || entry.kind} ? ${formatBytes(entry.size_bytes)} ? ${new Date(entry.modified_at).toLocaleString()}`;
+          const meta = document.createElement("small"); meta.textContent = `${kindNames[entry.kind] || entry.kind} · ${formatBytes(entry.size_bytes)} · ${new Date(entry.modified_at).toLocaleString()}`;
           button.append(meta); button.addEventListener("click", () => inspectBackup(entry.name, button)); return button;
         });
-        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "????????"; buttons.push(p); }
-        el("backups-list").replaceChildren(...buttons); setText("backups-message", `? ${(data.backups || []).length} ????`);
+        if (!buttons.length) { const p = document.createElement("p"); p.style.padding = "14px"; p.textContent = "暂无数据库备份。"; buttons.push(p); }
+        el("backups-list").replaceChildren(...buttons); setText("backups-message", `共 ${(data.backups || []).length} 个备份。`);
       }
 
       function auditDetails(details) {
         const entries = Object.entries(details || {});
-        return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" ? ") : "-";
+        return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ") : "-";
       }
 
       async function loadAudit(reset) {
@@ -1367,7 +1367,7 @@
         if (reset) {
           const selected = action;
           el("audit-action").replaceChildren(
-            Object.assign(document.createElement("option"), { value: "", textContent: "????" }),
+            Object.assign(document.createElement("option"), { value: "", textContent: "全部动作" }),
             ...(data.actions || []).map(item => Object.assign(document.createElement("option"), { value: item.action, textContent: `${item.label} (${item.count})` }))
           );
           el("audit-action").value = selected;
@@ -1383,36 +1383,36 @@
         if (reset) el("audit-body").replaceChildren(...rows);
         else el("audit-body").append(...rows);
         if (reset && !rows.length) {
-          const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "???????"; row.append(cell); el("audit-body").append(row);
+          const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 5; cell.textContent = "暂无审计记录。"; row.append(cell); el("audit-body").append(row);
         }
         auditBeforeId = data.next_before_id || null;
         el("audit-more").disabled = !data.has_more;
-        setText("audit-message", data.has_more ? "????????????????" : "?????????????");
+        setText("audit-message", data.has_more ? "已加载本页，可继续读取更早记录。" : "已到达当前筛选的最早记录。");
       }
 
       async function loadDiagnostics() {
         const data = payloadData(await bridge.apiGet("api/diagnostics"));
-        const modeNames = { disabled: "??", learning: "???", reply: "???", learning_reply: "?????", silent: "????" };
-        const reasonNames = { disabled: "??", cooldown: "??", filtered: "??", no_match: "???", probability: "????", exact: "??", regex: "??", similarity: "??" };
+        const modeNames = { disabled: "停用", learning: "仅学习", reply: "仅回复", learning_reply: "学习并回复", silent: "静默学习" };
+        const reasonNames = { disabled: "停用", cooldown: "冷却", filtered: "过滤", no_match: "无匹配", probability: "概率跳过", exact: "精确", regex: "正则", similarity: "相似" };
         const rows = (data.groups || []).map(group => {
           const row = document.createElement("tr");
           const runtime = group.runtime || {}; const database = group.database || {};
-          const reasons = Object.entries(runtime.reply_reasons || {}).map(([reason, count]) => `${reasonNames[reason] || reason}: ${count}`).join(" ? ") || "???";
+          const reasons = Object.entries(runtime.reply_reasons || {}).map(([reason, count]) => `${reasonNames[reason] || reason}: ${count}`).join(" · ") || "无决策";
           const values = [
             `${group.group_id}\n${modeNames[group.mode] || group.mode}`,
-            `?? ${database.questions || 0} ? ?? ${database.answers || 0} ? ??? ${database.answer_weight || 0}\n??? ${database.pending_messages || 0} ? ???? ${database.active_replies || 0} ? ?? ${database.media_assets || 0}`,
-            `??? ${runtime.normalized_messages || 0} ? ?? ${runtime.accepted_learning_messages || 0} ? ?? ${runtime.learned_pairs || 0}\n?? ${runtime.duplicates || 0} ? ?? ${runtime.chain_resets || 0}`,
-            `?? ${runtime.recalls_received || 0} ? ????? ${runtime.pending_recalls_removed || 0}`,
-            `?? ${runtime.reply_decisions || 0} ? ?? ${runtime.successful_sends || 0}\n${reasons}`,
-            runtime.last_activity_at ? new Date(runtime.last_activity_at).toLocaleString() : "??????",
+            `问题 ${database.questions || 0} · 答案 ${database.answers || 0} · 总权重 ${database.answer_weight || 0}\n待固化 ${database.pending_messages || 0} · 活跃回复 ${database.active_replies || 0} · 媒体 ${database.media_assets || 0}`,
+            `规范化 ${runtime.normalized_messages || 0} · 接受 ${runtime.accepted_learning_messages || 0} · 问答 ${runtime.learned_pairs || 0}\n重复 ${runtime.duplicates || 0} · 断链 ${runtime.chain_resets || 0}`,
+            `事件 ${runtime.recalls_received || 0} · 删除待固化 ${runtime.pending_recalls_removed || 0}`,
+            `决策 ${runtime.reply_decisions || 0} · 发送 ${runtime.successful_sends || 0}\n${reasons}`,
+            runtime.last_activity_at ? new Date(runtime.last_activity_at).toLocaleString() : "本次运行暂无",
           ];
           for (const value of values) { const cell = document.createElement("td"); cell.textContent = value; cell.style.whiteSpace = "pre-line"; row.append(cell); }
           return row;
         });
-        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6; cell.textContent = "???????????????"; row.append(cell); rows.push(row); }
+        if (!rows.length) { const row = document.createElement("tr"); const cell = document.createElement("td"); cell.colSpan = 6; cell.textContent = "暂无已配置或有词库数据的群聊。"; row.append(cell); rows.push(row); }
         el("diagnostics-body").replaceChildren(...rows);
-        const startedAt = data.runtime_started_at ? new Date(data.runtime_started_at).toLocaleString() : "??";
-        setText("diagnostics-message", `???????${startedAt}???? ${(data.groups || []).length} ????`);
+        const startedAt = data.runtime_started_at ? new Date(data.runtime_started_at).toLocaleString() : "未知";
+        setText("diagnostics-message", `运行计数起点：${startedAt}。已刷新 ${(data.groups || []).length} 个群聊。`);
       }
 
       async function inspectBackup(name, button) {
@@ -1422,12 +1422,12 @@
         setText("backup-name", data.name); setText("backup-integrity", data.integrity); setText("backup-schema", `v${data.schema_version}`);
         setText("backup-counts", `${data.counts?.questions ?? 0} / ${data.counts?.answers ?? 0}`);
         el("backup-restore").disabled = !data.restorable;
-        setText("backups-message", data.restorable ? "???????????????" : "????????");
+        setText("backups-message", data.restorable ? "备份完整性检查通过，可以恢复。" : "此备份不可恢复。");
       }
 
       async function updateBlacklist(scope, groupId, userId, blocked) {
         await postSecure("api/filters/blacklist/update", { scope, group_id: groupId || "", user_id: userId, blocked });
-        await loadBlacklist(); setText("filters-message", blocked ? `????? ${userId}?` : `????? ${userId} ???????????`);
+        await loadBlacklist(); setText("filters-message", blocked ? `已封禁用户 ${userId}。` : `已解除用户 ${userId} 的封禁并清零命中次数。`);
       }
 
       async function loadMediaPreview() {
@@ -1444,7 +1444,7 @@
           const response = await bridge.apiPost("api/auth/login", { password: "" });
           authState = { setup_required: false, authenticated: true, csrf_token: payloadData(response).csrf_token };
           await showDashboard();
-        } catch (error) { setText("auth-message", error?.message || "???????????"); }
+        } catch (error) { setText("auth-message", error?.message || "操作失败，请稍后重试。"); }
         finally { el("submit").disabled = false; }
       });
 
@@ -1459,9 +1459,9 @@
       el("tab-overview").addEventListener("click", () => showView("overview"));
       el("overview-refresh").addEventListener("click", async () => {
         const button = el("overview-refresh");
-        button.disabled = true; setText("overview-message", "??????...");
-        try { await refreshOverview(); setText("overview-message", "????????"); }
-        catch (error) { setText("overview-message", error?.message || "?????????"); }
+        button.disabled = true; setText("overview-message", "正在刷新统计...");
+        try { await refreshOverview(); setText("overview-message", "概览统计已更新。"); }
+        catch (error) { setText("overview-message", error?.message || "概览统计刷新失败。"); }
         finally { button.disabled = false; }
       });
       el("tab-groups").addEventListener("click", () => showView("groups"));
@@ -1476,42 +1476,42 @@
       el("tab-diagnostics").addEventListener("click", () => showView("diagnostics"));
       el("tab-audit").addEventListener("click", () => showView("audit"));
       el("task-type").addEventListener("change", updateTaskFields);
-      el("task-new").addEventListener("click", () => { editTask(); setText("tasks-message", "??????? "); });
+      el("task-new").addEventListener("click", () => { editTask(); setText("tasks-message", "正在新建任务。 "); });
       el("tasks-refresh").addEventListener("click", async () => {
-        const button = el("tasks-refresh"); button.disabled = true; setText("tasks-message", "??????...");
-        try { await loadTasks(); } catch (error) { setText("tasks-message", error?.message || "??????? "); } finally { button.disabled = false; }
+        const button = el("tasks-refresh"); button.disabled = true; setText("tasks-message", "正在刷新任务...");
+        try { await loadTasks(); } catch (error) { setText("tasks-message", error?.message || "任务刷新失败。 "); } finally { button.disabled = false; }
       });
       el("task-save").addEventListener("click", async () => {
         const destructive = el("task-type").value === "filter_cleanup" && el("task-cleanup-mode").value === "apply";
-        if (destructive) return confirmTaskAction("????????", "???????????????????????????????????????????????????", () => saveTask(true));
-        try { await saveTask(false); } catch (error) { setText("tasks-message", error?.message || "??????? "); }
+        if (destructive) return confirmTaskAction("确认自动清理任务", "该任务会在后台无人值守地删除命中过滤规则的答案。每次执行都会先创建数据库备份，并在事务内重新检查候选。", () => saveTask(true));
+        try { await saveTask(false); } catch (error) { setText("tasks-message", error?.message || "任务保存失败。 "); }
       });
       el("task-run").addEventListener("click", async () => {
         if (!selectedTask) return;
-        const execute = async confirmed => { const data = await postSecure("api/tasks/run", { task_id: selectedTask.task_id, confirmed }); await loadTasks(selectedTask.task_id); setText("tasks-message", `????${data.status === "success" ? "??" : "??"}?${taskSummary(data.summary)}`); };
-        if (selectedTask.destructive) return confirmTaskAction("??????????", "???????????????????????????????", () => execute(true));
-        try { await execute(false); } catch (error) { setText("tasks-message", error?.message || "??????? "); }
+        const execute = async confirmed => { const data = await postSecure("api/tasks/run", { task_id: selectedTask.task_id, confirmed }); await loadTasks(selectedTask.task_id); setText("tasks-message", `任务执行${data.status === "success" ? "完成" : "失败"}：${taskSummary(data.summary)}`); };
+        if (selectedTask.destructive) return confirmTaskAction("确认立即执行自动清理", "将立即备份数据库、重新检查候选，并删除当前命中过滤规则的答案。", () => execute(true));
+        try { await execute(false); } catch (error) { setText("tasks-message", error?.message || "任务执行失败。 "); }
       });
       el("task-delete").addEventListener("click", () => {
         if (!selectedTask) return;
-        confirmTaskAction("??????", `??????${selectedTask.name}????????????????????????`, async () => { await postSecure("api/tasks/delete", { task_id: selectedTask.task_id, revision: selectedTask.revision, confirmed: true }); selectedTask = null; await loadTasks(""); setText("tasks-message", "?????? "); });
+        confirmTaskAction("确认删除任务", `将删除任务“${selectedTask.name}”及其执行历史，不会删除已生成的备份或词库内容。`, async () => { await postSecure("api/tasks/delete", { task_id: selectedTask.task_id, revision: selectedTask.revision, confirmed: true }); selectedTask = null; await loadTasks(""); setText("tasks-message", "任务已删除。 "); });
       });
       el("task-confirm-cancel").addEventListener("click", () => { pendingTaskAction = null; el("task-confirm-dialog").close(); });
       el("task-confirm-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!pendingTaskAction) return;
         const action = pendingTaskAction; el("task-confirm-submit").disabled = true;
         try { await action(); pendingTaskAction = null; el("task-confirm-dialog").close(); }
-        catch (error) { setText("task-confirm-message", error?.message || "??????? "); }
+        catch (error) { setText("task-confirm-message", error?.message || "任务操作失败。 "); }
         finally { el("task-confirm-submit").disabled = false; }
       });
       el("diagnostics-refresh").addEventListener("click", async () => {
-        const button = el("diagnostics-refresh"); button.disabled = true; setText("diagnostics-message", "??????...");
+        const button = el("diagnostics-refresh"); button.disabled = true; setText("diagnostics-message", "正在刷新诊断...");
         try { await loadDiagnostics(); }
-        catch (error) { setText("diagnostics-message", error?.message || "?????????"); }
+        catch (error) { setText("diagnostics-message", error?.message || "运行诊断刷新失败。"); }
         finally { button.disabled = false; }
       });
-      el("migration-refresh").addEventListener("click", () => loadMigrationStatus().catch(error => setText("migration-message", error?.message || "?????????")));
-      el("external-library-refresh").addEventListener("click", () => loadExternalLibraries().then(() => setText("external-library-message", "??????????")).catch(error => setText("external-library-message", error?.message || "?????????")));
+      el("migration-refresh").addEventListener("click", () => loadMigrationStatus().catch(error => setText("migration-message", error?.message || "迁移记录读取失败。")));
+      el("external-library-refresh").addEventListener("click", () => loadExternalLibraries().then(() => setText("external-library-message", "外部词库列表已更新。")).catch(error => setText("external-library-message", error?.message || "外部词库读取失败。")));
       el("migration-operation").addEventListener("change", updateMigrationOperation);
       el("migration-library").addEventListener("change", () => {
         const item = externalLibraries.find(candidate => candidate.library_id === el("migration-library").value);
@@ -1519,56 +1519,56 @@
       });
       el("migration-upload").addEventListener("click", async () => {
         const file = el("migration-file").files?.[0];
-        if (!file || !file.name.toLowerCase().endsWith(".cl")) { setText("migration-message", "??? .cl ?????"); return; }
-        const button = el("migration-upload"); button.disabled = true; migrationUpload = null; migrationPlan = null; el("migration-prepare").disabled = true; el("migration-apply").classList.add("hidden"); setText("migration-message", "???????????...");
+        if (!file || !file.name.toLowerCase().endsWith(".cl")) { setText("migration-message", "请选择 .cl 词库文件。"); return; }
+        const button = el("migration-upload"); button.disabled = true; migrationUpload = null; migrationPlan = null; el("migration-prepare").disabled = true; el("migration-apply").classList.add("hidden"); setText("migration-message", "正在上传并执行隔离扫描...");
         try {
           await postSecure("api/migration/upload/authorize", { file_name: file.name, size_bytes: file.size });
           const data = payloadData(await bridge.upload("api/migration/upload", file));
-          migrationUpload = data; renderMigrationScan(data.scan); el("migration-prepare").disabled = false; setText("migration-message", "??????????????????????????");
-        } catch (error) { setText("migration-message", error?.message || "??????????"); }
+          migrationUpload = data; renderMigrationScan(data.scan); el("migration-prepare").disabled = false; setText("migration-message", "安全与兼容性扫描通过，可生成外部词库导入或更新计划。");
+        } catch (error) { setText("migration-message", error?.message || "词库上传或扫描失败。"); }
         finally { button.disabled = false; }
       });
       el("migration-prepare").addEventListener("click", async () => {
         if (!migrationUpload) return;
-        const button = el("migration-prepare"); button.disabled = true; button.classList.add("busy"); setText("migration-message", "?????????...");
+        const button = el("migration-prepare"); button.disabled = true; button.classList.add("busy"); setText("migration-message", "正在隔离转换旧词库...");
         try {
           const operation = el("migration-operation").value;
           const data = await postSecure("api/migration/prepare", { upload_id: migrationUpload.upload_id, group_id: selectedMigrationGroup(), operation, library_id: operation === "update" ? el("migration-library").value : "", library_name: el("migration-name").value.trim() });
           migrationPlan = data; migrationUpload = null; el("migration-file").value = ""; el("migration-apply").classList.remove("hidden");
-          setText("migration-plan", `?? ${data.import_id}?${data.operation === "update" ? "??" : "??"}?????${data.library_name}????? ${(data.group_ids || [data.group_id]).join("?")}??? ${data.question_count}??? ${data.answer_count}????? ${data.skipped_questions}??? ${data.skipped_answers}????? ${data.unknown_components}??????????`);
-          setText("migration-message", "?????????????????"); await loadMigrationStatus();
-        } catch (error) { setText("migration-message", error?.message || "????????"); }
+          setText("migration-plan", `计划 ${data.import_id}：${data.operation === "update" ? "更新" : "新建"}外部词库“${data.library_name}”，绑定群 ${(data.group_ids || [data.group_id]).join("、")}；问题 ${data.question_count}，答案 ${data.answer_count}；跳过问题 ${data.skipped_questions}，答案 ${data.skipped_answers}，未知组件 ${data.unknown_components}。计划一小时内有效。`);
+          setText("migration-message", "导入计划已生成，当前词库尚未改变。"); await loadMigrationStatus();
+        } catch (error) { setText("migration-message", error?.message || "旧词库转换失败。"); }
         finally { button.classList.remove("busy"); button.disabled = migrationUpload === null; }
       });
-      el("migration-apply").addEventListener("click", () => { if (!migrationPlan) return; setText("migration-confirm-message", ""); setText("migration-copy", `${migrationPlan.operation === "update" ? "?????" : "???"}?????${migrationPlan.library_name}??????????????????????????`); el("migration-dialog").showModal(); });
+      el("migration-apply").addEventListener("click", () => { if (!migrationPlan) return; setText("migration-confirm-message", ""); setText("migration-copy", `${migrationPlan.operation === "update" ? "将完整替换" : "将创建"}外部词库“${migrationPlan.library_name}”。执行前会自动备份数据库，群聊自产词库不会被修改。`); el("migration-dialog").showModal(); });
       el("migration-cancel").addEventListener("click", () => el("migration-dialog").close());
       el("migration-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!migrationPlan) return;
         try {
           const data = await postSecure("api/migration/apply", { import_id: migrationPlan.import_id, group_id: migrationPlan.group_id, confirmed: true });
           el("migration-dialog").close(); migrationPlan = null; el("migration-apply").classList.add("hidden"); el("migration-prepare").disabled = true;
-          setText("migration-plan", `????????? v${data.version}??? ${data.question_count}??? ${data.answer_count}???????${data.backup_name}`); setText("migration-message", "???????????????????????"); await loadMigrationStatus(); await loadExternalLibraries(); await refreshOverview(); await loadGroups();
-        } catch (error) { setText("migration-confirm-message", error?.message || "?????????"); }
+          setText("migration-plan", `操作完成：外部词库 v${data.version}，问题 ${data.question_count}，答案 ${data.answer_count}。执行前备份：${data.backup_name}`); setText("migration-message", "外部词库已经独立保存，可单独启停、更新和删除。"); await loadMigrationStatus(); await loadExternalLibraries(); await refreshOverview(); await loadGroups();
+        } catch (error) { setText("migration-confirm-message", error?.message || "旧词库导入未执行。"); }
       });
-      el("backups-refresh").addEventListener("click", () => loadBackups().catch(error => setText("backups-message", error?.message || "?????????")));
-      el("audit-refresh").addEventListener("click", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "?????????")));
-      el("audit-action").addEventListener("change", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "?????????")));
-      el("audit-more").addEventListener("click", () => loadAudit(false).catch(error => setText("audit-message", error?.message || "?????????")));
-      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `??? ${selectedBackup.name}?????????????????????????`); el("backup-restore-dialog").showModal(); });
+      el("backups-refresh").addEventListener("click", () => loadBackups().catch(error => setText("backups-message", error?.message || "备份列表读取失败。")));
+      el("audit-refresh").addEventListener("click", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
+      el("audit-action").addEventListener("change", () => loadAudit(true).catch(error => setText("audit-message", error?.message || "审计日志读取失败。")));
+      el("audit-more").addEventListener("click", () => loadAudit(false).catch(error => setText("audit-message", error?.message || "更早记录读取失败。")));
+      el("backup-restore").addEventListener("click", () => { if (!selectedBackup) return; setText("backup-restore-message", ""); setText("backup-restore-copy", `将恢复 ${selectedBackup.name}。当前数据库会先生成保险备份，成功后需要重新进入。`); el("backup-restore-dialog").showModal(); });
       el("backup-restore-cancel").addEventListener("click", () => el("backup-restore-dialog").close());
       el("backup-restore-form").addEventListener("submit", async event => {
         event.preventDefault(); if (!selectedBackup) return;
         try {
           const data = await postSecure("api/backups/restore", { name: selectedBackup.name, confirmed: true });
           el("backup-restore-dialog").close(); authState = null; selectedBackup = null;
-          await refreshAuth(); setText("auth-message", `??????????${data.safety_backup_name}???????`);
-        } catch (error) { setText("backup-restore-message", error?.message || "??????"); }
+          await refreshAuth(); setText("auth-message", `恢复完成，保险备份：${data.safety_backup_name}。请重新进入。`);
+        } catch (error) { setText("backup-restore-message", error?.message || "恢复未执行。"); }
       });
       el("permission-add-group").addEventListener("click", () => addPermissionGroup());
-      el("permissions-refresh").addEventListener("click", () => loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "?????????")));
+      el("permissions-refresh").addEventListener("click", () => loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。")));
       el("permissions-save").addEventListener("click", () => {
         try { permissionPayload(); setText("permissions-confirm-message", ""); el("permissions-dialog").showModal(); }
-        catch (error) { setText("permissions-message", error?.message || "???????"); }
+        catch (error) { setText("permissions-message", error?.message || "权限设置无效。"); }
       });
       el("permissions-cancel").addEventListener("click", () => el("permissions-dialog").close());
       el("permissions-form").addEventListener("submit", async event => {
@@ -1576,10 +1576,10 @@
         try {
           const data = await postSecure("api/permissions/update", { ...permissionPayload(), confirmed: true });
           permissionRevision = data.revision; el("permissions-dialog").close();
-          setText("permissions-message", "???????? AstrBot ?????");
-        } catch (error) { setText("permissions-confirm-message", error?.message || "????????"); }
+          setText("permissions-message", "权限设置已保存到 AstrBot 插件配置。");
+        } catch (error) { setText("permissions-confirm-message", error?.message || "权限设置未保存。"); }
       });
-      el("tts-refresh").addEventListener("click", () => loadTtsSettings().catch(error => setText("tts-message", error?.message || "?????????")));
+      el("tts-refresh").addEventListener("click", () => loadTtsSettings().catch(error => setText("tts-message", error?.message || "语音设置读取失败。")));
       el("tts-driver").addEventListener("change", () => updateTtsDriverFields(true));
       el("tts-save").addEventListener("click", async () => {
         const button = el("tts-save"); button.disabled = true;
@@ -1587,24 +1587,24 @@
           const data = await postSecure("api/tts/settings/update", ttsPayload());
           ttsRevision = data.revision;
           el("tts-reference").value = ""; el("tts-clear-reference").checked = false;
-          setText("tts-reference-state", data.reference_audio_configured ? `????????${data.reference_audio_name}` : "????????");
-          setText("tts-message", `??????????${data.runtime?.available ? "????" : "?????"}?`);
-        } catch (error) { setText("tts-message", error?.message || "?????????"); }
+          setText("tts-reference-state", data.reference_audio_configured ? `已配置参考音频：${data.reference_audio_name}` : "未配置参考音频。");
+          setText("tts-message", `语音设置已保存；驱动${data.runtime?.available ? "当前可用" : "当前未就绪"}。`);
+        } catch (error) { setText("tts-message", error?.message || "语音设置保存失败。"); }
         finally { button.disabled = false; }
       });
       el("tts-test").addEventListener("click", async () => {
-        const button = el("tts-test"); button.disabled = true; setText("tts-test-result", "????...");
+        const button = el("tts-test"); button.disabled = true; setText("tts-test-result", "正在合成...");
         try {
           const cloud = cloudTtsDrivers.has(el("tts-driver").value);
-          if (cloud && !window.confirm("?? TTS ??????????????????????")) {
-            setText("tts-test-result", "????????"); return;
+          if (cloud && !window.confirm("云端 TTS 测试可能产生费用并消耗调用额度，确认继续吗？")) {
+            setText("tts-test-result", "已取消云端测试。"); return;
           }
           const data = await postSecure("api/tts/test", { text: el("tts-test-text").value.trim(), confirmed: cloud });
-          setText("tts-test-result", `?????${data.file_name}?${formatBytes(data.size_bytes)}??? ${data.driver}?`);
-        } catch (error) { setText("tts-test-result", error?.message || "???????"); }
+          setText("tts-test-result", `合成成功：${data.file_name}，${formatBytes(data.size_bytes)}，驱动 ${data.driver}。`);
+        } catch (error) { setText("tts-test-result", error?.message || "语音测试失败。"); }
         finally { button.disabled = false; }
       });
-      el("tts-secret-refresh").addEventListener("click", () => loadTtsSecrets().catch(error => setText("tts-secret-message", error?.message || "?????????")));
+      el("tts-secret-refresh").addEventListener("click", () => loadTtsSecrets().catch(error => setText("tts-secret-message", error?.message || "密钥状态读取失败。")));
       el("tts-secret-save").addEventListener("click", async () => {
         const fields = {
           api_key: el("tts-secret-api-key"),
@@ -1615,27 +1615,27 @@
           aliyun_token: el("tts-aliyun-token"),
         };
         const values = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value.trim()]).filter(([, value]) => value));
-        if (!Object.keys(values).length) { setText("tts-secret-message", "??????????????"); return; }
-        if (!window.confirm("??????? Windows ??? DPAPI ???????????")) return;
+        if (!Object.keys(values).length) { setText("tts-secret-message", "请至少填写一项要保存的密钥。"); return; }
+        if (!window.confirm("密钥将使用当前 Windows 用户的 DPAPI 加密保存，确认继续吗？")) return;
         const button = el("tts-secret-save"); button.disabled = true;
         try {
           const data = await postSecure("api/tts/secrets/update", { values, confirmed: true });
           Object.values(fields).forEach(input => { input.value = ""; });
-          setText("tts-secret-state", `??? DPAPI ???${(data.keys || []).join("?")}??? ${data.mask || "****"}`);
-          setText("tts-secret-message", "?????????????????????????");
-        } catch (error) { setText("tts-secret-message", error?.message || "?????????"); }
+          setText("tts-secret-state", `已通过 DPAPI 保存：${(data.keys || []).join("、")}；掩码 ${data.mask || "****"}`);
+          setText("tts-secret-message", "云端密钥已保存。必要时请刷新语音设置查看驱动状态。");
+        } catch (error) { setText("tts-secret-message", error?.message || "云端密钥保存失败。"); }
         finally { button.disabled = false; }
       });
       el("tts-secret-clear").addEventListener("click", async () => {
-        if (!window.confirm("???????? TTS ???????????????")) return;
+        if (!window.confirm("这会清除全部云端 TTS 密钥，且无法撤销。确认继续吗？")) return;
         const button = el("tts-secret-clear"); button.disabled = true;
         try {
           await postSecure("api/tts/secrets/clear", { confirmed: true });
-          setText("tts-secret-state", "?????????"); setText("tts-secret-message", "???? TTS ??????");
-        } catch (error) { setText("tts-secret-message", error?.message || "?????????"); }
+          setText("tts-secret-state", "尚未保存云端密钥。"); setText("tts-secret-message", "全部云端 TTS 密钥已清除。");
+        } catch (error) { setText("tts-secret-message", error?.message || "云端密钥清除失败。"); }
         finally { button.disabled = false; }
       });
-      el("filter-group-load").addEventListener("click", () => { try { renderGroupFilterRule(selectedFilterGroup()); setText("filters-message", "??????????"); } catch (error) { setText("filters-message", error.message); } });
+      el("filter-group-load").addEventListener("click", () => { try { renderGroupFilterRule(selectedFilterGroup()); setText("filters-message", "已读取群聊附加规则。"); } catch (error) { setText("filters-message", error.message); } });
       el("filter-group-clear").addEventListener("click", () => { for (const key of ["contains", "exact", "regex", "sensitive"]) setLines(`group-filter-${key}`, []); renderComponentChecks("group-filter-components", []); });
       el("filters-save").addEventListener("click", async () => {
         try {
@@ -1644,21 +1644,21 @@
           if (groupRule) filterGroupRules = filterGroupRules.filter(item => String(item.group_id) !== groupId);
           if (groupRule && ["contains", "exact", "regex", "sensitive", "component_types"].some(key => groupRule[key].length)) filterGroupRules.push(groupRule);
           const data = await postSecure("api/filters/settings/update", { enabled: el("filters-enabled").checked, contains: lines("filter-contains"), exact: lines("filter-exact"), regex: lines("filter-regex"), sensitive: lines("filter-sensitive"), component_types: checkedComponents("filter-components"), blacklist_threshold: Number(el("blacklist-threshold").value), blacklist_scope: el("blacklist-scope").value, regex_timeout_ms: Number(el("filter-timeout").value), group_rules: filterGroupRules, revision: filterRevision || "" });
-          filterRevision = data.revision; filterGroupRules = data.group_rules || filterGroupRules; setText("filters-message", "???????? AstrBot ?????"); await loadGroups();
-        } catch (error) { setText("filters-message", error?.message || "?????????"); }
+          filterRevision = data.revision; filterGroupRules = data.group_rules || filterGroupRules; setText("filters-message", "过滤设置已保存到 AstrBot 插件配置。"); await loadGroups();
+        } catch (error) { setText("filters-message", error?.message || "过滤设置保存失败。"); }
       });
       el("filters-test").addEventListener("click", async () => {
-        try { const data = await postSecure("api/filters/test", { group_id: selectedFilterGroup(), text: el("filter-test-text").value, component_type: el("filter-test-type").value }); setText("filter-test-result", `?????${data.reply.matched ? data.reply.rule_type : "???"}?????${data.sensitive.matched ? "??" : "???"}?`); }
-        catch (error) { setText("filter-test-result", error?.message || "?????"); }
+        try { const data = await postSecure("api/filters/test", { group_id: selectedFilterGroup(), text: el("filter-test-text").value, component_type: el("filter-test-type").value }); setText("filter-test-result", `回复过滤：${data.reply.matched ? data.reply.rule_type : "未命中"}；敏感词：${data.sensitive.matched ? "命中" : "未命中"}。`); }
+        catch (error) { setText("filter-test-result", error?.message || "测试失败。"); }
       });
       el("filter-cleanup-prepare").addEventListener("click", async () => {
         try {
           const data = await postSecure("api/filters/cleanup/prepare", { group_id: selectedFilterGroup() });
           filterCleanupPlan = data; el("filter-cleanup-apply").classList.remove("hidden");
           const types = Object.entries(data.rule_type_counts || {}).map(([key, value]) => `${key} ${value}`).join(" / ");
-          setText("filter-cleanup-plan", `?? ${data.plan_id}????? ${data.affected_answers}????? ${data.affected_questions}???????? ${data.questions_becoming_empty}??????${types || "?"}?`);
-          setText("filters-message", "?????????????????");
-        } catch (error) { filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden"); setText("filter-cleanup-plan", error?.message || "?????????"); }
+          setText("filter-cleanup-plan", `计划 ${data.plan_id}：命中答案 ${data.affected_answers}，涉及问题 ${data.affected_questions}，删除后变空问题 ${data.questions_becoming_empty}。规则类型：${types || "无"}。`);
+          setText("filters-message", "过滤清理计划已生成，词库尚未改变。");
+        } catch (error) { filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden"); setText("filter-cleanup-plan", error?.message || "无法生成清理计划。"); }
       });
       el("filter-cleanup-apply").addEventListener("click", () => { setText("filter-cleanup-message", ""); el("filter-cleanup-dialog").showModal(); });
       el("filter-cleanup-cancel").addEventListener("click", () => el("filter-cleanup-dialog").close());
@@ -1667,54 +1667,54 @@
         try {
           const data = await postSecure("api/filters/cleanup/apply", { group_id: selectedFilterGroup(), plan_id: filterCleanupPlan.plan_id, confirmed: true });
           el("filter-cleanup-dialog").close(); filterCleanupPlan = null; el("filter-cleanup-apply").classList.add("hidden");
-          setText("filter-cleanup-plan", `????????? ${data.deleted_answers}?????? ${data.orphan_questions}???????${data.backup_name}`);
-          setText("filters-message", "????????????"); await showDashboard(); showView("filters");
-        } catch (error) { setText("filter-cleanup-message", error?.message || "??????"); }
+          setText("filter-cleanup-plan", `清理完成：删除答案 ${data.deleted_answers}，删除空问题 ${data.orphan_questions}。执行前备份：${data.backup_name}`);
+          setText("filters-message", "过滤规则词库清理已完成。"); await showDashboard(); showView("filters");
+        } catch (error) { setText("filter-cleanup-message", error?.message || "清理未执行。"); }
       });
-      el("blacklist-refresh").addEventListener("click", () => loadBlacklist().catch(error => setText("filters-message", error?.message || "????????")));
+      el("blacklist-refresh").addEventListener("click", () => loadBlacklist().catch(error => setText("filters-message", error?.message || "黑名单读取失败。")));
       el("blacklist-block").addEventListener("click", async () => {
-        try { const scope = el("manual-scope").value; const userId = el("blacklist-user").value.trim(); const groupId = scope === "group" ? el("blacklist-group").value.trim() : ""; if (!/^\d{5,20}$/.test(userId) || (scope === "group" && !/^\d{5,20}$/.test(groupId))) throw new Error("???????? QQ ?????"); await updateBlacklist(scope, groupId, userId, true); }
-        catch (error) { setText("filters-message", error?.message || "???????"); }
+        try { const scope = el("manual-scope").value; const userId = el("blacklist-user").value.trim(); const groupId = scope === "group" ? el("blacklist-group").value.trim() : ""; if (!/^\d{5,20}$/.test(userId) || (scope === "group" && !/^\d{5,20}$/.test(groupId))) throw new Error("请输入有效的用户 QQ 号和群号。"); await updateBlacklist(scope, groupId, userId, true); }
+        catch (error) { setText("filters-message", error?.message || "人工封禁失败。"); }
       });
       document.querySelectorAll('input[name="group-mode"]').forEach(input => input.addEventListener("change", updateTargetState));
-      el("group-load").addEventListener("click", async () => { try { await loadGroupSettings(); } catch (error) { setText("group-message", error?.message || "???????"); } });
+      el("group-load").addEventListener("click", async () => { try { await loadGroupSettings(); } catch (error) { setText("group-message", error?.message || "设置读取失败。"); } });
       el("group-save").addEventListener("click", async () => {
         try {
           const mode = document.querySelector('input[name="group-mode"]:checked')?.value;
-          if (!mode) throw new Error("??????????");
+          if (!mode) throw new Error("请选择群聊运行模式。");
           const targets = el("target-users").value.split(/\s+/).map(value => value.trim()).filter(Boolean);
           const probabilityText = el("group-probability").value.trim();
           const probability = probabilityText === "" ? null : Number(probabilityText);
-          if (probability !== null && (!Number.isFinite(probability) || probability < 0 || probability > 100)) throw new Error("??????? 0 ? 100 ??????");
+          if (probability !== null && (!Number.isFinite(probability) || probability < 0 || probability > 100)) throw new Error("回复概率必须是 0 到 100 之间的数字。");
           const data = await postSecure("api/groups/settings/update", { group_id: selectedSettingsGroup(), mode, target_user_ids: targets, probability_percent: probability, revision: groupRevision || "" });
-          groupRevision = data.revision; setText("group-message", "???????? AstrBot ?????"); await loadGroups();
-        } catch (error) { setText("group-message", error?.message || "???????"); }
+          groupRevision = data.revision; setText("group-message", "群聊设置已保存到 AstrBot 插件配置。"); await loadGroups();
+        } catch (error) { setText("group-message", error?.message || "设置保存失败。"); }
       });
-      el("library-search").addEventListener("click", async () => { try { await searchLibrary(); } catch (error) { setText("library-message", error?.message || "?????"); } });
+      el("library-search").addEventListener("click", async () => { try { await searchLibrary(); } catch (error) { setText("library-message", error?.message || "搜索失败。"); } });
       el("library-query").addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); el("library-search").click(); } });
       el("library-add").addEventListener("click", async () => {
         try {
           const data = await postSecure("api/library/add", { group_id: selectedLibraryGroup(), question: el("add-question").value.trim(), answer: el("add-answer").value.trim(), is_regex: el("add-regex").checked });
-          el("add-question").value = ""; el("add-answer").value = ""; setText("library-message", `${data.created ? "???" : "?????"}?Q${data.question_id} / A${data.answer_id}?`); await searchLibrary(); await loadQuestion(data.question_id);
-        } catch (error) { setText("library-message", error?.message || "?????"); }
+          el("add-question").value = ""; el("add-answer").value = ""; setText("library-message", `${data.created ? "已添加" : "已增加权重"}：Q${data.question_id} / A${data.answer_id}。`); await searchLibrary(); await loadQuestion(data.question_id);
+        } catch (error) { setText("library-message", error?.message || "添加失败。"); }
       });
       el("library-export").addEventListener("click", () => {
         try {
           libraryExportFormat = "archive";
-          setText("library-export-title", "???????");
-          setText("library-export-copy", "?????????? XLSX ?????????? JSONL??????????????????????");
+          setText("library-export-title", "导出当前群词库");
+          setText("library-export-copy", "导出包包含便于查看的 XLSX 和保留完整问答组件的 JSONL。文件可能含群聊原文与个人信息，请妥善保管。");
           selectedLibraryGroup(); setText("library-export-message", "");
           el("library-export-dialog").showModal();
-        } catch (error) { setText("library-message", error?.message || "???????"); }
+        } catch (error) { setText("library-message", error?.message || "无法导出词库。"); }
       });
       el("library-export-legacy").addEventListener("click", () => {
         try {
           libraryExportFormat = "legacy_cl";
-          setText("library-export-title", "???? .cl ??");
-          setText("library-export-copy", "?? .cl ?? pickle ???????????????????????????????????????????");
+          setText("library-export-title", "导出旧版 .cl 词库");
+          setText("library-export-copy", "旧版 .cl 使用 pickle 基础容器并可能包含群聊原文。仅远程或内嵌媒体可便携导出，本地媒体会转换成明确占位文本。");
           selectedLibraryGroup(); setText("library-export-message", "");
           el("library-export-dialog").showModal();
-        } catch (error) { setText("library-message", error?.message || "?????????"); }
+        } catch (error) { setText("library-message", error?.message || "无法导出旧版词库。"); }
       });
       el("library-export-cancel").addEventListener("click", () => el("library-export-dialog").close());
       el("library-export-form").addEventListener("submit", async event => {
@@ -1724,23 +1724,23 @@
           const prepared = await postSecure("api/library/export/prepare", { group_id: groupId, format: libraryExportFormat, confirmed: true });
           const result = await bridge.download("api/library/export", { ticket: prepared.ticket }, prepared.filename);
           el("library-export-dialog").close();
-          const degraded = prepared.degraded_components ? `????? ${prepared.degraded_components}` : "";
-          setText("library-message", `? ${groupId} ???????${result?.filename || "?????"}${degraded}`);
-        } catch (error) { setText("library-export-message", error?.message || "???????"); }
+          const degraded = prepared.degraded_components ? `；降级组件 ${prepared.degraded_components}` : "";
+          setText("library-message", `群 ${groupId} 的词库已导出：${result?.filename || "下载已开始"}${degraded}`);
+        } catch (error) { setText("library-export-message", error?.message || "词库导出失败。"); }
       });
       el("contribution-prepare").addEventListener("click", async () => {
         try {
           const userId = el("contribution-user").value.trim();
-          if (!/^\d{5,20}$/.test(userId)) throw new Error("???????? QQ ??");
+          if (!/^\d{5,20}$/.test(userId)) throw new Error("请输入有效的成员 QQ 号。");
           const data = await postSecure("api/library/contributions/prepare", { group_id: selectedLibraryGroup(), user_id: userId });
           contributionPlan = data; el("contribution-apply").classList.remove("hidden");
-          setText("contribution-plan", `?? ${data.plan_id}??? ${data.contributions}?????? ${data.affected_answers}?????? ${data.answers_becoming_empty}??????? ${data.questions_becoming_empty}?????? ${data.pending_messages}??????????`);
-        } catch (error) { contributionPlan = null; el("contribution-apply").classList.add("hidden"); setText("contribution-plan", error?.message || "?????????????"); }
+          setText("contribution-plan", `计划 ${data.plan_id}：贡献 ${data.contributions}，受影响答案 ${data.affected_answers}，将删除答案 ${data.answers_becoming_empty}，将删除空问题 ${data.questions_becoming_empty}，待固化消息 ${data.pending_messages}。计划一小时内有效。`);
+        } catch (error) { contributionPlan = null; el("contribution-apply").classList.add("hidden"); setText("contribution-plan", error?.message || "无法生成成员贡献删除计划。"); }
       });
       el("contribution-apply").addEventListener("click", () => {
         if (!contributionPlan) return;
         setText("contribution-message", "");
-        setText("contribution-copy", `???? ${contributionPlan.group_id} ??? ${contributionPlan.user_id} ???????????????????`);
+        setText("contribution-copy", `将删除群 ${contributionPlan.group_id} 中成员 ${contributionPlan.user_id} 的可追踪贡献。执行前会自动备份数据库。`);
         el("contribution-dialog").showModal();
       });
       el("contribution-cancel").addEventListener("click", () => el("contribution-dialog").close());
@@ -1749,9 +1749,9 @@
         try {
           const data = await postSecure("api/library/contributions/apply", { group_id: contributionPlan.group_id, user_id: contributionPlan.user_id, plan_id: contributionPlan.plan_id, confirmed: true });
           el("contribution-dialog").close(); contributionPlan = null; el("contribution-apply").classList.add("hidden");
-          setText("contribution-plan", `????????? ${data.removed_contributions}??????? ${data.reduced_answers}????? ${data.deleted_answers}?????? ${data.orphan_questions}???????? ${data.removed_pending_messages}???????${data.backup_name}`);
+          setText("contribution-plan", `删除完成：移除贡献 ${data.removed_contributions}，降低权重答案 ${data.reduced_answers}，删除答案 ${data.deleted_answers}，删除空问题 ${data.orphan_questions}，移除待固化消息 ${data.removed_pending_messages}。执行前备份：${data.backup_name}`);
           await searchLibrary();
-        } catch (error) { setText("contribution-message", error?.message || "??????"); }
+        } catch (error) { setText("contribution-message", error?.message || "删除未执行。"); }
       });
       el("delete-question").addEventListener("click", () => { if (currentQuestion) openLibraryDelete("question", currentQuestion.question_id); });
       el("library-delete-cancel").addEventListener("click", () => el("library-delete-dialog").close());
@@ -1761,29 +1761,29 @@
         try {
           const data = await postSecure(`api/library/delete-${target}`, { group_id: selectedLibraryGroup(), [`${target}_id`]: id, confirmed: true });
           el("library-delete-dialog").close(); pendingLibraryDelete = null; currentQuestion = null; el("question-detail").classList.add("hidden");
-          setText("library-message", `???????????${data.backup_name}`); await searchLibrary();
-        } catch (error) { setText("library-delete-message", error?.message || "??????"); }
+          setText("library-message", `删除完成，执行前备份：${data.backup_name}`); await searchLibrary();
+        } catch (error) { setText("library-delete-message", error?.message || "删除未执行。"); }
       });
       el("media-preview").addEventListener("click", async () => {
-        try { setText("media-message", "???..."); await loadMediaPreview(); setText("media-message", "??????"); }
-        catch (error) { setText("media-message", error?.message || "?????"); }
+        try { setText("media-message", "读取中..."); await loadMediaPreview(); setText("media-message", "预览已更新。"); }
+        catch (error) { setText("media-message", error?.message || "读取失败。"); }
       });
       el("media-scan").addEventListener("click", async () => {
         try {
-          setText("media-message", "???????????...");
+          setText("media-message", "正在扫描，不会删除内容...");
           const data = await postSecure("api/media/scan", { group_id: selectedGroup() });
           renderPreview(data.preview || {}); cleanupPlan = null; el("cleanup-apply").classList.add("hidden");
-          setText("cleanup-plan", "?????????");
-          setText("media-message", `?????${data.scanned_answers} ????${data.scanned_components} ??????`);
-        } catch (error) { setText("media-message", error?.message || "?????"); }
+          setText("cleanup-plan", "尚未生成清理计划。");
+          setText("media-message", `扫描完成：${data.scanned_answers} 个答案，${data.scanned_components} 个媒体组件。`);
+        } catch (error) { setText("media-message", error?.message || "扫描失败。"); }
       });
       el("cleanup-prepare").addEventListener("click", async () => {
         try {
           const data = await postSecure("api/media/cleanup/prepare", { group_id: selectedGroup(), mode: el("cleanup-mode").value });
           cleanupPlan = data; el("cleanup-apply").classList.remove("hidden");
-          setText("cleanup-plan", `?? ${data.plan_id}????? ${data.invalid_components}????? ${data.update_answers}????? ${data.delete_answers}??????????`);
-          setText("media-message", "?????????????");
-        } catch (error) { setText("media-message", error?.message || "?????????"); }
+          setText("cleanup-plan", `计划 ${data.plan_id}：失效组件 ${data.invalid_components}，更新答案 ${data.update_answers}，删除答案 ${data.delete_answers}。计划一小时内有效。`);
+          setText("media-message", "计划已生成，词库尚未改变。");
+        } catch (error) { setText("media-message", error?.message || "无法生成清理计划。"); }
       });
       el("cleanup-apply").addEventListener("click", () => { setText("reauth-message", ""); el("reauth-dialog").showModal(); });
       el("reauth-cancel").addEventListener("click", () => el("reauth-dialog").close());
@@ -1793,15 +1793,15 @@
         try {
           const data = await postSecure("api/media/cleanup/apply", { group_id: selectedGroup(), plan_id: cleanupPlan.plan_id, confirmed: true });
           el("reauth-dialog").close(); cleanupPlan = null; el("cleanup-apply").classList.add("hidden");
-          setText("cleanup-plan", `???????????${data.backup_name}`);
-          setText("media-message", `???? ${data.removed_components}????? ${data.updated_answers}????? ${data.deleted_answers}?`);
+          setText("cleanup-plan", `清理完成，执行前备份：${data.backup_name}`);
+          setText("media-message", `移除组件 ${data.removed_components}，更新答案 ${data.updated_answers}，删除答案 ${data.deleted_answers}。`);
           await loadMediaPreview();
-        } catch (error) { setText("reauth-message", error?.message || "??????"); }
+        } catch (error) { setText("reauth-message", error?.message || "清理未执行。"); }
       });
 
       (async () => {
         try { await bridge.ready(); await refreshAuth(); }
-        catch (error) { setText("auth-message", error?.message || "????????"); }
+        catch (error) { setText("auth-message", error?.message || "页面初始化失败。"); }
       })();
     </script>
   </body>
