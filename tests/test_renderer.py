@@ -136,6 +136,26 @@ def test_renderer_prefers_persisted_media_and_falls_back_to_url(monkeypatch, tmp
     assert remote_chain.chain[0].file == "https://example.test/fallback.png"
 
 
+def test_renderer_does_not_treat_onebot_image_id_as_local_file(monkeypatch):
+    renderer = load_renderer(monkeypatch)
+
+    chain = renderer.render_message_chain(
+        (
+            {
+                "type": "Image",
+                "data": {
+                    "file": "09AD9B554FB83AB4CDAFEA9135AC309B.jpeg",
+                    "url": "https://gchat.qpic.cn/download?temporary=1",
+                },
+            },
+        ),
+        max_plain_length=100,
+    )
+
+    assert chain is not None
+    assert chain.chain[0].file == "https://gchat.qpic.cn/download?temporary=1"
+
+
 def test_renderer_rejects_media_path_outside_data_directory(monkeypatch, tmp_path):
     renderer = load_renderer(monkeypatch)
     outside = tmp_path.parent / "outside.png"

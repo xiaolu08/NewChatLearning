@@ -16,7 +16,7 @@ status: 当前有效
 | 原版类型 | NapCat/AstrBot 方向 | 匹配 | 保存 | 重发策略 |
 | --- | --- | --- | --- | --- |
 | `Plain` | Plain | 是 | JSON | 原文发送 |
-| `Image` | Image/CQ image | 是 | 先按 NapCat 文件标识调用 `get_image` / `get_file`，再本地下载与 SHA-256 去重；解析失败仍保留原始组件 | 本地文件优先，缺失时回退远程 URL |
+| `Image` | Image/CQ image | 是 | 先按 NapCat 文件标识调用 `get_image` / `get_file`，再本地下载与 SHA-256 去重；解析失败仍保留原始组件 | 本地文件优先，缺失时回退远程 URL；发送解析失败时移除失效媒体并保留文本 |
 | `FlashImage` | 闪照或图片降级 | 是 | 已实现本地下载 | 当前按普通图片稳定降级 |
 | `Face` | Face | 是 | ID + 名称 | 按 ID 重发，失败用文本占位 |
 | `MarketFace` | 商城表情/原始 CQ | 是 | 从 NapCat 原始段补回标识并持久化可用媒体 | 图片可用时优先图片，否则原生 `mface` 段或文本降级 |

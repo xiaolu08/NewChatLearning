@@ -25,7 +25,23 @@ async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
     ):
         await event.send(chain)
         return None
-    messages = await parser(chain)
+    try:
+        messages = await parser(chain)
+    except (OSError, TypeError, ValueError):
+        # Expired media must not abort an otherwise valid text reply.
+        fallback = type(chain)()
+        fallback.chain = [
+            component
+            for component in getattr(chain, "chain", [])
+            if component.__class__.__name__.lower()
+            not in {"image", "record", "video", "file"}
+        ]
+        if not fallback.chain:
+            return None
+        try:
+            messages = await parser(fallback)
+        except (OSError, TypeError, ValueError):
+            return None
     if not messages:
         return None
     routing = {}

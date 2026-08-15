@@ -178,7 +178,9 @@ def _media_source(
             return str(candidate)
     local = str(data.get("path") or data.get("file_") or data.get("file") or "")
     if local and not local.startswith(("http://", "https://")):
-        return local
+        candidate = Path(local)
+        if candidate.is_file():
+            return str(candidate)
     return str(data.get("url") or local or "") if remote_fallback else ""
 
 
