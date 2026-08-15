@@ -38,6 +38,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "library": {
         "mode": "group",
         "excluded_group_ids": [],
+        "global_group_ids": [],
+        "local_only_group_ids": [],
         "group_tags": [],
     },
     "filters": {
@@ -222,7 +224,22 @@ class ConfigService:
     ) -> tuple[tuple[str, ...], ...]:
         library = self.snapshot()["library"]
         group_id = str(group_id)
-        if str(library.get("mode", "group")).lower() != "global":
+        local_only = {
+            str(item).strip()
+            for item in library.get("local_only_group_ids", [])
+            if str(item).strip()
+        }
+        if group_id in local_only:
+            return ((group_id,),)
+        global_groups = {
+            str(item).strip()
+            for item in library.get("global_group_ids", [])
+            if str(item).strip()
+        }
+        if (
+            group_id not in global_groups
+            and str(library.get("mode", "group")).lower() != "global"
+        ):
             return ((group_id,),)
 
         group_tags = self._normalized_group_tags(library.get("group_tags"))
@@ -262,6 +279,12 @@ class ConfigService:
                     if str(item).strip()
                 }
             ),
+            "global_group_ids": self._normalized_group_ids(
+                library.get("global_group_ids", [])
+            ),
+            "local_only_group_ids": self._normalized_group_ids(
+                library.get("local_only_group_ids", [])
+            ),
             "tagged_groups": len(group_tags),
             "tags": sorted({tag for tags in group_tags.values() for tag in tags}),
         }
@@ -282,6 +305,12 @@ class ConfigService:
             str(entry.get("group_id", "")).strip()
             for entry in snapshot["learning"].get("target_users", [])
             if isinstance(entry, dict) and str(entry.get("group_id", "")).strip()
+        )
+        values.update(
+            self._normalized_group_ids(snapshot["library"].get("global_group_ids", []))
+        )
+        values.update(
+            self._normalized_group_ids(snapshot["library"].get("local_only_group_ids", []))
         )
         values.update(
             str(entry.get("group_id", "")).strip()
@@ -385,21 +414,30 @@ class ConfigService:
 
     def cross_group_settings(self) -> dict[str, Any]:
         snapshot = self.snapshot()
-        tags = self._normalized_group_tags(snapshot["library"].get("group_tags"))
+        library = snapshot["library"]
+        tags = self._normalized_group_tags(library.get("group_tags"))
         permissions = self._validated_permission_update(snapshot["permissions"])
+        reply_group_ids = self._normalized_group_ids(snapshot["reply"].get("group_ids", []))
+        local_only_group_ids = self._normalized_group_ids(
+            library.get("local_only_group_ids", [])
+        )
+        global_group_ids = set(self._normalized_group_ids(library.get("global_group_ids", [])))
+        if str(library.get("mode", "group")).lower() == "global":
+            global_group_ids.update(reply_group_ids)
+        global_group_ids.difference_update(local_only_group_ids)
         return {
             "learning_group_ids": self._normalized_group_ids(
                 snapshot["learning"].get("group_ids", [])
             ),
-            "reply_group_ids": self._normalized_group_ids(
-                snapshot["reply"].get("group_ids", [])
-            ),
+            "reply_group_ids": reply_group_ids,
             "silent_group_ids": self._normalized_group_ids(
                 snapshot["reply"].get("silent_group_ids", [])
             ),
             "excluded_group_ids": self._normalized_group_ids(
-                snapshot["library"].get("excluded_group_ids", [])
+                library.get("excluded_group_ids", [])
             ),
+            "global_group_ids": sorted(global_group_ids),
+            "local_only_group_ids": local_only_group_ids,
             "group_tags": [
                 {"group_id": group_id, "tags": list(group_tags)}
                 for group_id, group_tags in tags.items()
@@ -449,7 +487,7 @@ class ConfigService:
         sub_admins: dict[str, list[str]] | None = None,
     ) -> dict[str, Any]:
         if action not in {"add", "remove"} or category not in {
-            "learning", "learnings", "reply", "tag", "subadmin", "unmerge"
+            "learning", "learnings", "reply", "tag", "subadmin", "unmerge", "globe"
         }:
             raise ValueError("invalid_cross_group_settings")
         normalized_groups = self._normalized_group_ids(group_ids)
@@ -492,6 +530,20 @@ class ConfigService:
                 if category == "unmerge":
                     library["excluded_group_ids"] = self._replace_group_memberships(
                         library.get("excluded_group_ids", []), normalized_groups, enabled
+                    )
+                if category == "globe":
+                    # Once an administrator uses the per-group command, explicit
+                    # memberships replace the legacy all-groups switch.
+                    library["mode"] = "group"
+                    library["global_group_ids"] = self._replace_group_memberships(
+                        library.get("global_group_ids", []),
+                        normalized_groups,
+                        enabled,
+                    )
+                    library["local_only_group_ids"] = self._replace_group_memberships(
+                        library.get("local_only_group_ids", []),
+                        normalized_groups,
+                        not enabled,
                     )
                 if category == "tag":
                     tags = self._normalized_group_tags(library.get("group_tags"))

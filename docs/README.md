@@ -27,6 +27,7 @@
 - [0.1.0-beta.31.post4 Release Notes](./releases/0.1.0-beta.31.post4.md)：首个公开预览版本的功能、限制和安装包校验信息。
 - [0.1.0-beta.31.post5 Release Notes](./releases/0.1.0-beta.31.post5.md)：跨群管理命令与私聊全局开关更新。
 - [0.1.0-beta.31.post6 Release Notes](./releases/0.1.0-beta.31.post6.md)：AstrBot 4.27.2 私聊事件过滤器加载热修复。
+- [0.1.0-beta.31.post12 Release Notes](./releases/0.1.0-beta.31.post12.md)：按群控制全局词库查询范围及群列表展示更新。
 
 ## 研究资料
 

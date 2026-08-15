@@ -510,10 +510,10 @@ class NewChatLearningPlugin(star.Star):
                 "/ncl media-cleanup-prepare [prune|drop-answer] - 准备清理\n"
                 "/ncl media-cleanup-apply <计划ID> confirm - 备份并执行清理\n"
                 "全局/插件管理员旧版跨群命令：\n"
-                "!grouplist - 查看学习、回复、自主管理和全局排除群\n"
+                "!grouplist - 查看学习、回复、自主管理和词库范围\n"
                 "!add/remove learning|learnings|reply <群号...>\n"
                 "!add tag <标签> <群号...> / !remove tag <群号...>\n"
-                "!add/remove subadmin|unmerge <群号...>"
+                "!add/remove subadmin|unmerge|globe <群号...>"
             )
         )
 
@@ -1255,7 +1255,9 @@ class NewChatLearningPlugin(star.Star):
             f"已开启学习的群：{joined('learning_group_ids')}\n"
             f"已开启回复的群：{joined('reply_group_ids')}\n"
             f"允许自主管理的群：{'、'.join(sub_admin_groups) if sub_admin_groups else '无'}\n"
-            f"不进入全局词库的群：{joined('excluded_group_ids')}"
+            f"不汇入全局词库的群：{joined('excluded_group_ids')}\n"
+            f"使用全局词库的群：{joined('global_group_ids')}\n"
+            f"仅使用本群词库的群：{joined('local_only_group_ids')}"
         )
 
     @staticmethod
@@ -1267,6 +1269,7 @@ class NewChatLearningPlugin(star.Star):
             "tag": "用法：!add tag <标签> <群号...> 或 !remove tag <群号...>",
             "subadmin": "用法：!add/remove subadmin <群号...>",
             "unmerge": "用法：!add/remove unmerge <群号...>",
+            "globe": "用法：!add/remove globe <群号...>",
         }
         return usages.get(category, "跨群设置命令无效。")
 

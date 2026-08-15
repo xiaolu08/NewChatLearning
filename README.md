@@ -4,7 +4,7 @@
 
 将 QQ 群聊里的相邻消息整理成可检索的问答词库，让 AstrBot 用本地算法学习和回复。核心学习、匹配和回复流程不调用 LLM，不主动消耗 Token。
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post11-orange)
+![Version](https://img.shields.io/badge/version-0.1.0--beta.31.post12-orange)
 ![Stage](https://img.shields.io/badge/stage-public%20beta-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.27.2-4c8eda)
@@ -30,7 +30,7 @@
 4. 点击 **进入** 管理会话。
 5. 建议先关闭自动回复，完成群设置、备份和词库迁移检查后再逐步启用。
 
-> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post11`。
+> 异常时重启 AstrBot，再确认插件版本为 `0.1.0-beta.31.post12`。
 
 ## 常用命令
 
@@ -56,7 +56,7 @@
 
 | 旧版命令 | 新版命令 | 含义 |
 | --- | --- | --- |
-| `!grouplist` | 原命令可直接使用 | 查看已开启学习、回复、允许自主管理及不进入全局词库的群 |
+| `!grouplist` | 原命令可直接使用 | 查看已开启学习、回复、允许自主管理、使用全局词库、仅使用本群词库及来源排除群 |
 | `!add learning <群号...>` | 原命令可直接使用 | 添加开启学习的群；`/ncl learning on` 只作用于当前群 |
 | `!remove learning <群号...>` | 原命令可直接使用 | 移除开启学习的群；同时退出这些群的静默学习状态 |
 | `!add learnings <群号...>` | 原命令可直接使用 | 同时开启学习和回复 |
@@ -66,6 +66,7 @@
 | `!add tag <标签> <群号...>` / `!remove tag <群号...>` | 原命令可直接使用 | 添加共享标签；移除时清除目标群的全部标签 |
 | `!add subadmin <群号...>` / `!remove subadmin <群号...>` | 原命令可直接使用 | 从 NapCat 读取目标群当前群主/群管理员并授予本群管理权，或移除该群授权 |
 | `!add unmerge <群号...>` / `!remove unmerge <群号...>` | 原命令可直接使用 | 添加/移除不进入全局词库的群 |
+| `!add globe <群号...>` / `!remove globe <群号...>` | 新版按群命令 | 允许/禁止目标回复群查询全局或标签共享词库；使用后按群设置取代旧的全部群模式 |
 | `!learning` | 私聊控制全局；群聊控制当前群 | 兼容入口：私聊时切换全局学习主开关，群聊时切换当前群学习 |
 | `!reply` | 私聊控制全局；群聊控制当前群 | 兼容入口：私聊时切换全局回复主开关，群聊时切换当前群词库回复 |
 
@@ -100,7 +101,7 @@
 - SQLite schema、统一配置读取和运行状态服务骨架
 - `/ncl help`、`/ncl status` 管理命令与只读 Dashboard 状态页
 - `/ncl mode`、`learning`、`reply`、`silent` 与 `target` 当前群运行模式和定向学习管理命令
-- 可关闭的 `!learning`、`!reply`，以及 `!grouplist`、`!add/!remove learning|learnings|reply|tag|subadmin|unmerge` 原版兼容入口
+- 可关闭的 `!learning`、`!reply`，以及 `!grouplist`、`!add/!remove learning|learnings|reply|tag|subadmin|unmerge|globe` 跨群管理入口
 - NapCat/OneBot 群消息规范化与版本化组件 JSON
 - 可配置群白名单的相邻消息学习、重复答案增权和超时断链
 - 尚未固化消息的持久化暂存与群消息撤回清理

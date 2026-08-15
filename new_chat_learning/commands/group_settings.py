@@ -42,7 +42,15 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
     if command in {"!add", "!remove"} and arguments:
         action = "add" if command == "!add" else "remove"
         category = arguments[0]
-        if category not in {"learning", "learnings", "reply", "tag", "subadmin", "unmerge"}:
+        if category not in {
+            "learning",
+            "learnings",
+            "reply",
+            "tag",
+            "subadmin",
+            "unmerge",
+            "globe",
+        }:
             return None
         if category == "tag" and action == "add":
             if len(raw_arguments) < 3:

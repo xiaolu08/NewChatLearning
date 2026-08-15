@@ -693,6 +693,8 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
                 "learning_group_ids": ["10001"],
                 "reply_group_ids": ["10002"],
                 "excluded_group_ids": ["10003"],
+                "global_group_ids": ["10002"],
+                "local_only_group_ids": ["10005"],
                 "group_sub_admins": [
                     {"group_id": "10004", "admin_ids": ["12345"]}
                 ],
@@ -713,7 +715,9 @@ def test_cross_group_list_requires_plugin_admin_and_formats_original_sections(mo
     assert "已开启学习的群：10001" in event.result.text
     assert "已开启回复的群：10002" in event.result.text
     assert "允许自主管理的群：10004" in event.result.text
-    assert "不进入全局词库的群：10003" in event.result.text
+    assert "不汇入全局词库的群：10003" in event.result.text
+    assert "使用全局词库的群：10002" in event.result.text
+    assert "仅使用本群词库的群：10005" in event.result.text
 
     plugin.config = {
         "permissions": {
@@ -784,6 +788,52 @@ def test_cross_group_learning_command_persists_all_target_groups(monkeypatch):
         }
     ]
     assert "共 2 个群" in event.result.text
+
+
+def test_cross_group_globe_command_persists_target_groups(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "learning_group_ids": [],
+                "reply_group_ids": ["10001", "10002"],
+                "excluded_group_ids": [],
+                "global_group_ids": [],
+                "local_only_group_ids": [],
+                "group_sub_admins": [],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_cross_group_settings(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                **self.config.cross_group_settings(),
+                "global_group_ids": [],
+                "local_only_group_ids": ["10001", "10002"],
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand("remove", "globe", ("10001", "10002")),
+        )
+    )
+
+    assert plugin.app.calls[0]["category"] == "globe"
+    assert plugin.app.calls[0]["group_ids"] == ["10001", "10002"]
+    assert "使用全局词库的群：无" in event.result.text
+    assert "仅使用本群词库的群：10001、10002" in event.result.text
 
 
 def test_cross_group_subadmin_reads_target_group_managers_before_save(monkeypatch):

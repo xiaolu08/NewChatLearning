@@ -493,6 +493,71 @@ def test_global_library_combines_untagged_groups_and_honors_exclusions(tmp_path)
     assert hidden.reason == "no_match"
 
 
+def test_local_only_reply_group_ignores_global_library(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "local-only.sqlite3")
+        await store.open()
+        local = await seed_group_pair(store, "10001", "本群问题", "本群答案", 1000)
+        shared = await seed_group_pair(store, "10002", "共享问题", "共享答案", 2000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                },
+                "library": {
+                    "mode": "global",
+                    "local_only_group_ids": ["10001"],
+                },
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            local_result = await reply.decide("10001", local.normalized_key)
+            shared_result = await reply.decide("10001", shared.normalized_key)
+        finally:
+            await store.close()
+        return local_result, shared_result
+
+    local_result, shared_result = asyncio.run(scenario())
+
+    assert local_result.candidate.components[0]["data"]["text"] == "本群答案"
+    assert shared_result.reason == "no_match"
+
+
+def test_explicit_global_reply_group_uses_shared_library_in_group_mode(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "explicit-global.sqlite3")
+        await store.open()
+        shared = await seed_group_pair(store, "10002", "共享问题", "共享答案", 1000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001", "10003"],
+                    "probability_percent": 100,
+                },
+                "library": {
+                    "mode": "group",
+                    "global_group_ids": ["10001"],
+                },
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            enabled = await reply.decide("10001", shared.normalized_key)
+            isolated = await reply.decide("10003", shared.normalized_key)
+        finally:
+            await store.close()
+        return enabled, isolated
+
+    enabled, isolated = asyncio.run(scenario())
+
+    assert enabled.candidate.components[0]["data"]["text"] == "共享答案"
+    assert isolated.reason == "no_match"
+
+
 def test_tagged_group_queries_only_shared_tag_members(tmp_path):
     async def scenario():
         store = SQLiteStore(tmp_path / "tags.sqlite3")

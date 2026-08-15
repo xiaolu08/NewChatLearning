@@ -33,12 +33,20 @@ def test_parse_legacy_group_commands():
     assert parse_legacy_group_command("!remove unmerge 10001") == CrossGroupCommand(
         "remove", "unmerge", ("10001",)
     )
+    assert parse_legacy_group_command("!add globe 10001 10002") == CrossGroupCommand(
+        "add", "globe", ("10001", "10002")
+    )
+    assert parse_legacy_group_command("!remove globe 10001") == CrossGroupCommand(
+        "remove", "globe", ("10001",)
+    )
 
 
 def test_legacy_parser_does_not_intercept_unrelated_forms():
     assert parse_legacy_group_command("hello !learning on") is None
     assert parse_legacy_group_command("!grouplist extra") is None
     assert parse_legacy_group_command("!unknown") is None
+    assert parse_legacy_group_command("!globe") is None
+    assert parse_legacy_group_command("!globe on") is None
 
 
 def test_toggle_transitions_preserve_unrelated_capability():

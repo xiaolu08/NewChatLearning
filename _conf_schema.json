@@ -277,10 +277,10 @@
   "library": {
     "description": "词库范围",
     "type": "object",
-    "hint": "普通模式只查询本群；全局模式实时联合查询，不复制词库文件。配置标签的群只查询共享标签范围。",
+    "hint": "普通模式只查询本群；全局模式是旧配置兼容项。建议使用 !add/remove globe 按目标群控制实时联合查询，配置标签的群只查询共享标签范围。",
     "items": {
       "mode": {
-        "description": "回复词库模式",
+        "description": "兼容词库模式",
         "type": "string",
         "options": ["group", "global"],
         "default": "group"
@@ -290,6 +290,20 @@
         "type": "list",
         "items": {"type": "string"},
         "hint": "仅影响未配置标签群使用的全局词库；不停止该群自身学习。",
+        "default": []
+      },
+      "global_group_ids": {
+        "description": "启用共享词库的群号",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "这些目标群可查询全局或标签共享词库。可使用 !add globe 和 !remove globe 跨群调整。",
+        "default": []
+      },
+      "local_only_group_ids": {
+        "description": "仅使用本群词库的群号",
+        "type": "list",
+        "items": {"type": "string"},
+        "hint": "这些群即使启用了全局词库模式，也只查询本群词库。可使用 !add globe 和 !remove globe 跨群调整。",
         "default": []
       },
       "group_tags": {

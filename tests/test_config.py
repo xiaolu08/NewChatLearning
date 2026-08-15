@@ -142,6 +142,57 @@ def test_multiple_tags_create_separate_weighted_scopes_and_accept_legacy_dict():
     )
 
 
+def test_local_only_group_does_not_query_global_or_tagged_libraries():
+    service = ConfigService(
+        {
+            "library": {
+                "mode": "global",
+                "local_only_group_ids": ["10001"],
+                "group_tags": [
+                    {"group_id": "10001", "tags": ["friends"]},
+                    {"group_id": "10002", "tags": ["friends"]},
+                ],
+            }
+        }
+    )
+
+    assert service.reply_library_scopes("10001", ["10001", "10002"]) == (("10001",),)
+
+
+def test_explicit_global_group_queries_shared_library_in_group_mode():
+    service = ConfigService(
+        {
+            "library": {
+                "mode": "group",
+                "global_group_ids": ["10001"],
+            }
+        }
+    )
+
+    assert service.reply_library_scopes("10001", ["10001", "10002"]) == (
+        ("10001", "10002"),
+    )
+    assert service.reply_library_scopes("10002", ["10001", "10002"]) == (("10002",),)
+
+
+def test_cross_group_settings_lists_effective_global_library_groups():
+    service = ConfigService(
+        {
+            "reply": {"group_ids": ["10001", "10002", "10003"]},
+            "library": {
+                "mode": "global",
+                "global_group_ids": ["10004"],
+                "local_only_group_ids": ["10002"],
+            },
+        }
+    )
+
+    settings = service.cross_group_settings()
+
+    assert settings["global_group_ids"] == ["10001", "10003", "10004"]
+    assert settings["local_only_group_ids"] == ["10002"]
+
+
 def test_target_users_are_group_scoped_and_normalized():
     service = ConfigService(
         {
@@ -364,7 +415,30 @@ def test_cross_group_settings_update_all_legacy_categories_atomically():
         )
     )
     assert result["excluded_group_ids"] == ["10002"]
-    assert source.saves == 4
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="remove",
+            category="globe",
+            group_ids=["10001", "10002"],
+            expected_revision=service.revision,
+        )
+    )
+    assert result["local_only_group_ids"] == ["10001", "10002"]
+    assert result["global_group_ids"] == []
+    assert source["library"]["mode"] == "group"
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="globe",
+            group_ids=["10002"],
+            expected_revision=service.revision,
+        )
+    )
+    assert result["local_only_group_ids"] == ["10001"]
+    assert result["global_group_ids"] == ["10002"]
+    assert source.saves == 6
 
 
 def test_cross_group_settings_accepts_astrbot_config_wrapper_with_lock():
@@ -487,6 +561,28 @@ def test_cross_group_settings_remove_tag_and_roll_back_on_save_failure():
                 expected_revision=service.revision,
             )
         )
+    assert source == before
+
+
+def test_cross_group_globe_update_rolls_back_on_save_failure():
+    class Source(dict):
+        async def save_config_async(self):
+            raise OSError("disk full")
+
+    source = Source({"library": {"local_only_group_ids": ["10001"]}})
+    service = ConfigService(source)
+    before = deepcopy(source)
+
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            service.update_cross_group_settings(
+                action="add",
+                category="globe",
+                group_ids=["10001"],
+                expected_revision=service.revision,
+            )
+        )
+
     assert source == before
 
 
