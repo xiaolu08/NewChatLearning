@@ -41,7 +41,8 @@ status: 当前有效
 ### 群成员加入
 
 - 读取 OneBot `notice_type=group_increase` 的 `group_id`、`user_id` 与 `self_id`，忽略 Bot 自身入群事件。
-- 仅当事件群直接属于配置了欢迎语的联动词库组时，使用 NapCat `send_group_msg` 发送 `at` 与 `text` 两个消息段。
+- 仅当事件群直接属于配置了欢迎语的联动词库组时，首位新成员启动 60 秒收集窗口，窗口内成员去重后使用 NapCat `send_group_msg` 发送单条 `at... + text` 消息。
+- 合并欢迎消息发送成功后展示 60 秒，再使用返回的 OneBot 消息 ID 调用 `delete_msg` 撤回。
 - 欢迎消息不进入学习链，不继承全局词库、外部词库或其他联动组权限，也不会发送到事件群之外。
 
 ### 媒体健康

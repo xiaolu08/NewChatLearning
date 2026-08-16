@@ -103,25 +103,30 @@ async def send_group_welcome(
     event: Any,
     *,
     group_id: str,
-    user_id: str,
+    user_ids: tuple[str, ...],
     message: str,
-) -> bool:
+) -> str | None:
     bot = getattr(event, "bot", None)
-    if bot is None or not str(group_id).isdigit() or not str(user_id).isdigit():
-        return False
+    normalized_user_ids = tuple(
+        dict.fromkeys(str(user_id) for user_id in user_ids if str(user_id).isdigit())
+    )
+    if bot is None or not str(group_id).isdigit() or not normalized_user_ids:
+        return None
     text = str(message).strip()
     if not text:
-        return False
+        return None
     routing = {}
     self_id = str(getattr(event, "get_self_id", lambda: "")())
     if self_id:
         routing["self_id"] = int(self_id) if self_id.isdigit() else self_id
-    await bot.send_group_msg(
+    segments = [
+        {"type": "at", "data": {"qq": user_id}}
+        for user_id in normalized_user_ids
+    ]
+    segments.append({"type": "text", "data": {"text": f" {text}"}})
+    response = await bot.send_group_msg(
         group_id=int(group_id),
-        message=[
-            {"type": "at", "data": {"qq": str(user_id)}},
-            {"type": "text", "data": {"text": f" {text}"}},
-        ],
+        message=segments,
         **routing,
     )
-    return True
+    return _message_id(response)

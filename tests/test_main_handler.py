@@ -168,6 +168,8 @@ class Event:
 
 def plugin_with(main_module, decision):
     plugin = object.__new__(main_module.NewChatLearningPlugin)
+    plugin._welcome_batches = {}
+    plugin._welcome_tasks = set()
     reply = Reply(decision)
     plugin.app = SimpleNamespace(config=Config(), reply=reply, data_dir=None)
     history = History()
@@ -1043,10 +1045,17 @@ def test_cross_group_welcome_command_updates_named_share_group(monkeypatch):
     assert "已设置欢迎语" in event.result.text
 
 
-def test_group_increase_sends_only_configured_share_welcome(monkeypatch):
+def test_group_increase_batches_members_then_recalls_welcome(monkeypatch):
     main_module = load_main(monkeypatch)
-    notice = SimpleNamespace(group_id="10001", user_id="12345")
-    calls = []
+    notices = iter(
+        (
+            SimpleNamespace(group_id="10001", user_id="12345"),
+            SimpleNamespace(group_id="10001", user_id="67890"),
+            SimpleNamespace(group_id="10001", user_id="12345"),
+        )
+    )
+    sends = []
+    recalls = []
 
     class WelcomeConfig(Config):
         def share_welcome_messages_for(self, group_id):
@@ -1054,25 +1063,69 @@ def test_group_increase_sends_only_configured_share_welcome(monkeypatch):
             return ("欢迎加入！",)
 
     async def fake_send(_event, **kwargs):
-        calls.append(kwargs)
+        sends.append(kwargs)
+        return "88001"
+
+    async def fake_recall(_event, message_id):
+        recalls.append(message_id)
         return True
 
     plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
     plugin.app.config = WelcomeConfig()
     event = Event()
-    monkeypatch.setattr(main_module, "parse_group_increase_notice", lambda _event: notice)
+    monkeypatch.setattr(
+        main_module, "parse_group_increase_notice", lambda _event: next(notices)
+    )
     monkeypatch.setattr(main_module, "send_group_welcome", fake_send)
+    monkeypatch.setattr(main_module, "recall_message", fake_recall)
+    monkeypatch.setattr(main_module, "WELCOME_BATCH_SECONDS", 0)
+    monkeypatch.setattr(main_module, "WELCOME_DISPLAY_SECONDS", 0)
 
-    asyncio.run(plugin.capture_group_message(event))
+    async def scenario():
+        await plugin.capture_group_message(event)
+        await plugin.capture_group_message(event)
+        await plugin.capture_group_message(event)
+        tasks = tuple(plugin._welcome_tasks)
+        assert len(tasks) == 1
+        await asyncio.gather(*tasks)
 
-    assert calls == [
+    asyncio.run(scenario())
+
+    assert sends == [
         {
             "group_id": "10001",
-            "user_id": "12345",
+            "user_ids": ("12345", "67890"),
             "message": "欢迎加入！",
         }
     ]
+    assert recalls == ["88001"]
+    assert plugin._welcome_batches == {}
     assert event.stopped is False
+
+
+def test_terminate_cancels_pending_welcome_batches(monkeypatch):
+    main_module = load_main(monkeypatch)
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    stopped = []
+
+    async def stop():
+        stopped.append(True)
+
+    plugin.app.stop = stop
+
+    async def scenario():
+        plugin._queue_share_welcome(
+            Event(), group_id="10001", user_id="12345", message="欢迎加入！"
+        )
+        assert plugin._welcome_tasks
+        await plugin.terminate()
+
+    asyncio.run(scenario())
+
+    assert stopped == [True]
+    assert plugin.app is None
+    assert plugin._welcome_batches == {}
+    assert plugin._welcome_tasks == set()
 
 
 def test_sharelist_discloses_members_only_in_private_chat(monkeypatch):

@@ -148,17 +148,18 @@ def test_sends_group_welcome_with_mention_before_text():
         send_group_welcome(
             event,
             group_id="10001",
-            user_id="12345",
+            user_ids=("12345", "67890", "12345"),
             message="欢迎加入！",
         )
     )
 
-    assert sent is True
+    assert sent == "88"
     assert event.bot.sent == [
         {
             "group_id": 10001,
             "message": [
                 {"type": "at", "data": {"qq": "12345"}},
+                {"type": "at", "data": {"qq": "67890"}},
                 {"type": "text", "data": {"text": " 欢迎加入！"}},
             ],
             "self_id": 9,

@@ -81,6 +81,8 @@ EXPORT_TICKET_TTL_SECONDS = 300
 MIGRATION_UPLOAD_TICKET_TTL_SECONDS = 300
 MIGRATION_UPLOAD_TTL_SECONDS = 3600
 MIGRATION_UPLOAD_MAX_BYTES = 128 * 1024 * 1024
+WELCOME_BATCH_SECONDS = 60
+WELCOME_DISPLAY_SECONDS = 60
 
 
 class NewChatLearningPlugin(star.Star):
@@ -91,6 +93,8 @@ class NewChatLearningPlugin(star.Star):
         self._export_tickets: dict[str, dict] = {}
         self._migration_upload_tickets: dict[str, dict] = {}
         self._migration_uploads: dict[str, dict] = {}
+        self._welcome_batches: dict[tuple[str, str], dict] = {}
+        self._welcome_tasks: set[asyncio.Task] = set()
 
     async def initialize(self) -> None:
         data_dir = star.StarTools.get_data_dir(PLUGIN_NAME)
@@ -323,9 +327,65 @@ class NewChatLearningPlugin(star.Star):
         self.logger.info("NewChatLearning %s Beta skeleton initialized.", PLUGIN_VERSION)
 
     async def terminate(self) -> None:
+        tasks = tuple(self._welcome_tasks)
+        self._welcome_batches.clear()
+        self._welcome_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         if self.app is not None:
             await self.app.stop()
             self.app = None
+
+    def _queue_share_welcome(
+        self,
+        event: AstrMessageEvent,
+        *,
+        group_id: str,
+        user_id: str,
+        message: str,
+    ) -> None:
+        key = (str(group_id), str(message))
+        batch = self._welcome_batches.get(key)
+        if batch is None:
+            batch = {
+                "event": event,
+                "user_ids": [],
+                "user_id_set": set(),
+            }
+            self._welcome_batches[key] = batch
+            task = asyncio.create_task(self._flush_share_welcome(key))
+            self._welcome_tasks.add(task)
+            task.add_done_callback(self._welcome_tasks.discard)
+        normalized_user_id = str(user_id)
+        if normalized_user_id not in batch["user_id_set"]:
+            batch["user_id_set"].add(normalized_user_id)
+            batch["user_ids"].append(normalized_user_id)
+
+    async def _flush_share_welcome(self, key: tuple[str, str]) -> None:
+        try:
+            await asyncio.sleep(WELCOME_BATCH_SECONDS)
+            batch = self._welcome_batches.pop(key, None)
+            if batch is None or not batch["user_ids"]:
+                return
+            group_id, message = key
+            event = batch["event"]
+            message_id = await send_group_welcome(
+                event,
+                group_id=group_id,
+                user_ids=tuple(batch["user_ids"]),
+                message=message,
+            )
+            if message_id is None:
+                return
+            self._record_diagnostic(group_id, "welcome_messages_sent")
+            await asyncio.sleep(WELCOME_DISPLAY_SECONDS)
+            await recall_message(event, message_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.logger.exception("Failed to send or recall share-group welcome message.")
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(
@@ -340,19 +400,12 @@ class NewChatLearningPlugin(star.Star):
             for message in self.app.config.share_welcome_messages_for(
                 group_increase.group_id
             ):
-                try:
-                    sent = await send_group_welcome(
-                        event,
-                        group_id=group_increase.group_id,
-                        user_id=group_increase.user_id,
-                        message=message,
-                    )
-                    if sent:
-                        self._record_diagnostic(
-                            group_increase.group_id, "welcome_messages_sent"
-                        )
-                except Exception:
-                    self.logger.exception("Failed to send share-group welcome message.")
+                self._queue_share_welcome(
+                    event,
+                    group_id=group_increase.group_id,
+                    user_id=group_increase.user_id,
+                    message=message,
+                )
             return
         recall = parse_recall_notice(event)
         if recall is not None:
