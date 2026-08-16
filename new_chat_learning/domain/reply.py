@@ -12,6 +12,7 @@ class ReplyCandidate:
     weight: int
     answer_question_frequency: int
     components_json: str
+    normalized_key: str
 
     @property
     def components(self) -> tuple[dict[str, Any], ...]:
@@ -27,6 +28,7 @@ class ReplyDecision:
     candidate: ReplyCandidate | None
     reason: str
     wait_seconds: float = 0.0
+    is_repeat: bool = False
 
     @property
     def should_reply(self) -> bool:

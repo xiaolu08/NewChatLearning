@@ -139,6 +139,7 @@ class RuntimeApplication:
         expected_revision: str,
         actor_id: str,
         tag: str | None = None,
+        message_type: str | None = None,
         sub_admins: dict[str, list[str]] | None = None,
         source: str = "legacy_command",
     ) -> dict[str, Any]:
@@ -148,6 +149,7 @@ class RuntimeApplication:
             group_ids=group_ids,
             expected_revision=expected_revision,
             tag=tag,
+            message_type=message_type,
             sub_admins=sub_admins,
         )
         try:
@@ -158,6 +160,7 @@ class RuntimeApplication:
                 details={
                     "operation": action,
                     "category": category,
+                    "message_type": message_type,
                     "group_count": len(group_ids),
                     "source": source,
                 },

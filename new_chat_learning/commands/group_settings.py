@@ -3,6 +3,8 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass
 
+from new_chat_learning.domain.reply_policy import normalize_trigger_type
+
 MODES = {"disabled", "learning", "reply", "learning_reply", "silent"}
 LEARNING_MODES = {"learning", "learning_reply", "silent"}
 
@@ -19,6 +21,7 @@ class CrossGroupCommand:
     category: str = ""
     group_ids: tuple[str, ...] = ()
     tag: str | None = None
+    message_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -28,8 +31,11 @@ class LegacyGlobalCommand:
 
 
 def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCommand | None:
+    normalized_text = text.strip()
+    if normalized_text.startswith("！"):
+        normalized_text = f"!{normalized_text[1:]}"
     try:
-        parts = shlex.split(text.strip())
+        parts = shlex.split(normalized_text)
     except ValueError:
         return None
     if not parts:
@@ -41,6 +47,17 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
         return GroupSettingsCommand("learning", arguments)
     if command == "!reply":
         if arguments and arguments[0] == "-s":
+            message_type = normalize_trigger_type(
+                raw_arguments[1] if len(raw_arguments) >= 2 else None
+            )
+            if message_type is not None:
+                return CrossGroupCommand(
+                    "set",
+                    "reply_type_probability",
+                    tuple(raw_arguments[3:]) if len(raw_arguments) >= 4 else (),
+                    raw_arguments[2] if len(raw_arguments) >= 3 else None,
+                    message_type,
+                )
             return CrossGroupCommand(
                 "set",
                 "reply_probability",
@@ -48,6 +65,16 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
                 raw_arguments[1] if len(raw_arguments) >= 2 else None,
             )
         if arguments and arguments[0] == "-d":
+            message_type = normalize_trigger_type(
+                raw_arguments[1] if len(raw_arguments) >= 2 else None
+            )
+            if message_type is not None:
+                return CrossGroupCommand(
+                    "remove",
+                    "reply_type_probability",
+                    tuple(raw_arguments[2:]) if len(raw_arguments) >= 3 else (),
+                    message_type=message_type,
+                )
             return CrossGroupCommand(
                 "remove",
                 "reply_probability",

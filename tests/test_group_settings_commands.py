@@ -56,6 +56,28 @@ def test_parse_legacy_group_commands():
     assert parse_legacy_group_command("!reply -d 10001") == CrossGroupCommand(
         "remove", "reply_probability", ("10001",)
     )
+    assert parse_legacy_group_command(
+        "!reply -s xml 12.5 10001 10002"
+    ) == CrossGroupCommand(
+        "set",
+        "reply_type_probability",
+        ("10001", "10002"),
+        "12.5",
+        "xml",
+    )
+    assert parse_legacy_group_command("!reply -d 表情包 10001") == CrossGroupCommand(
+        "remove",
+        "reply_type_probability",
+        ("10001",),
+        message_type="marketface",
+    )
+    assert parse_legacy_group_command("！reply -s text 20 10001") == CrossGroupCommand(
+        "set",
+        "reply_type_probability",
+        ("10001",),
+        "20",
+        "text",
+    )
 
 
 def test_legacy_parser_does_not_intercept_unrelated_forms():

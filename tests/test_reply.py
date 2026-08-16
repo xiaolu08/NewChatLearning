@@ -4,6 +4,7 @@ import random
 import sqlite3
 
 from new_chat_learning.application.learning import LearningService
+from new_chat_learning.application.library import LibraryService, plain_normalized_key
 from new_chat_learning.application.reply import ReplyService, cosine_similarity
 from new_chat_learning.domain.message import NormalizedMessage
 from new_chat_learning.infrastructure.config import ConfigService
@@ -108,6 +109,103 @@ def test_exact_reply_probability_at_override_and_cooldown(tmp_path):
     assert forced.candidate.components[0]["data"]["text"] == "你好呀"
     assert cooldown.reason == "cooldown"
     assert after_cooldown.should_reply is True
+
+
+def test_message_type_probability_controls_trigger_independently(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "type-probability.sqlite3")
+        await store.open()
+        question = await seed_pair(store)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 0,
+                    "cooldown_seconds": 0,
+                    "group_type_probability_overrides": [
+                        {
+                            "group_id": "10001",
+                            "message_type": "text",
+                            "probability_percent": 100,
+                        }
+                    ],
+                }
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            text = await reply.decide(
+                "10001",
+                question.normalized_key,
+                trigger_components=({"type": "Plain", "data": {"text": "你好"}},),
+            )
+            image = await reply.decide(
+                "10001",
+                question.normalized_key,
+                trigger_components=({"type": "Image", "data": {"file": "x"}},),
+            )
+        finally:
+            await store.close()
+        return text, image
+
+    text, image = asyncio.run(scenario())
+
+    assert text.should_reply is True
+    assert image.reason == "probability"
+
+
+def test_repeat_replies_are_limited_to_two_per_rolling_hour(tmp_path):
+    now = [10_000.0]
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "repeat-limit.sqlite3")
+        await store.open()
+        library = LibraryService(store)
+        await library.add_text_pair(
+            group_id="10001",
+            actor_id="test",
+            question="咕咕嘎嘎",
+            answer="咕咕嘎嘎",
+        )
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "cooldown_seconds": 0,
+                }
+            }
+        )
+        reply = ReplyService(
+            store,
+            config,
+            random_source=random.Random(1),
+            wall_clock=lambda: now[0],
+        )
+        key = plain_normalized_key("咕咕嘎嘎")
+        components = ({"type": "Plain", "data": {"text": "咕咕嘎嘎"}},)
+        try:
+            first = await reply.decide("10001", key, trigger_components=components)
+            await reply.mark_repeat_sent("10001")
+            now[0] += 120
+            second = await reply.decide("10001", key, trigger_components=components)
+            await reply.mark_repeat_sent("10001")
+            now[0] += 600
+            blocked = await reply.decide("10001", key, trigger_components=components)
+            now[0] += 3300
+            after_window = await reply.decide("10001", key, trigger_components=components)
+        finally:
+            await store.close()
+        return first, second, blocked, after_window
+
+    first, second, blocked, after_window = asyncio.run(scenario())
+
+    assert first.is_repeat is True
+    assert second.is_repeat is True
+    assert blocked.reason == "repeat_limit"
+    assert after_window.is_repeat is True
 
 
 def test_plain_exact_reply_matches_question_learned_with_reply_and_at(tmp_path):

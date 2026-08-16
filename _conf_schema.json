@@ -155,6 +155,37 @@
         },
         "default": []
       },
+      "group_type_probability_overrides": {
+        "description": "按群消息类型回复概率",
+        "type": "template_list",
+        "hint": "只覆盖指定群和触发消息类型；未配置的类型继承该群基础回复概率。",
+        "templates": {
+          "group_type_probability_overrides": {
+            "name": "群聊消息类型概率",
+            "display_item": "group_id",
+            "hide_hint_in_list": true,
+            "items": {
+              "group_id": {
+                "description": "群号",
+                "type": "string",
+                "default": ""
+              },
+              "message_type": {
+                "description": "触发消息类型",
+                "type": "string",
+                "hint": "text、image、face、marketface、xml、json、record、video、file、forward、share、music、dice、mixed 或 other。",
+                "default": "text"
+              },
+              "probability_percent": {
+                "description": "回复概率（%）",
+                "type": "float",
+                "default": 50.0
+              }
+            }
+          }
+        },
+        "default": []
+      },
       "cooldown_seconds": {
         "description": "单群回复冷却（秒）",
         "type": "float",

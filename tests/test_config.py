@@ -54,6 +54,105 @@ def test_reply_requires_explicit_group_and_silent_group_wins():
     assert service.reply_settings()["cooldown_seconds"] == 0.0
 
 
+def test_reply_type_probability_overrides_group_base_probability():
+    service = ConfigService(
+        {
+            "reply": {
+                "probability_percent": 50,
+                "group_probability_overrides": [
+                    {"group_id": "10001", "probability_percent": 20}
+                ],
+                "group_type_probability_overrides": [
+                    {
+                        "group_id": "10001",
+                        "message_type": "xml",
+                        "probability_percent": 80,
+                    }
+                ],
+            }
+        }
+    )
+
+    assert service.reply_settings("10001", "text")["probability_percent"] == 20
+    assert service.reply_settings("10001", "xml")["probability_percent"] == 80
+    assert service.reply_settings("10002", "xml")["probability_percent"] == 50
+
+
+def test_legacy_probability_update_clears_type_specific_overrides():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    source = Source(
+        {
+            "reply": {
+                "group_probability_overrides": [],
+                "group_type_probability_overrides": [
+                    {
+                        "group_id": "10001",
+                        "message_type": "xml",
+                        "probability_percent": 80,
+                    }
+                ],
+            }
+        }
+    )
+    service = ConfigService(source)
+
+    asyncio.run(
+        service.update_cross_group_settings(
+            action="set",
+            category="reply_probability",
+            group_ids=["10001"],
+            expected_revision=service.revision,
+            tag="25",
+        )
+    )
+
+    assert service.reply_settings("10001", "xml")["probability_percent"] == 25
+    assert source["reply"]["group_type_probability_overrides"] == []
+
+
+def test_type_probability_update_preserves_group_base_and_other_types():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    source = Source(
+        {
+            "reply": {
+                "group_probability_overrides": [
+                    {"group_id": "10001", "probability_percent": 25}
+                ],
+                "group_type_probability_overrides": [
+                    {
+                        "group_id": "10001",
+                        "message_type": "text",
+                        "probability_percent": 60,
+                    }
+                ],
+            }
+        }
+    )
+    service = ConfigService(source)
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="set",
+            category="reply_type_probability",
+            group_ids=["10001"],
+            expected_revision=service.revision,
+            tag="80",
+            message_type="xml",
+        )
+    )
+
+    assert service.reply_settings("10001", "text")["probability_percent"] == 60
+    assert service.reply_settings("10001", "xml")["probability_percent"] == 80
+    assert service.reply_settings("10001", "image")["probability_percent"] == 25
+    assert len(result["group_reply_type_probabilities"]) == 2
+
+
 def test_matching_settings_are_bounded_and_type_thresholds_are_normalized():
     service = ConfigService(
         {

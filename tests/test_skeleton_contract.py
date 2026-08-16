@@ -39,6 +39,7 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert schema["learning"]["items"]["target_users"]["type"] == "template_list"
     assert schema["reply"]["items"]["enabled"]["default"] is False
     assert schema["reply"]["items"]["probability_percent"]["default"] == 50.0
+    assert schema["reply"]["items"]["group_type_probability_overrides"]["type"] == "template_list"
     assert schema["reply"]["items"]["regex_enabled"]["default"] is True
     assert schema["reply"]["items"]["similarity_enabled"]["default"] is False
     assert schema["reply"]["items"]["similarity_threshold"]["default"] == 0.5

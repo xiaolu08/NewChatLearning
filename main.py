@@ -53,6 +53,7 @@ from new_chat_learning.commands.group_settings import (
 )
 from new_chat_learning.commands.permissions import is_group_admin, is_plugin_admin
 from new_chat_learning.constants import PLUGIN_NAME, PLUGIN_VERSION
+from new_chat_learning.domain.reply_policy import TRIGGER_TYPE_LABELS
 from new_chat_learning.migration.scanner import scan_directory, scan_file
 from new_chat_learning.platform.astrbot.renderer import render_message_chain
 from new_chat_learning.platform.napcat import normalizer as _napcat_normalizer
@@ -384,6 +385,7 @@ class NewChatLearningPlugin(star.Star):
             reply_matching_key(message, event.get_self_id()),
             plain_text=message.plain_text,
             mentioned_bot=mentioned_bot,
+            trigger_components=getattr(message, "matching_components", message.components),
         )
         self._record_diagnostic(group_id, "reply_decisions", reason=decision.reason)
         if not decision.should_reply or decision.candidate is None:
@@ -413,6 +415,8 @@ class NewChatLearningPlugin(star.Star):
         sent_message_id = await send_group_message_with_id(event, chain)
         self._record_diagnostic(group_id, "successful_sends")
         self.app.reply.mark_sent(group_id)
+        if decision.is_repeat:
+            await self.app.reply.mark_repeat_sent(group_id)
         if sent_message_id is not None:
             await self.app.store.register_reply(
                 platform=event.get_platform_name(),
@@ -539,6 +543,9 @@ class NewChatLearningPlugin(star.Star):
                 "!add/remove learning|learnings|reply <群号...>\n"
                 "!reply -s <概率> <群号...> - 设置目标群独立回复概率\n"
                 "!reply -d <群号...> - 恢复目标群继承全局回复概率\n"
+                "!reply -s <类型> <概率> <群号...> - 单独设置消息类型概率\n"
+                "!reply -d <类型> <群号...> - 删除消息类型独立概率\n"
+                "类型：text/image/face/marketface/xml/json/record/video/file/forward/share/music/dice/mixed/other\n"
                 "!add tag <标签> <群号...> / !remove tag <群号...>\n"
                 "!add/remove subadmin <群号...> - 管理群聊子管理员授权\n"
                 "!add/remove unmerge <群号...> - 排除/恢复来源群汇入全局词库\n"
@@ -1207,15 +1214,20 @@ class NewChatLearningPlugin(star.Star):
                     return
                 sub_admins[group_id] = admin_ids
         try:
+            update_kwargs = {
+                "action": command.action,
+                "category": command.category,
+                "group_ids": normalized_group_ids,
+                "tag": command.tag,
+                "sub_admins": sub_admins,
+                "expected_revision": settings["revision"],
+                "actor_id": event.get_sender_id(),
+                "source": "legacy_private_command" if private else "legacy_group_command",
+            }
+            if command.message_type is not None:
+                update_kwargs["message_type"] = command.message_type
             result = await self.app.update_cross_group_settings(
-                action=command.action,
-                category=command.category,
-                group_ids=normalized_group_ids,
-                tag=command.tag,
-                sub_admins=sub_admins,
-                expected_revision=settings["revision"],
-                actor_id=event.get_sender_id(),
-                source="legacy_private_command" if private else "legacy_group_command",
+                **update_kwargs,
             )
         except ValueError as exc:
             if str(exc) == "revision_conflict":
@@ -1234,6 +1246,11 @@ class NewChatLearningPlugin(star.Star):
             "set": "设置",
         }.get(command.action, command.action)
         label = self._cross_group_category_label(command.category)
+        if command.category == "reply_type_probability" and command.message_type:
+            label = (
+                f"{TRIGGER_TYPE_LABELS.get(command.message_type, command.message_type)}"
+                "触发回复概率"
+            )
         summary = f"跨群设置已保存：{verb}{label}，共 {len(normalized_group_ids)} 个目标群。"
         if private:
             summary = f"{summary}\n{self._format_cross_group_settings(result)}"
@@ -1312,6 +1329,7 @@ class NewChatLearningPlugin(star.Star):
             f"已开启学习的群：{joined('learning_group_ids')}\n"
             f"已开启回复的群：{joined('reply_group_ids')}\n"
             f"独立回复概率：{NewChatLearningPlugin._format_group_probabilities(settings)}\n"
+            f"消息类型概率：{NewChatLearningPlugin._format_group_type_probabilities(settings)}\n"
             f"允许自主管理的群：{'、'.join(sub_admin_groups) if sub_admin_groups else '无'}\n"
             f"不汇入全局词库的群：{joined('excluded_group_ids')}\n"
             f"使用全局词库的群：{joined('global_group_ids')}\n"
@@ -1338,11 +1356,16 @@ class NewChatLearningPlugin(star.Star):
             if group_id in probabilities
             else "继承全局"
         )
+        type_probabilities = NewChatLearningPlugin._format_group_type_probabilities(
+            settings,
+            group_id=group_id,
+        )
         return (
             "当前群跨群设置\n"
             f"学习：{'已开启' if contains('learning_group_ids') else '未开启'}\n"
             f"回复：{'已开启' if contains('reply_group_ids') else '未开启'}\n"
             f"独立回复概率：{probability}\n"
+            f"消息类型概率：{type_probabilities}\n"
             f"允许查询全局/标签词库：{'是' if contains('global_group_ids') else '否'}\n"
             "联动群聊列表：使用 !sharelist 查看\n"
             f"不汇入全局词库：{'是' if contains('excluded_group_ids') else '否'}\n"
@@ -1361,6 +1384,7 @@ class NewChatLearningPlugin(star.Star):
             "globe": "全局词库查询范围",
             "share": "联动词库成员",
             "reply_probability": "独立回复概率",
+            "reply_type_probability": "消息类型触发回复概率",
         }.get(category, "跨群设置")
 
     @staticmethod
@@ -1376,6 +1400,12 @@ class NewChatLearningPlugin(star.Star):
             "share": "用法：!add/remove share <群号...> <联动组名>",
             "reply_probability": (
                 "用法：!reply -s <0-100> <群号...> 或 !reply -d <群号...>"
+            ),
+            "reply_type_probability": (
+                "用法：!reply -s <类型> <0-100> <群号...> 或 "
+                "!reply -d <类型> <群号...>；类型可用 text、image、face、"
+                "marketface、xml、json、record、video、file、forward、share、"
+                "music、dice、mixed、other"
             ),
         }
         return usages.get(category, "跨群设置命令无效。")
@@ -1403,6 +1433,27 @@ class NewChatLearningPlugin(star.Star):
             if isinstance(entry, dict) and entry.get("group_id")
         ]
         return "、".join(values) if values else "无（全部继承全局）"
+
+    @staticmethod
+    def _format_group_type_probabilities(
+        settings: dict,
+        *,
+        group_id: str | None = None,
+    ) -> str:
+        values = []
+        for entry in settings.get("group_reply_type_probabilities", []):
+            if not isinstance(entry, dict) or not entry.get("group_id"):
+                continue
+            entry_group_id = str(entry.get("group_id"))
+            if group_id is not None and entry_group_id != str(group_id):
+                continue
+            message_type = str(entry.get("message_type", ""))
+            label = TRIGGER_TYPE_LABELS.get(message_type, message_type)
+            prefix = "" if group_id is not None else f"{entry_group_id}:"
+            values.append(
+                f"{prefix}{label}={float(entry.get('probability_percent', 0)):g}%"
+            )
+        return "、".join(values) if values else "无（继承本群基础概率）"
 
     @staticmethod
     def _format_group_settings(settings: dict, *, saved: bool = False) -> str:

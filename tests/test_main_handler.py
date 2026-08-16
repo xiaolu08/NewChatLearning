@@ -92,13 +92,25 @@ class Reply:
         self.marked = []
         self.mentioned_bot = None
 
-    async def decide(self, _group_id, _key, *, plain_text="", mentioned_bot=False):
+    async def decide(
+        self,
+        _group_id,
+        _key,
+        *,
+        plain_text="",
+        mentioned_bot=False,
+        trigger_components=(),
+    ):
         self.plain_text = plain_text
         self.mentioned_bot = mentioned_bot
+        self.trigger_components = trigger_components
         return self.decision
 
     def mark_sent(self, group_id):
         self.marked.append(group_id)
+
+    async def mark_repeat_sent(self, group_id):
+        self.marked.append(f"repeat:{group_id}")
 
 
 class History:

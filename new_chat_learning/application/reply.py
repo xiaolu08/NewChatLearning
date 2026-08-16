@@ -11,6 +11,7 @@ import regex
 
 from new_chat_learning.application.content_filter import ContentFilterService
 from new_chat_learning.domain.reply import QuestionCandidate, ReplyCandidate, ReplyDecision
+from new_chat_learning.domain.reply_policy import classify_trigger_components
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
@@ -26,12 +27,14 @@ class ReplyService:
         *,
         random_source: random.Random | None = None,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self.store = store
         self.config = config
         self.content_filter = content_filter or ContentFilterService(config)
         self.random = random_source or random.Random()
         self.clock = clock
+        self.wall_clock = wall_clock
         self._last_reply_at: dict[str, float] = {}
 
     async def decide(
@@ -41,11 +44,13 @@ class ReplyService:
         *,
         plain_text: str = "",
         mentioned_bot: bool = False,
+        trigger_components: tuple[dict[str, object], ...] = (),
     ) -> ReplyDecision:
         if not self.config.reply_enabled_for(group_id):
             return ReplyDecision(None, "disabled")
 
-        settings = self.config.reply_settings(group_id)
+        trigger_type = classify_trigger_components(trigger_components)
+        settings = self.config.reply_settings(group_id, trigger_type)
         now = self.clock()
         cooldown = float(settings["cooldown_seconds"])
         last_reply = self._last_reply_at.get(str(group_id))
@@ -104,6 +109,26 @@ class ReplyService:
         if not force_reply and self.random.random() > probability:
             return ReplyDecision(None, "probability")
 
+        repeat_candidates = [
+            selection
+            for selection in selections
+            if selection[0].normalized_key == normalized_key
+        ]
+        if repeat_candidates:
+            since = int(self.wall_clock()) - 3600
+            repeat_count = await self.store.recent_repeat_reply_count(
+                group_id=str(group_id),
+                since=since,
+            )
+            if repeat_count >= 2:
+                selections = [
+                    selection
+                    for selection in selections
+                    if selection[0].normalized_key != normalized_key
+                ]
+                if not selections:
+                    return ReplyDecision(None, "repeat_limit")
+
         candidate, reason = self.random.choices(
             selections,
             weights=[max(1, item.weight) for item, _reason in selections],
@@ -112,10 +137,21 @@ class ReplyService:
         base_wait = float(settings["wait_seconds"])
         jitter = float(settings["wait_jitter_seconds"])
         wait_seconds = max(0.0, base_wait + self.random.uniform(-jitter, jitter))
-        return ReplyDecision(candidate, reason, wait_seconds)
+        return ReplyDecision(
+            candidate,
+            reason,
+            wait_seconds,
+            is_repeat=candidate.normalized_key == normalized_key,
+        )
 
     def mark_sent(self, group_id: str) -> None:
         self._last_reply_at[str(group_id)] = self.clock()
+
+    async def mark_repeat_sent(self, group_id: str) -> None:
+        await self.store.register_repeat_reply(
+            group_id=str(group_id),
+            triggered_at=int(self.wall_clock()),
+        )
 
     async def _filter_candidates(
         self,

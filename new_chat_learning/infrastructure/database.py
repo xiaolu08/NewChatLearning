@@ -126,6 +126,12 @@ CREATE TABLE IF NOT EXISTS reply_records (
     UNIQUE(platform, group_id, sent_message_id)
 );
 
+CREATE TABLE IF NOT EXISTS repeat_reply_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id TEXT NOT NULL,
+    triggered_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS legacy_imports (
     import_id TEXT PRIMARY KEY,
     group_id TEXT NOT NULL,
@@ -221,6 +227,8 @@ CREATE INDEX IF NOT EXISTS idx_answer_media_state ON answer_media(state);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_reply_records_recent
 ON reply_records(platform, group_id, state, id DESC);
+CREATE INDEX IF NOT EXISTS idx_repeat_reply_events_recent
+ON repeat_reply_events(group_id, triggered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_filter_hits_recent ON filter_hits(created_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_due
 ON scheduled_tasks(enabled, next_run_at);
@@ -1407,6 +1415,28 @@ class SQLiteStore:
             )
             connection.commit()
 
+    async def recent_repeat_reply_count(self, *, group_id: str, since: int) -> int:
+        async with self._lock:
+            row = self._require_connection().execute(
+                "SELECT COUNT(*) FROM repeat_reply_events "
+                "WHERE group_id = ? AND triggered_at >= ?",
+                (str(group_id), int(since)),
+            ).fetchone()
+            return int(row[0]) if row is not None else 0
+
+    async def register_repeat_reply(self, *, group_id: str, triggered_at: int) -> None:
+        async with self._lock:
+            connection = self._require_connection()
+            connection.execute(
+                "INSERT INTO repeat_reply_events(group_id, triggered_at) VALUES(?, ?)",
+                (str(group_id), int(triggered_at)),
+            )
+            connection.execute(
+                "DELETE FROM repeat_reply_events WHERE triggered_at < ?",
+                (int(triggered_at) - 86400,),
+            )
+            connection.commit()
+
     async def recent_reply_message_id(
         self,
         *,
@@ -2451,7 +2481,8 @@ class SQLiteStore:
                 f"COALESCE((SELECT SUM(aq.frequency) FROM questions AS aq "
                 f"WHERE aq.group_id IN ({placeholders}) "
                 "AND aq.normalized_key = a.normalized_key), 0) "
-                "AS answer_question_frequency, a.components_json "
+                "AS answer_question_frequency, a.components_json, "
+                "a.normalized_key AS answer_normalized_key "
                 "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
                 f"WHERE q.group_id IN ({placeholders}) "
                 "AND q.normalized_key = ? AND a.weight > 0 "
@@ -2465,6 +2496,7 @@ class SQLiteStore:
                     weight=int(row["weight"]),
                     answer_question_frequency=int(row["answer_question_frequency"]),
                     components_json=str(row["components_json"]),
+                    normalized_key=str(row["answer_normalized_key"]),
                 )
                 for row in rows
             ]
@@ -2512,7 +2544,8 @@ class SQLiteStore:
                 f"COALESCE((SELECT SUM(aq.frequency) FROM questions AS aq "
                 f"WHERE aq.group_id IN ({placeholders}) "
                 "AND aq.normalized_key = a.normalized_key), 0) "
-                "AS answer_question_frequency, a.components_json "
+                "AS answer_question_frequency, a.components_json, "
+                "a.normalized_key AS answer_normalized_key "
                 "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
                 f"WHERE q.group_id IN ({placeholders}) "
                 "AND q.plain_text = ? AND q.is_regex = 0 AND a.weight > 0 "
@@ -2526,6 +2559,7 @@ class SQLiteStore:
                     weight=int(row["weight"]),
                     answer_question_frequency=int(row["answer_question_frequency"]),
                     components_json=str(row["components_json"]),
+                    normalized_key=str(row["answer_normalized_key"]),
                 )
                 for row in rows
             ]
@@ -2546,7 +2580,7 @@ class SQLiteStore:
                 f"WHERE aq.group_id IN ({placeholders}) "
                 "AND aq.normalized_key = a.normalized_key), 0) "
                 "AS answer_question_frequency, "
-                "a.components_json FROM answers AS a "
+                "a.components_json, a.normalized_key AS answer_normalized_key FROM answers AS a "
                 "JOIN questions AS q ON q.id = a.question_id "
                 f"WHERE q.group_id IN ({placeholders}) "
                 "AND q.normalized_key = ? AND a.weight > 0 ORDER BY a.id",
@@ -2559,6 +2593,7 @@ class SQLiteStore:
                     weight=int(row["weight"]),
                     answer_question_frequency=int(row["answer_question_frequency"]),
                     components_json=str(row["components_json"]),
+                    normalized_key=str(row["answer_normalized_key"]),
                 )
                 for row in rows
             ]
@@ -2772,6 +2807,15 @@ class SQLiteStore:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_external_library_bindings_group "
             "ON external_library_bindings(group_id, library_id)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS repeat_reply_events ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, "
+            "triggered_at INTEGER NOT NULL)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_repeat_reply_events_recent "
+            "ON repeat_reply_events(group_id, triggered_at DESC)"
         )
         rows = connection.execute(
             "SELECT id, components_json FROM questions WHERE plain_text = ''"
