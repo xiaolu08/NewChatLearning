@@ -44,6 +44,7 @@ NewChatLearning 已完整恢复上游群管理命令的主要语义，但尚未�
 | `autotaskinfo` | 功能等价 | WebUI 任务列表与运行历史 |
 | `autotaskcommand` | 功能等价 | WebUI 任务页面说明；原版任意特殊命令机制不开放 |
 | `fastdelete` | 功能等价 | `!d`/`!delete` 引用 Bot 回复或按最近序号删除；权限由插件管理员和群子管理员控制 |
+| `!d reply <完整答案正文>` | 扩展命令 | 全局/插件管理员跨群精确删除全部纯文本答案副本，执行前备份并覆盖外部导入词库域 |
 | `check` | 功能等价 | `/ncl status` 与 WebUI 概览/诊断页面 |
 | `grouplist` | 命令兼容 | `!grouplist` 显示学习、回复、自主管理、全局来源排除和仅本群查询群；联动部分仅显示 `!sharelist` 引导 |
 | `globe` | 语义改进 | 不提供容易影响全部群的无参数总开关；使用 `!add/remove globe <群号...>` 按目标群控制共享词库查询 |

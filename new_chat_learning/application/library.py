@@ -152,6 +152,25 @@ class LibraryService:
         )
         return {"deleted": deleted, "backup_path": str(backup_path)}
 
+    async def delete_answer_text_globally(
+        self,
+        *,
+        actor_id: str,
+        answer_text: str,
+    ) -> dict:
+        text = str(answer_text).strip()
+        if not text or len(text) > 4000:
+            raise ValueError("invalid_global_answer_text")
+        if self.backup_dir is None:
+            raise RuntimeError("library_backup_directory_unavailable")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        backup_path = self.backup_dir / f"before-library-delete-global-reply-{timestamp}.sqlite3"
+        return await self.store.delete_answers_globally_with_backup(
+            actor_id=actor_id,
+            normalized_key=plain_normalized_key(text),
+            backup_path=backup_path,
+        )
+
     async def _backup_before_delete(self, target: str, target_id: int) -> Path:
         if self.backup_dir is None:
             raise RuntimeError("library_backup_directory_unavailable")

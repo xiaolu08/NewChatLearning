@@ -5,12 +5,31 @@ from dataclasses import dataclass
 from typing import Any
 
 FAST_DELETE_PATTERN = re.compile(r"^[!！](?:d|delete)(?:\s+(\d+))?\s*$", re.IGNORECASE)
+GLOBAL_REPLY_DELETE_PATTERN = re.compile(
+    r"^[!！](?:d|delete)\s+reply\s+(.+?)\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class FastDeleteRequest:
     quoted_message_id: str | None
     recent_position: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalReplyDeleteRequest:
+    answer_text: str
+
+
+def parse_global_reply_delete(text: str) -> GlobalReplyDeleteRequest | None:
+    match = GLOBAL_REPLY_DELETE_PATTERN.fullmatch(str(text).strip())
+    if match is None:
+        return None
+    answer_text = match.group(1).strip()
+    if not answer_text or len(answer_text) > 4000:
+        return None
+    return GlobalReplyDeleteRequest(answer_text)
 
 
 def parse_fast_delete(event: Any) -> FastDeleteRequest | None:

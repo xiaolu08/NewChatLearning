@@ -41,7 +41,12 @@ from astrbot.api.web import PluginUploadFile, file_response, json_response, requ
 
 from new_chat_learning.application.library import component_preview, parse_add_pair
 from new_chat_learning.application.runtime import RuntimeApplication
-from new_chat_learning.commands.fast_delete import FastDeleteRequest, parse_fast_delete
+from new_chat_learning.commands.fast_delete import (
+    FastDeleteRequest,
+    GlobalReplyDeleteRequest,
+    parse_fast_delete,
+    parse_global_reply_delete,
+)
 from new_chat_learning.commands.group_settings import (
     LEARNING_MODES,
     CrossGroupCommand,
@@ -421,6 +426,11 @@ class NewChatLearningPlugin(star.Star):
                 self._record_diagnostic(recall.group_id, "pending_recalls_removed")
             return
         group_id = event.get_group_id()
+        global_reply_delete = parse_global_reply_delete(event.get_message_str())
+        if global_reply_delete is not None:
+            await self._handle_global_reply_delete(event, global_reply_delete)
+            event.stop_event()
+            return
         legacy_command = None
         if self._legacy_command_aliases_enabled():
             legacy_command = parse_legacy_group_command(event.get_message_str())
@@ -531,9 +541,20 @@ class NewChatLearningPlugin(star.Star):
         priority=maxsize - 100,
     )
     async def capture_private_message(self, event: AstrMessageEvent) -> None:
-        if self.app is None or not self._legacy_command_aliases_enabled():
+        if self.app is None:
             return
         message_text = event.get_message_str().strip()
+        global_reply_delete = parse_global_reply_delete(message_text)
+        if global_reply_delete is not None:
+            await self._handle_global_reply_delete(
+                event,
+                global_reply_delete,
+                private=True,
+            )
+            event.stop_event()
+            return
+        if not self._legacy_command_aliases_enabled():
+            return
         if message_text.lower() in {"!help", "！help", "/ncl help"}:
             await self.ncl_help(event)
             event.stop_event()
@@ -590,6 +611,55 @@ class NewChatLearningPlugin(star.Star):
                 self.logger.exception("Failed to recall fast-delete command.")
         event.set_result(event.plain_result("已删除对应答案。"))
 
+    async def _handle_global_reply_delete(
+        self,
+        event: AstrMessageEvent,
+        request: GlobalReplyDeleteRequest,
+        *,
+        private: bool = False,
+    ) -> None:
+        if self.app is None or not is_plugin_admin(event, self.config):
+            event.stop_event()
+            return
+        try:
+            result = await self.app.library.delete_answer_text_globally(
+                actor_id=event.get_sender_id(),
+                answer_text=request.answer_text,
+            )
+        except ValueError:
+            event.set_result(
+                MessageEventResult().message("用法：!d reply <完整答案正文>")
+            )
+            return
+        except (OSError, RuntimeError, sqlite3.DatabaseError):
+            self.logger.exception("Failed to delete matching answers across libraries.")
+            event.set_result(
+                MessageEventResult().message("跨群答案删除失败，原词库已保留。")
+            )
+            return
+        deleted = int(result.get("deleted_answers", 0))
+        if deleted <= 0:
+            event.set_result(
+                MessageEventResult().message("所有词库中均未找到完全一致的纯文本答案。")
+            )
+            return
+        if not private:
+            command_id = str(getattr(event.message_obj, "message_id", "") or "")
+            if command_id:
+                try:
+                    await recall_message(event, command_id)
+                except Exception:
+                    self.logger.exception("Failed to recall global answer delete command.")
+        summary = (
+            f"跨群答案删除完成：删除 {deleted} 个答案，"
+            f"清理 {int(result.get('orphan_questions', 0))} 个空问题，"
+            f"影响 {int(result.get('group_count', 0))} 个词库。"
+        )
+        backup_path = result.get("backup_path")
+        if private and backup_path:
+            summary = f"{summary}\n执行前备份：{Path(str(backup_path)).name}"
+        event.set_result(MessageEventResult().message(summary))
+
     @filter.command_group("ncl")
     def ncl(self) -> None:
         """NewChatLearning 管理命令。"""
@@ -644,6 +714,7 @@ class NewChatLearningPlugin(star.Star):
                 "!remove wellcome <联动组名> - 关闭该组欢迎语\n"
                 "!add reply cd <分钟> <联动组名> - 设置成员群独立回复冷却\n"
                 "!remove reply cd <联动组名> - 关闭联动组回复冷却"
+                "\n!d reply <完整答案正文> - 跨群删除所有完全一致的纯文本答案"
             )
         )
 

@@ -14,6 +14,7 @@ ACTION_NAMES = {
     "cleanup_filtered_answers": "过滤词库清理",
     "cleanup_invalid_media": "失效媒体清理",
     "delete_answer": "删除答案",
+    "delete_answers_by_text_globally": "跨群删除同文答案",
     "delete_member_contributions": "删除成员贡献",
     "delete_question": "删除问题",
     "export_library": "导出词库",

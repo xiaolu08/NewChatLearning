@@ -366,6 +366,80 @@ def test_unauthorized_fast_delete_is_silent_and_stops_event(monkeypatch):
     assert event.result is None
 
 
+def test_global_reply_delete_is_plugin_admin_only_and_hides_group_ids(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Library:
+        async def delete_answer_text_globally(self, **kwargs):
+            assert kwargs == {
+                "actor_id": "7",
+                "answer_text": "米家出了绝区零这个游戏真是帮大忙了",
+            }
+            return {
+                "deleted_answers": 4,
+                "orphan_questions": 2,
+                "group_count": 3,
+                "backup_path": "C:/private/backups/before-delete.sqlite3",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.library = Library()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+    recalled = []
+
+    async def fake_recall(_event, message_id):
+        recalled.append(message_id)
+        return True
+
+    monkeypatch.setattr(main_module, "recall_message", fake_recall)
+    request = main_module.GlobalReplyDeleteRequest(
+        "米家出了绝区零这个游戏真是帮大忙了"
+    )
+    asyncio.run(plugin._handle_global_reply_delete(event, request))
+
+    assert "删除 4 个答案" in event.result.text
+    assert "影响 3 个词库" in event.result.text
+    assert "C:/private" not in event.result.text
+    assert recalled == ["600"]
+
+    unauthorized, _reply, _history = plugin_with(
+        main_module, ReplyDecision(None, "no_match")
+    )
+    unauthorized.app.library = Library()
+    unauthorized.config = {}
+    denied_event = Event()
+    asyncio.run(unauthorized._handle_global_reply_delete(denied_event, request))
+    assert denied_event.stopped is True
+    assert denied_event.result is None
+
+
+def test_private_global_reply_delete_works_when_legacy_aliases_are_disabled(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Library:
+        async def delete_answer_text_globally(self, **_kwargs):
+            return {
+                "deleted_answers": 1,
+                "orphan_questions": 1,
+                "group_count": 1,
+                "backup_path": "C:/private/backups/before-delete.sqlite3",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app.library = Library()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    plugin._legacy_command_aliases_enabled = lambda: False
+    event = Event()
+    event.message_str = "!d reply 完整答案"
+
+    asyncio.run(plugin.capture_private_message(event))
+
+    assert event.stopped is True
+    assert "删除 1 个答案" in event.result.text
+    assert "before-delete.sqlite3" in event.result.text
+
+
 def test_unauthorized_library_command_is_silent(monkeypatch):
     main_module = load_main(monkeypatch)
     plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))

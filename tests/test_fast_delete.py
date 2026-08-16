@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
-from new_chat_learning.commands.fast_delete import parse_fast_delete
+from new_chat_learning.commands.fast_delete import (
+    parse_fast_delete,
+    parse_global_reply_delete,
+)
 
 
 class Event:
@@ -37,3 +40,14 @@ def test_parse_quote_id_from_raw_onebot_segments():
     request = parse_fast_delete(Event("!d", raw=raw))
     assert request is not None
     assert request.quoted_message_id == "99"
+
+
+def test_parse_global_reply_delete_exact_text_and_full_width_prefix():
+    request = parse_global_reply_delete(
+        "！d reply 米家出了绝区零这个游戏真是帮大忙了"
+    )
+    assert request is not None
+    assert request.answer_text == "米家出了绝区零这个游戏真是帮大忙了"
+    assert parse_global_reply_delete("!delete reply 完整答案") is not None
+    assert parse_global_reply_delete("!d reply") is None
+    assert parse_global_reply_delete("hello !d reply 完整答案") is None

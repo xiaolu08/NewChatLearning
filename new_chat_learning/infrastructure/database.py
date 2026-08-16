@@ -2145,6 +2145,87 @@ class SQLiteStore:
                 connection.rollback()
                 raise
 
+    async def delete_answers_globally_with_backup(
+        self,
+        *,
+        actor_id: str,
+        normalized_key: str,
+        backup_path: Path,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            connection = self._require_connection()
+            rows = connection.execute(
+                "SELECT a.id AS answer_id, a.question_id, q.group_id "
+                "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
+                "WHERE a.normalized_key = ?",
+                (str(normalized_key),),
+            ).fetchall()
+            if not rows:
+                return {
+                    "deleted_answers": 0,
+                    "orphan_questions": 0,
+                    "group_count": 0,
+                    "backup_path": None,
+                }
+
+            backup_path = Path(backup_path)
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            backup = sqlite3.connect(backup_path)
+            try:
+                connection.backup(backup)
+                integrity = backup.execute("PRAGMA quick_check").fetchone()[0]
+                if integrity != "ok":
+                    raise RuntimeError(f"backup_integrity:{integrity}")
+            finally:
+                backup.close()
+
+            question_ids = {int(row["question_id"]) for row in rows}
+            group_count = len({str(row["group_id"]) for row in rows})
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "UPDATE reply_records SET state = 'deleted', deleted_at=CURRENT_TIMESTAMP "
+                    "WHERE answer_id IN (SELECT id FROM answers WHERE normalized_key = ?) "
+                    "AND state = 'active'",
+                    (str(normalized_key),),
+                )
+                deleted_answers = connection.execute(
+                    "DELETE FROM answers WHERE normalized_key = ?",
+                    (str(normalized_key),),
+                ).rowcount
+                orphan_questions = 0
+                ordered_question_ids = sorted(question_ids)
+                for offset in range(0, len(ordered_question_ids), 500):
+                    chunk = ordered_question_ids[offset : offset + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    orphan_questions += connection.execute(
+                        f"DELETE FROM questions WHERE id IN ({placeholders}) AND NOT EXISTS "
+                        "(SELECT 1 FROM answers WHERE answers.question_id = questions.id)",
+                        chunk,
+                    ).rowcount
+                self._insert_audit(
+                    connection,
+                    actor_id=str(actor_id),
+                    action="delete_answers_by_text_globally",
+                    target="answers:global_exact_text",
+                    details={
+                        "deleted_answers": int(deleted_answers),
+                        "orphan_questions": int(orphan_questions),
+                        "group_count": group_count,
+                        "backup_name": backup_path.name,
+                    },
+                )
+                connection.commit()
+                return {
+                    "deleted_answers": int(deleted_answers),
+                    "orphan_questions": int(orphan_questions),
+                    "group_count": group_count,
+                    "backup_path": str(backup_path),
+                }
+            except Exception:
+                connection.rollback()
+                raise
+
     async def member_contribution_preview(
         self, *, group_id: str, user_id: str
     ) -> dict[str, Any]:

@@ -172,3 +172,93 @@ def test_library_deletion_creates_integrity_checked_backup(tmp_path):
     finally:
         backup.close()
     assert audits[-1] == "delete_answer"
+
+
+def test_global_exact_text_answer_delete_covers_all_scopes_with_one_backup(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "global-answer-delete.sqlite3")
+        await store.open()
+        library = LibraryService(store, tmp_path)
+        try:
+            pairs = []
+            for index, group_id in enumerate(("10001", "10002", "external:legacy"), 1):
+                pairs.append(
+                    await library.add_text_pair(
+                        group_id=group_id,
+                        actor_id="7",
+                        question=f"问题 {index}",
+                        answer="米家出了绝区零这个游戏真是帮大忙了",
+                    )
+                )
+            kept = await library.add_text_pair(
+                group_id="10001",
+                actor_id="7",
+                question="保留问题",
+                answer="只差一个标点。",
+            )
+            result = await library.delete_answer_text_globally(
+                actor_id="7",
+                answer_text="米家出了绝区零这个游戏真是帮大忙了",
+            )
+            connection = store._require_connection()
+            remaining_answers = int(
+                connection.execute("SELECT COUNT(*) FROM answers").fetchone()[0]
+            )
+            remaining_questions = int(
+                connection.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
+            )
+            audit = connection.execute(
+                "SELECT action, details_json FROM audit_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            return pairs, kept, result, remaining_answers, remaining_questions, audit
+        finally:
+            await store.close()
+
+    pairs, kept, result, remaining_answers, remaining_questions, audit = asyncio.run(
+        scenario()
+    )
+
+    assert result["deleted_answers"] == 3
+    assert result["orphan_questions"] == 3
+    assert result["group_count"] == 3
+    assert remaining_answers == 1
+    assert remaining_questions == 1
+    backup_path = __import__("pathlib").Path(result["backup_path"])
+    backup = sqlite3.connect(backup_path)
+    try:
+        assert backup.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        assert backup.execute("SELECT COUNT(*) FROM answers").fetchone()[0] == 4
+    finally:
+        backup.close()
+    assert audit["action"] == "delete_answers_by_text_globally"
+    assert "米家出了" not in str(audit["details_json"])
+    assert kept["answer_id"] not in {pair["answer_id"] for pair in pairs}
+
+
+def test_global_answer_delete_does_not_backup_when_no_exact_match(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "global-answer-delete-miss.sqlite3")
+        await store.open()
+        library = LibraryService(store, tmp_path)
+        try:
+            await library.add_text_pair(
+                group_id="10001",
+                actor_id="7",
+                question="问题",
+                answer="完整答案",
+            )
+            return await library.delete_answer_text_globally(
+                actor_id="7",
+                answer_text="完整答案。",
+            )
+        finally:
+            await store.close()
+
+    result = asyncio.run(scenario())
+    assert result == {
+        "deleted_answers": 0,
+        "orphan_questions": 0,
+        "group_count": 0,
+        "backup_path": None,
+    }
+    assert list((tmp_path / "backups").glob("*.sqlite3")) == []
