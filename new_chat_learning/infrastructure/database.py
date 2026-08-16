@@ -2497,6 +2497,39 @@ class SQLiteStore:
                 for row in rows
             ]
 
+    async def find_plain_exact_answers(
+        self,
+        group_ids: tuple[str, ...],
+        plain_text: str,
+    ) -> list[ReplyCandidate]:
+        if not group_ids or not plain_text:
+            return []
+        async with self._lock:
+            connection = self._require_connection()
+            placeholders = ",".join("?" for _ in group_ids)
+            rows = connection.execute(
+                "SELECT a.id AS answer_id, a.question_id, a.weight, "
+                f"COALESCE((SELECT SUM(aq.frequency) FROM questions AS aq "
+                f"WHERE aq.group_id IN ({placeholders}) "
+                "AND aq.normalized_key = a.normalized_key), 0) "
+                "AS answer_question_frequency, a.components_json "
+                "FROM answers AS a JOIN questions AS q ON q.id = a.question_id "
+                f"WHERE q.group_id IN ({placeholders}) "
+                "AND q.plain_text = ? AND q.is_regex = 0 AND a.weight > 0 "
+                "ORDER BY a.id",
+                (*group_ids, *group_ids, plain_text),
+            ).fetchall()
+            return [
+                ReplyCandidate(
+                    answer_id=int(row["answer_id"]),
+                    question_id=int(row["question_id"]),
+                    weight=int(row["weight"]),
+                    answer_question_frequency=int(row["answer_question_frequency"]),
+                    components_json=str(row["components_json"]),
+                )
+                for row in rows
+            ]
+
     async def find_answers_for_question(
         self,
         group_ids: tuple[str, ...],

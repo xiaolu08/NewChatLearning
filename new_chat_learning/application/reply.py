@@ -70,6 +70,15 @@ class ReplyService:
                 continue
             if not plain_text:
                 continue
+            plain_candidates = await self.store.find_plain_exact_answers(scope, plain_text)
+            if plain_candidates:
+                eligible = self._eligible_candidates(
+                    plain_candidates, settings["type_frequency_thresholds"]
+                )
+                allowed, filtered = await self._filter_candidates(group_id, eligible)
+                filtered_any = filtered_any or filtered
+                selections.extend((candidate, "plain_exact") for candidate in allowed)
+                continue
             question, reason = await self._find_fallback_question(
                 scope,
                 plain_text,

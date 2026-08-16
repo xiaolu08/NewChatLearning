@@ -47,6 +47,23 @@ async def seed_group_pair(
     return question
 
 
+def quoted_message(message_id: str, timestamp: int, text: str, group_id: str = "10001"):
+    components = (
+        {"type": "Reply", "data": {"id": "quoted-message", "text": "quoted"}},
+        {"type": "At", "data": {"qq": "12345", "name": "member"}},
+        {"type": "Plain", "data": {"text": text}},
+    )
+    return NormalizedMessage(
+        platform="aiocqhttp",
+        group_id=group_id,
+        sender_id="42",
+        message_id=message_id,
+        timestamp=timestamp,
+        components=components,
+        matching_components=components,
+    )
+
+
 def test_exact_reply_probability_at_override_and_cooldown(tmp_path):
     now = [10.0]
 
@@ -91,6 +108,48 @@ def test_exact_reply_probability_at_override_and_cooldown(tmp_path):
     assert forced.candidate.components[0]["data"]["text"] == "你好呀"
     assert cooldown.reason == "cooldown"
     assert after_cooldown.should_reply is True
+
+
+def test_plain_exact_reply_matches_question_learned_with_reply_and_at(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "plain-exact.sqlite3")
+        await store.open()
+        learning = LearningService(store, interval_seconds=900)
+        question = quoted_message("q1", 1000, "那麻爪了")
+        await learning.observe(question)
+        await learning.observe(message("a1", 1001, "图片答案"))
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "similarity_enabled": False,
+                }
+            }
+        )
+        try:
+            reply = ReplyService(store, config, random_source=random.Random(1))
+            matched = await reply.decide(
+                "10001",
+                message("incoming", 2000, "那麻爪了").normalized_key,
+                plain_text="那麻爪了",
+            )
+            typo = await reply.decide(
+                "10001",
+                message("typo", 2001, "那麻瓜了").normalized_key,
+                plain_text="那麻瓜了",
+            )
+            return question, matched, typo
+        finally:
+            await store.close()
+
+    question, matched, typo = asyncio.run(scenario())
+
+    assert question.normalized_key != message("plain", 1, "那麻爪了").normalized_key
+    assert matched.reason == "plain_exact"
+    assert matched.should_reply is True
+    assert typo.reason == "no_match"
 
 
 def test_silent_group_never_queries_or_replies(tmp_path):
