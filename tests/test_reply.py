@@ -431,6 +431,39 @@ def test_jieba_cosine_similarity_selects_best_question_and_honors_length(tmp_pat
     assert too_long.reason == "no_match"
 
 
+def test_similarity_matches_upstream_punctuation_and_zero_score_behavior(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "similarity-zero.sqlite3")
+        await store.open()
+        question = await seed_pair(store)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "similarity_enabled": True,
+                    "similarity_threshold": 0,
+                }
+            }
+        )
+        try:
+            decision = await ReplyService(store, config).decide(
+                "10001",
+                "not-an-exact-key",
+                plain_text="再见",
+            )
+            return question, decision
+        finally:
+            await store.close()
+
+    question, decision = asyncio.run(scenario())
+
+    assert question.plain_text == "你好"
+    assert cosine_similarity("你好「」『』〔〕〈〉", "你好") == 1.0
+    assert decision.reason == "no_match"
+
+
 def test_type_frequency_threshold_uses_answer_weight_or_answer_as_question_frequency(tmp_path):
     async def scenario():
         store = SQLiteStore(tmp_path / "threshold.sqlite3")

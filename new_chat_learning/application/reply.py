@@ -166,6 +166,8 @@ class ReplyService:
             if question.is_regex or len(question.plain_text) > max_length:
                 continue
             score = cosine_similarity(question.plain_text, plain_text)
+            if score <= 0.0:
+                continue
             if score >= threshold and (best_question is None or score > best_score):
                 best_question = question
                 best_score = score
@@ -206,19 +208,31 @@ PUNCTUATION = {
     "”",
     "‘",
     "’",
+    "「",
+    "」",
+    "『",
+    "』",
     "（",
     "）",
     "[",
     "]",
+    "〔",
+    "〕",
     "【",
     "】",
     "-",
     "—",
+    "——",
     "…",
+    "……",
     "～",
     "·",
     "《",
     "》",
+    "〈",
+    "〉",
+    "﹏﹏",
+    "___",
     ".",
 }
 
