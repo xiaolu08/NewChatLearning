@@ -197,6 +197,35 @@ class RuntimeApplication:
             logger.exception("Share welcome was saved but audit recording failed.")
         return result
 
+    async def update_share_reply_cooldown(
+        self,
+        *,
+        group_name: str,
+        minutes: int | None,
+        expected_revision: str,
+        actor_id: str,
+        source: str = "legacy_command",
+    ) -> dict[str, Any]:
+        result = await self.config.update_share_reply_cooldown(
+            group_name=group_name,
+            minutes=minutes,
+            expected_revision=expected_revision,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_share_reply_cooldown",
+                target=f"share_group:{group_name}",
+                details={
+                    "operation": "set" if minutes is not None else "remove",
+                    "cooldown_minutes": minutes,
+                    "source": source,
+                },
+            )
+        except Exception:
+            logger.exception("Share reply cooldown was saved but audit recording failed.")
+        return result
+
     async def update_global_switch(
         self,
         *,

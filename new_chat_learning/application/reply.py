@@ -36,6 +36,7 @@ class ReplyService:
         self.clock = clock
         self.wall_clock = wall_clock
         self._last_reply_at: dict[str, float] = {}
+        self._last_share_reply_at: dict[str, float] = {}
 
     async def decide(
         self,
@@ -56,6 +57,16 @@ class ReplyService:
         last_reply = self._last_reply_at.get(str(group_id))
         if last_reply is not None and now - last_reply < cooldown:
             return ReplyDecision(None, "cooldown")
+        share_cooldowns = getattr(
+            self.config, "share_reply_cooldowns_for", lambda _group_id: ()
+        )(group_id)
+        for share_name, share_cooldown in share_cooldowns:
+            last_share_reply = self._last_share_reply_at.get(str(share_name))
+            if (
+                last_share_reply is not None
+                and now - last_share_reply < float(share_cooldown)
+            ):
+                return ReplyDecision(None, "share_cooldown")
 
         available_groups = await self.store.list_question_group_ids()
         group_scopes = self.config.reply_library_scopes(group_id, available_groups)
@@ -145,7 +156,13 @@ class ReplyService:
         )
 
     def mark_sent(self, group_id: str) -> None:
-        self._last_reply_at[str(group_id)] = self.clock()
+        now = self.clock()
+        self._last_reply_at[str(group_id)] = now
+        share_cooldowns = getattr(
+            self.config, "share_reply_cooldowns_for", lambda _group_id: ()
+        )(group_id)
+        for share_name, _cooldown in share_cooldowns:
+            self._last_share_reply_at[str(share_name)] = now
 
     async def mark_repeat_sent(self, group_id: str) -> None:
         await self.store.register_repeat_reply(

@@ -199,6 +199,23 @@ class ConfigService:
             )
         )
 
+    def share_reply_cooldowns_for(self, group_id: str) -> tuple[tuple[str, int], ...]:
+        snapshot = self.snapshot()
+        if not bool(snapshot["general"].get("enabled", True)):
+            return ()
+        group_id = str(group_id)
+        share_groups = self._normalized_share_groups(
+            snapshot["library"].get("share_groups")
+        )
+        cooldowns = self._normalized_share_reply_cooldowns(
+            snapshot["library"].get("share_groups")
+        )
+        return tuple(
+            (name, cooldowns[name] * 60)
+            for name, members in share_groups.items()
+            if group_id in members and name in cooldowns
+        )
+
     def reply_settings(
         self,
         group_id: str | None = None,
@@ -491,6 +508,9 @@ class ConfigService:
         share_welcome_messages = self._normalized_share_welcome_messages(
             library.get("share_groups")
         )
+        share_reply_cooldowns = self._normalized_share_reply_cooldowns(
+            library.get("share_groups")
+        )
         permissions = self._validated_permission_update(snapshot["permissions"])
         reply_group_ids = self._normalized_group_ids(snapshot["reply"].get("group_ids", []))
         local_only_group_ids = self._normalized_group_ids(
@@ -541,6 +561,11 @@ class ConfigService:
                     **(
                         {"welcome_message": share_welcome_messages[name]}
                         if name in share_welcome_messages
+                        else {}
+                    ),
+                    **(
+                        {"reply_cooldown_minutes": share_reply_cooldowns[name]}
+                        if name in share_reply_cooldowns
                         else {}
                     ),
                 }
@@ -743,6 +768,9 @@ class ConfigService:
                     share_welcome_messages = self._normalized_share_welcome_messages(
                         library.get("share_groups")
                     )
+                    share_reply_cooldowns = self._normalized_share_reply_cooldowns(
+                        library.get("share_groups")
+                    )
                     members = list(share_groups.get(normalized_tag, ()))
                     members = self._replace_group_memberships(
                         members, normalized_groups, enabled
@@ -758,6 +786,11 @@ class ConfigService:
                             **(
                                 {"welcome_message": share_welcome_messages[name]}
                                 if name in share_welcome_messages
+                                else {}
+                            ),
+                            **(
+                                {"reply_cooldown_minutes": share_reply_cooldowns[name]}
+                                if name in share_reply_cooldowns
                                 else {}
                             ),
                         }
@@ -822,6 +855,9 @@ class ConfigService:
                 welcome_messages = self._normalized_share_welcome_messages(
                     library.get("share_groups")
                 )
+                reply_cooldowns = self._normalized_share_reply_cooldowns(
+                    library.get("share_groups")
+                )
                 if normalized_message is None:
                     welcome_messages.pop(normalized_name, None)
                 else:
@@ -833,6 +869,72 @@ class ConfigService:
                         **(
                             {"welcome_message": welcome_messages[name]}
                             if name in welcome_messages
+                            else {}
+                        ),
+                        **(
+                            {"reply_cooldown_minutes": reply_cooldowns[name]}
+                            if name in reply_cooldowns
+                            else {}
+                        ),
+                    }
+                    for name, group_ids in share_groups.items()
+                ]
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.cross_group_settings()
+
+    async def update_share_reply_cooldown(
+        self,
+        *,
+        group_name: str,
+        minutes: int | None,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        normalized_name = self._bounded_text(group_name, 64)
+        if not normalized_name:
+            raise ValueError("invalid_share_reply_cooldown")
+        if minutes is not None and (
+            isinstance(minutes, bool)
+            or not isinstance(minutes, int)
+            or not 1 <= minutes <= 10080
+        ):
+            raise ValueError("invalid_share_reply_cooldown")
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            original = self._backup_source()
+            try:
+                library = self._source.setdefault("library", {})
+                share_groups = self._normalized_share_groups(
+                    library.get("share_groups")
+                )
+                if normalized_name not in share_groups:
+                    raise ValueError("unknown_share_group")
+                welcome_messages = self._normalized_share_welcome_messages(
+                    library.get("share_groups")
+                )
+                reply_cooldowns = self._normalized_share_reply_cooldowns(
+                    library.get("share_groups")
+                )
+                if minutes is None:
+                    reply_cooldowns.pop(normalized_name, None)
+                else:
+                    reply_cooldowns[normalized_name] = minutes
+                library["share_groups"] = [
+                    {
+                        "name": name,
+                        "group_ids": list(group_ids),
+                        **(
+                            {"welcome_message": welcome_messages[name]}
+                            if name in welcome_messages
+                            else {}
+                        ),
+                        **(
+                            {"reply_cooldown_minutes": reply_cooldowns[name]}
+                            if name in reply_cooldowns
                             else {}
                         ),
                     }
@@ -1315,6 +1417,29 @@ class ConfigService:
                 continue
             if name and message:
                 result[name] = message
+        return result
+
+    @classmethod
+    def _normalized_share_reply_cooldowns(cls, value: Any) -> dict[str, int]:
+        if not isinstance(value, list):
+            return {}
+        result: dict[str, int] = {}
+        for entry in value[:100]:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                name = cls._bounded_text(entry.get("name"), 64)
+                raw_minutes = entry.get("reply_cooldown_minutes")
+                if isinstance(raw_minutes, bool):
+                    continue
+                numeric_minutes = float(raw_minutes)
+                if not numeric_minutes.is_integer():
+                    continue
+                minutes = int(numeric_minutes)
+            except (TypeError, ValueError):
+                continue
+            if name and 1 <= minutes <= 10080:
+                result[name] = minutes
         return result
 
     @classmethod

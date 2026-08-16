@@ -23,6 +23,7 @@ class CrossGroupCommand:
     tag: str | None = None
     message_type: str | None = None
     message: str | None = None
+    minutes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,27 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
     if command in {"!add", "!remove"} and arguments:
         action = "add" if command == "!add" else "remove"
         category = arguments[0]
+        if category == "reply" and len(arguments) >= 2 and arguments[1] == "cd":
+            if action == "add":
+                if len(raw_arguments) != 4:
+                    return CrossGroupCommand(action, "share_reply_cooldown")
+                try:
+                    minutes = int(raw_arguments[2])
+                except ValueError:
+                    minutes = None
+                return CrossGroupCommand(
+                    action,
+                    "share_reply_cooldown",
+                    tag=raw_arguments[3],
+                    minutes=minutes,
+                )
+            if len(raw_arguments) != 3:
+                return CrossGroupCommand(action, "share_reply_cooldown")
+            return CrossGroupCommand(
+                action,
+                "share_reply_cooldown",
+                tag=raw_arguments[2],
+            )
         if category in {"welcome", "wellcome"}:
             if action == "add":
                 if len(raw_arguments) < 3:

@@ -126,6 +126,12 @@ class NewChatLearningPlugin(star.Star):
                 ["POST"],
                 "NewChatLearning 保存联动组欢迎语",
             ),
+            (
+                "share-groups/reply-cooldown",
+                self.web_share_group_reply_cooldown_update,
+                ["POST"],
+                "NewChatLearning 保存联动组回复冷却",
+            ),
             ("groups/settings", self.web_group_settings, ["GET"], "NewChatLearning 群聊设置"),
             (
                 "groups/settings/update",
@@ -635,7 +641,9 @@ class NewChatLearningPlugin(star.Star):
                 "!add share <群号...> <联动组名> - 创建或加入群聊联动词库\n"
                 "!remove share <群号...> <联动组名> - 移除联动组成员\n"
                 "!add wellcome <欢迎语> <联动组名> - 设置新成员欢迎语\n"
-                "!remove wellcome <联动组名> - 关闭该组欢迎语"
+                "!remove wellcome <联动组名> - 关闭该组欢迎语\n"
+                "!add reply cd <分钟> <联动组名> - 设置联动组共享回复冷却\n"
+                "!remove reply cd <联动组名> - 关闭联动组回复冷却"
             )
         )
 
@@ -1297,6 +1305,47 @@ class NewChatLearningPlugin(star.Star):
                 text = f"{text}\n{self._format_share_groups(result)}"
             event.set_result(MessageEventResult().message(text))
             return
+        if command.category == "share_reply_cooldown":
+            usage = self._cross_group_command_usage(command.category)
+            if (
+                not command.tag
+                or (command.action == "add" and command.minutes is None)
+                or command.action not in {"add", "remove"}
+            ):
+                event.set_result(MessageEventResult().message(usage))
+                return
+            try:
+                result = await self.app.update_share_reply_cooldown(
+                    group_name=command.tag,
+                    minutes=command.minutes if command.action == "add" else None,
+                    expected_revision=settings["revision"],
+                    actor_id=event.get_sender_id(),
+                    source="legacy_private_command" if private else "legacy_group_command",
+                )
+            except ValueError as exc:
+                if str(exc) == "revision_conflict":
+                    text = "配置已被其他入口修改，请重试。"
+                elif str(exc) == "unknown_share_group":
+                    text = "指定的联动词库组不存在，请先使用 !add share 创建。"
+                else:
+                    text = usage
+                event.set_result(MessageEventResult().message(text))
+                return
+            except (OSError, RuntimeError):
+                self.logger.exception("Failed to persist share reply cooldown from command.")
+                event.set_result(
+                    MessageEventResult().message("联动组回复冷却保存失败，原配置已保留。")
+                )
+                return
+            text = (
+                f"联动组共享回复冷却已设置为 {command.minutes} 分钟。"
+                if command.action == "add"
+                else "联动组共享回复冷却已关闭。"
+            )
+            if private:
+                text = f"{text}\n{self._format_share_groups(result)}"
+            event.set_result(MessageEventResult().message(text))
+            return
 
         group_ids = [self._web_group_id(value) for value in command.group_ids]
         if not group_ids or any(group_id is None for group_id in group_ids):
@@ -1499,6 +1548,7 @@ class NewChatLearningPlugin(star.Star):
             "globe": "全局词库查询范围",
             "share": "联动词库成员",
             "share_welcome": "联动组新成员欢迎语",
+            "share_reply_cooldown": "联动组共享回复冷却",
             "reply_probability": "独立回复概率",
             "reply_type_probability": "消息类型触发回复概率",
         }.get(category, "跨群设置")
@@ -1517,6 +1567,10 @@ class NewChatLearningPlugin(star.Star):
             "share_welcome": (
                 "用法：!add wellcome <欢迎语> <联动组名> 或 "
                 "!remove wellcome <联动组名>；组名含空格时请使用引号"
+            ),
+            "share_reply_cooldown": (
+                "用法：!add reply cd <1-10080 分钟> <联动组名> 或 "
+                "!remove reply cd <联动组名>；组名含空格时请使用引号"
             ),
             "reply_probability": (
                 "用法：!reply -s <0-100> <群号...> 或 !reply -d <群号...>"
@@ -1542,7 +1596,15 @@ class NewChatLearningPlugin(star.Star):
             ]
             if name and group_ids:
                 welcome = "，已设置欢迎语" if str(entry.get("welcome_message", "")).strip() else ""
-                values.append(f"{name}（{'、'.join(group_ids)}{welcome}）")
+                cooldown = entry.get("reply_cooldown_minutes")
+                cooldown_text = (
+                    f"，回复冷却 {int(cooldown)} 分钟"
+                    if isinstance(cooldown, (int, float)) and int(cooldown) > 0
+                    else ""
+                )
+                values.append(
+                    f"{name}（{'、'.join(group_ids)}{welcome}{cooldown_text}）"
+                )
         return "；".join(values) if values else "无"
 
     @staticmethod
@@ -1791,6 +1853,76 @@ class NewChatLearningPlugin(star.Star):
             )
         except (OSError, RuntimeError):
             self.logger.exception("Failed to persist share welcome from WebUI.")
+            return self._web_json(
+                {"status": "error", "message": "AstrBot 插件配置保存失败。"},
+                status_code=503,
+            )
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "share_groups": result.get("share_groups", []),
+                    "revision": result["revision"],
+                },
+            }
+        )
+
+    async def web_share_group_reply_cooldown_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_name = str(payload.get("group_name", "")).strip()
+        revision = str(payload.get("revision", "")).strip()
+        raw_minutes = payload.get("minutes")
+        minutes = None
+        if raw_minutes is not None:
+            try:
+                if isinstance(raw_minutes, bool):
+                    raise ValueError
+                numeric_minutes = float(raw_minutes)
+                if not numeric_minutes.is_integer():
+                    raise ValueError
+                minutes = int(numeric_minutes)
+            except (TypeError, ValueError):
+                minutes = 0
+        if (
+            not group_name
+            or len(group_name) > 64
+            or (minutes is not None and not 1 <= minutes <= 10080)
+        ):
+            return self._web_json(
+                {"status": "error", "message": "联动组名称或回复冷却分钟数无效。"},
+                status_code=400,
+            )
+        try:
+            result = await self.app.update_share_reply_cooldown(
+                group_name=group_name,
+                minutes=minutes,
+                expected_revision=revision,
+                actor_id=self._web_actor_id(),
+                source="webui",
+            )
+        except ValueError as exc:
+            if str(exc) == "revision_conflict":
+                return self._web_json(
+                    {
+                        "status": "error",
+                        "message": "配置已被其他入口修改，请刷新后重试。",
+                        "data": {"revision": self.app.config.revision},
+                    },
+                    status_code=409,
+                )
+            if str(exc) == "unknown_share_group":
+                return self._web_json(
+                    {"status": "error", "message": "联动词库组已不存在。"},
+                    status_code=404,
+                )
+            return self._web_json(
+                {"status": "error", "message": "联动组回复冷却无效。"},
+                status_code=400,
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist share reply cooldown from WebUI.")
             return self._web_json(
                 {"status": "error", "message": "AstrBot 插件配置保存失败。"},
                 status_code=503,

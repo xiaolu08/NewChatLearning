@@ -399,6 +399,71 @@ def test_share_group_welcome_can_be_set_used_preserved_and_removed():
     assert service.share_welcome_messages_for("10001") == ()
 
 
+def test_share_group_reply_cooldown_can_be_set_used_preserved_and_removed():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    service = ConfigService(
+        Source(
+            {
+                "library": {
+                    "share_groups": [
+                        {
+                            "name": "牛牛联动组",
+                            "group_ids": ["10001", "10002"],
+                            "welcome_message": "欢迎加入！",
+                        }
+                    ]
+                }
+            }
+        )
+    )
+    result = asyncio.run(
+        service.update_share_reply_cooldown(
+            group_name="牛牛联动组",
+            minutes=50,
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"][0]["reply_cooldown_minutes"] == 50
+    assert result["share_groups"][0]["welcome_message"] == "欢迎加入！"
+    assert service.share_reply_cooldowns_for("10001") == (("牛牛联动组", 3000),)
+    assert service.share_reply_cooldowns_for("99999") == ()
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="share",
+            group_ids=["10003"],
+            tag="牛牛联动组",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"][0]["reply_cooldown_minutes"] == 50
+    assert service.share_reply_cooldowns_for("10003") == (("牛牛联动组", 3000),)
+
+    result = asyncio.run(
+        service.update_share_reply_cooldown(
+            group_name="牛牛联动组",
+            minutes=None,
+            expected_revision=service.revision,
+        )
+    )
+    assert "reply_cooldown_minutes" not in result["share_groups"][0]
+    assert result["share_groups"][0]["welcome_message"] == "欢迎加入！"
+    assert service.share_reply_cooldowns_for("10001") == ()
+
+    with pytest.raises(ValueError, match="invalid_share_reply_cooldown"):
+        asyncio.run(
+            service.update_share_reply_cooldown(
+                group_name="牛牛联动组",
+                minutes=0,
+                expected_revision=service.revision,
+            )
+        )
+
+
 def test_cross_group_settings_lists_effective_global_library_groups():
     service = ConfigService(
         {

@@ -1045,6 +1045,60 @@ def test_cross_group_welcome_command_updates_named_share_group(monkeypatch):
     assert "已设置欢迎语" in event.result.text
 
 
+def test_cross_group_reply_cooldown_command_updates_named_share_group(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "share_groups": [
+                    {"name": "牛牛联动组", "group_ids": ["10001"]}
+                ],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_share_reply_cooldown(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                "share_groups": [
+                    {
+                        "name": "牛牛联动组",
+                        "group_ids": ["10001"],
+                        "reply_cooldown_minutes": kwargs["minutes"],
+                    }
+                ],
+                "revision": "revision-2",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand(
+                "add",
+                "share_reply_cooldown",
+                tag="牛牛联动组",
+                minutes=50,
+            ),
+            private=True,
+        )
+    )
+
+    assert plugin.app.calls[0]["group_name"] == "牛牛联动组"
+    assert plugin.app.calls[0]["minutes"] == 50
+    assert "共享回复冷却已设置为 50 分钟" in event.result.text
+    assert "回复冷却 50 分钟" in event.result.text
+
+
 def test_group_increase_batches_members_then_recalls_welcome(monkeypatch):
     main_module = load_main(monkeypatch)
     notices = iter(
@@ -2329,6 +2383,54 @@ def test_web_share_welcome_update_uses_revision_csrf_and_actor(monkeypatch):
     plugin.app = App()
 
     response = asyncio.run(plugin.web_share_group_welcome_update())
+
+    assert response["status"] == "ok"
+    assert response["data"]["revision"] == "newrevision"
+
+
+def test_web_share_reply_cooldown_update_uses_revision_csrf_and_actor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def update_share_reply_cooldown(self, **kwargs):
+            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            assert kwargs == {
+                "group_name": "牛牛联动组",
+                "minutes": 50,
+                "expected_revision": "oldrevision",
+                "actor_id": expected_actor,
+                "source": "webui",
+            }
+            return {
+                "share_groups": [
+                    {
+                        "name": "牛牛联动组",
+                        "group_ids": ["10001"],
+                        "reply_cooldown_minutes": 50,
+                    }
+                ],
+                "revision": "newrevision",
+            }
+
+    async def body():
+        return '{"group_name":"牛牛联动组","minutes":50,"revision":"oldrevision","csrf_token":"csrf"}'.encode()
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_share_group_reply_cooldown_update())
 
     assert response["status"] == "ok"
     assert response["data"]["revision"] == "newrevision"

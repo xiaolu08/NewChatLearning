@@ -111,6 +111,100 @@ def test_exact_reply_probability_at_override_and_cooldown(tmp_path):
     assert after_cooldown.should_reply is True
 
 
+def test_share_group_reply_cooldown_is_shared_across_member_groups(tmp_path):
+    now = [10.0]
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "share-cooldown.sqlite3")
+        await store.open()
+        question = await seed_group_pair(store, "10001", "你好", "你好呀", 1000)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001", "10002"],
+                    "probability_percent": 100,
+                    "cooldown_seconds": 0,
+                },
+                "library": {
+                    "share_groups": [
+                        {
+                            "name": "牛牛联动组",
+                            "group_ids": ["10001", "10002"],
+                            "reply_cooldown_minutes": 50,
+                        }
+                    ]
+                },
+            }
+        )
+        reply = ReplyService(store, config, clock=lambda: now[0])
+        try:
+            first = await reply.decide("10001", question.normalized_key)
+            reply.mark_sent("10001")
+            blocked = await reply.decide("10002", question.normalized_key)
+            now[0] = 3010.0
+            after_cooldown = await reply.decide("10002", question.normalized_key)
+        finally:
+            await store.close()
+        return first, blocked, after_cooldown
+
+    first, blocked, after_cooldown = asyncio.run(scenario())
+
+    assert first.should_reply is True
+    assert blocked.reason == "share_cooldown"
+    assert after_cooldown.should_reply is True
+
+
+def test_all_share_group_cooldowns_must_expire(tmp_path):
+    now = [10.0]
+
+    async def scenario():
+        store = SQLiteStore(tmp_path / "multiple-share-cooldowns.sqlite3")
+        await store.open()
+        question = await seed_pair(store)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "cooldown_seconds": 0,
+                },
+                "library": {
+                    "share_groups": [
+                        {
+                            "name": "短冷却组",
+                            "group_ids": ["10001"],
+                            "reply_cooldown_minutes": 50,
+                        },
+                        {
+                            "name": "长冷却组",
+                            "group_ids": ["10001"],
+                            "reply_cooldown_minutes": 60,
+                        },
+                    ]
+                },
+            }
+        )
+        reply = ReplyService(store, config, clock=lambda: now[0])
+        try:
+            first = await reply.decide("10001", question.normalized_key)
+            reply.mark_sent("10001")
+            now[0] = 3010.0
+            still_blocked = await reply.decide("10001", question.normalized_key)
+            now[0] = 3610.0
+            allowed = await reply.decide("10001", question.normalized_key)
+        finally:
+            await store.close()
+        return first, still_blocked, allowed
+
+    first, still_blocked, allowed = asyncio.run(scenario())
+
+    assert first.should_reply is True
+    assert still_blocked.reason == "share_cooldown"
+    assert allowed.should_reply is True
+
+
 def test_message_type_probability_controls_trigger_independently(tmp_path):
     async def scenario():
         store = SQLiteStore(tmp_path / "type-probability.sqlite3")

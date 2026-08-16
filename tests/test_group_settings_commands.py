@@ -97,6 +97,21 @@ def test_parse_legacy_group_commands():
     assert parse_legacy_group_command(
         '!remove wellcome "联动 词库"'
     ) == CrossGroupCommand("remove", "share_welcome", tag="联动 词库")
+    assert parse_legacy_group_command(
+        '！add reply cd 50 "牛牛 联动组"'
+    ) == CrossGroupCommand(
+        "add",
+        "share_reply_cooldown",
+        tag="牛牛 联动组",
+        minutes=50,
+    )
+    assert parse_legacy_group_command(
+        '!remove reply cd "牛牛 联动组"'
+    ) == CrossGroupCommand(
+        "remove",
+        "share_reply_cooldown",
+        tag="牛牛 联动组",
+    )
 
 
 def test_legacy_parser_does_not_intercept_unrelated_forms():
@@ -111,6 +126,9 @@ def test_legacy_parser_does_not_intercept_unrelated_forms():
     )
     assert parse_legacy_group_command("!add wellcome only-message") == CrossGroupCommand(
         "add", "share_welcome"
+    )
+    assert parse_legacy_group_command("!add reply cd fifty 牛牛联动组") == CrossGroupCommand(
+        "add", "share_reply_cooldown", tag="牛牛联动组"
     )
 
 

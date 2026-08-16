@@ -383,13 +383,16 @@
           <div id="group-message" class="result" role="status"></div>
         </section>
         <section class="settings-band">
-          <h2>联动组新成员欢迎语</h2>
+          <h2>联动组自动功能</h2>
           <div class="toolbar">
             <div class="field"><label for="share-welcome-group">联动词库组</label><select id="share-welcome-group" aria-describedby="share-welcome-status"></select></div>
           </div>
           <label for="share-welcome-message">欢迎语</label>
           <textarea id="share-welcome-message" maxlength="1000" aria-describedby="share-welcome-status" placeholder="Bot 会先 @ 新成员，再发送这里的文本"></textarea>
           <div class="toolbar" style="margin-top:16px"><button id="share-welcome-save" type="button">保存欢迎语</button><button id="share-welcome-disable" class="secondary" type="button">关闭欢迎语</button></div>
+          <label for="share-reply-cooldown">共享回复冷却（分钟）</label>
+          <input id="share-reply-cooldown" type="number" min="1" max="10080" step="1" placeholder="未启用">
+          <div class="toolbar" style="margin-top:16px"><button id="share-reply-cooldown-save" type="button">保存回复冷却</button><button id="share-reply-cooldown-disable" class="secondary" type="button">关闭回复冷却</button></div>
           <div id="share-welcome-status" class="result" role="status"></div>
         </section>
       </div>
@@ -919,8 +922,11 @@
       function renderSelectedShareWelcome() {
         const selected = shareGroups.find(item => item.name === el("share-welcome-group").value);
         el("share-welcome-message").value = selected?.welcome_message || "";
+        el("share-reply-cooldown").value = selected?.reply_cooldown_minutes || "";
         el("share-welcome-save").disabled = !selected;
         el("share-welcome-disable").disabled = !selected || !selected.welcome_message;
+        el("share-reply-cooldown-save").disabled = !selected;
+        el("share-reply-cooldown-disable").disabled = !selected || !selected.reply_cooldown_minutes;
       }
 
       async function loadShareGroups() {
@@ -944,6 +950,18 @@
           const data = await postSecure("api/share-groups/welcome", { group_name: groupName, message, revision: shareWelcomeRevision || "" });
           shareWelcomeRevision = data.revision; shareGroups = data.share_groups || [];
           setText("share-welcome-status", message === null ? "新成员欢迎语已关闭。" : "新成员欢迎语已保存到 AstrBot 插件配置。");
+        } finally { renderSelectedShareWelcome(); }
+      }
+
+      async function saveShareReplyCooldown(minutes) {
+        const groupName = el("share-welcome-group").value;
+        if (!groupName) throw new Error("请先创建并选择联动词库组。");
+        el("share-reply-cooldown-save").disabled = true;
+        el("share-reply-cooldown-disable").disabled = true;
+        try {
+          const data = await postSecure("api/share-groups/reply-cooldown", { group_name: groupName, minutes, revision: shareWelcomeRevision || "" });
+          shareWelcomeRevision = data.revision; shareGroups = data.share_groups || [];
+          setText("share-welcome-status", minutes === null ? "联动组共享回复冷却已关闭。" : `联动组共享回复冷却已设置为 ${minutes} 分钟。`);
         } finally { renderSelectedShareWelcome(); }
       }
 
@@ -1745,6 +1763,17 @@
       el("share-welcome-disable").addEventListener("click", async () => {
         try { await saveShareWelcome(null); }
         catch (error) { setText("share-welcome-status", error?.message || "欢迎语关闭失败。"); }
+      });
+      el("share-reply-cooldown-save").addEventListener("click", async () => {
+        try {
+          const minutes = Number(el("share-reply-cooldown").value);
+          if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) throw new Error("回复冷却必须是 1 到 10080 之间的整数分钟。");
+          await saveShareReplyCooldown(minutes);
+        } catch (error) { setText("share-welcome-status", error?.message || "回复冷却保存失败。"); }
+      });
+      el("share-reply-cooldown-disable").addEventListener("click", async () => {
+        try { await saveShareReplyCooldown(null); }
+        catch (error) { setText("share-welcome-status", error?.message || "回复冷却关闭失败。"); }
       });
       el("library-search").addEventListener("click", async () => { try { await searchLibrary(); } catch (error) { setText("library-message", error?.message || "搜索失败。"); } });
       el("library-query").addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); el("library-search").click(); } });
