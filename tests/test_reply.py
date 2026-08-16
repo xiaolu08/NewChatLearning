@@ -111,7 +111,7 @@ def test_exact_reply_probability_at_override_and_cooldown(tmp_path):
     assert after_cooldown.should_reply is True
 
 
-def test_share_group_reply_cooldown_is_shared_across_member_groups(tmp_path):
+def test_share_group_reply_cooldown_is_independent_for_each_member_group(tmp_path):
     now = [10.0]
 
     async def scenario():
@@ -141,16 +141,19 @@ def test_share_group_reply_cooldown_is_shared_across_member_groups(tmp_path):
         try:
             first = await reply.decide("10001", question.normalized_key)
             reply.mark_sent("10001")
+            other_group = await reply.decide("10002", question.normalized_key)
+            reply.mark_sent("10002")
             blocked = await reply.decide("10002", question.normalized_key)
             now[0] = 3010.0
             after_cooldown = await reply.decide("10002", question.normalized_key)
         finally:
             await store.close()
-        return first, blocked, after_cooldown
+        return first, other_group, blocked, after_cooldown
 
-    first, blocked, after_cooldown = asyncio.run(scenario())
+    first, other_group, blocked, after_cooldown = asyncio.run(scenario())
 
     assert first.should_reply is True
+    assert other_group.should_reply is True
     assert blocked.reason == "share_cooldown"
     assert after_cooldown.should_reply is True
 

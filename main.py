@@ -642,7 +642,7 @@ class NewChatLearningPlugin(star.Star):
                 "!remove share <群号...> <联动组名> - 移除联动组成员\n"
                 "!add wellcome <欢迎语> <联动组名> - 设置新成员欢迎语\n"
                 "!remove wellcome <联动组名> - 关闭该组欢迎语\n"
-                "!add reply cd <分钟> <联动组名> - 设置联动组共享回复冷却\n"
+                "!add reply cd <分钟> <联动组名> - 设置成员群独立回复冷却\n"
                 "!remove reply cd <联动组名> - 关闭联动组回复冷却"
             )
         )
@@ -1338,9 +1338,9 @@ class NewChatLearningPlugin(star.Star):
                 )
                 return
             text = (
-                f"联动组共享回复冷却已设置为 {command.minutes} 分钟。"
+                f"联动组成员群独立回复冷却已设置为 {command.minutes} 分钟。"
                 if command.action == "add"
-                else "联动组共享回复冷却已关闭。"
+                else "联动组成员群独立回复冷却已关闭。"
             )
             if private:
                 text = f"{text}\n{self._format_share_groups(result)}"
@@ -1548,7 +1548,7 @@ class NewChatLearningPlugin(star.Star):
             "globe": "全局词库查询范围",
             "share": "联动词库成员",
             "share_welcome": "联动组新成员欢迎语",
-            "share_reply_cooldown": "联动组共享回复冷却",
+            "share_reply_cooldown": "联动组成员群独立回复冷却",
             "reply_probability": "独立回复概率",
             "reply_type_probability": "消息类型触发回复概率",
         }.get(category, "跨群设置")

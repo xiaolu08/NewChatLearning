@@ -1095,7 +1095,7 @@ def test_cross_group_reply_cooldown_command_updates_named_share_group(monkeypatc
 
     assert plugin.app.calls[0]["group_name"] == "牛牛联动组"
     assert plugin.app.calls[0]["minutes"] == 50
-    assert "共享回复冷却已设置为 50 分钟" in event.result.text
+    assert "成员群独立回复冷却已设置为 50 分钟" in event.result.text
     assert "回复冷却 50 分钟" in event.result.text
 
 

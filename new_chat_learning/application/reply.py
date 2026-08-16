@@ -60,13 +60,17 @@ class ReplyService:
         share_cooldowns = getattr(
             self.config, "share_reply_cooldowns_for", lambda _group_id: ()
         )(group_id)
-        for share_name, share_cooldown in share_cooldowns:
-            last_share_reply = self._last_share_reply_at.get(str(share_name))
-            if (
-                last_share_reply is not None
-                and now - last_share_reply < float(share_cooldown)
-            ):
-                return ReplyDecision(None, "share_cooldown")
+        share_cooldown = max(
+            (float(cooldown) for _share_name, cooldown in share_cooldowns),
+            default=0.0,
+        )
+        last_share_reply = self._last_share_reply_at.get(str(group_id))
+        if (
+            share_cooldown > 0
+            and last_share_reply is not None
+            and now - last_share_reply < share_cooldown
+        ):
+            return ReplyDecision(None, "share_cooldown")
 
         available_groups = await self.store.list_question_group_ids()
         group_scopes = self.config.reply_library_scopes(group_id, available_groups)
@@ -161,8 +165,8 @@ class ReplyService:
         share_cooldowns = getattr(
             self.config, "share_reply_cooldowns_for", lambda _group_id: ()
         )(group_id)
-        for share_name, _cooldown in share_cooldowns:
-            self._last_share_reply_at[str(share_name)] = now
+        if share_cooldowns:
+            self._last_share_reply_at[str(group_id)] = now
 
     async def mark_repeat_sent(self, group_id: str) -> None:
         await self.store.register_repeat_reply(
