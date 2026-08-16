@@ -1,7 +1,7 @@
 ---
 title: NewChatLearning 系统设计
-version: 1.1
-date: 2026-08-14
+version: 1.2
+date: 2026-08-16
 status: 当前有效
 ---
 
@@ -54,6 +54,7 @@ NewChatLearning/
 - 全局模式实时联合未被排除、且未进入标签体系的群，不生成 `Merge.cl` 或复制问题答案。
 - 配置标签的群只查询与自己共享标签的群；多个标签分别形成候选范围，同一答案可像原版多个标签词库一样重复贡献抽样权重。
 - 命名联动组为成员群追加该组全部成员的本群词库范围。群可加入多个联动组，查询时合并直接成员并去重；不会沿成员群继续读取其全局词库、外部导入词库或其他联动组，因此不存在递归权限扩散。
+- 每个命名联动组可保存一条可选新成员欢迎语。收到 OneBot `group_increase` 后，只查询事件群直接所属联动组的欢迎语，过滤 Bot 自身入群事件，并通过 NapCat 发送 `At + Plain`。一个群属于多个已配置组时按配置顺序发送，重复文本去重；欢迎能力不沿词库权限传播。
 - 问题频次、答案权重、贡献者和媒体引用仍保留原群来源，便于后续按群管理、备份和删除。
 - 旧 `.cl` 导入保存为独立外部词库域；每个外部词库维护启用状态、版本和目标群绑定。外部域不参与群聊学习，也不自动进入全部回复群。
 
@@ -72,9 +73,9 @@ NewChatLearning/
 
 - 主入口：`/ncl help`、`/ncl status`、`/ncl learning`、`/ncl reply`、`/ncl silent`、`/ncl target`、`/ncl library`、`/ncl media`、`/ncl tts`、`/ncl task`、`/ncl admin`。
 - Beta 25 已实现当前群 `/ncl mode [disabled|learning|reply|learning_reply|silent]`、`/ncl learning on|off`、`/ncl reply on|off`、`/ncl silent on|off` 和 `/ncl target list|add|remove|clear`。开关命令只改变对应能力并保留另一项；定向用户只有在学习模式下才能新增。
-- 当前已兼容的管理入口包括 `!learning`、`!reply`、`!grouplist`、`!sharelist` 和 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge|globe|share`。`!learning` 与 `!reply` 在管理员私聊中切换全局主开关，在群聊中切换当前群能力；`!reply -s <百分比> <群号...>` 设置目标群全部触发类型的统一概率并清除类型细分，`!reply -d <群号...>` 恢复全部类型继承全局概率。`!reply -s <类型> <百分比> <群号...>` 和对应 `-d` 形式只修改指定触发消息类型。`!add/remove share <群号...> <联动组名>` 创建或调整命名联动组，带空格的组名使用引号。管理员私聊 `!sharelist` 返回完整联动组名和成员群号，群聊中只提示转到私聊。带群号的跨群命令可从任意管理群或管理员私聊发出，不需要进入目标群。跨群命令只允许 AstrBot 全局管理员或插件管理员执行；群聊子管理员和普通成员被静默截断，命令消息不进入学习链。
+- 当前已兼容的管理入口包括 `!learning`、`!reply`、`!grouplist`、`!sharelist` 和 `!add/!remove learning|learnings|reply|tag|subadmin|unmerge|globe|share|wellcome`。`!learning` 与 `!reply` 在管理员私聊中切换全局主开关，在群聊中切换当前群能力；`!reply -s <百分比> <群号...>` 设置目标群全部触发类型的统一概率并清除类型细分，`!reply -d <群号...>` 恢复全部类型继承全局概率。`!reply -s <类型> <百分比> <群号...>` 和对应 `-d` 形式只修改指定触发消息类型。`!add/remove share <群号...> <联动组名>` 创建或调整命名联动组，`!add wellcome <欢迎语> <联动组名>` 与 `!remove wellcome <联动组名>` 设置或关闭欢迎语，同时接受 `welcome` 拼写；带空格的组名使用引号。管理员私聊 `!sharelist` 返回完整联动组名和成员群号，群聊中只提示转到私聊。带群号的跨群命令可从任意管理群或管理员私聊发出，不需要进入目标群。跨群命令只允许 AstrBot 全局管理员或插件管理员执行；群聊子管理员和普通成员被静默截断，命令消息不进入学习链。
 - `unmerge` 与 `globe` 控制两个不同方向：`add unmerge` 排除来源群，不让该群词条汇入未标签的全局查询范围；`add globe` 明确允许目标回复群查询全局或标签共享词库，`remove globe` 则使其只查询本群词库。首次使用按群 `globe` 命令后，显式群列表会取代兼容旧配置保留的全部群模式；不存在无群号的 `!globe` 总开关。
-- 跨群写入在一次配置 revision 校验和一次持久化中原子更新学习群、回复群、静默群、共享标签、联动词库组、全局词库来源排除群、仅本群查询群、群级概率、消息类型概率及子管理员。群聊中的写入回执只返回操作类型和目标数量，`!grouplist` 的私聊和群聊结果都只保留 `!sharelist` 引导，不展开联动组。完整联动组名和成员群号仅在管理员私聊使用 `!sharelist` 时返回。`remove tag` 清除目标群全部标签；`remove share` 只移除指定联动组中的目标群，空组自动删除。`add subadmin` 通过 AstrBot 的 NapCat 群资料接口读取目标群当前群主和群管理员，读取任一目标失败则整批不保存；再次执行可刷新授权名单。
+- 跨群写入在一次配置 revision 校验和一次持久化中原子更新学习群、回复群、静默群、共享标签、联动词库组及其欢迎语、全局词库来源排除群、仅本群查询群、群级概率、消息类型概率及子管理员。欢迎语设置由聊天命令、WebUI 与 AstrBot 配置共用同一服务并写入审计，但审计摘要不保存欢迎语正文。群聊中的写入回执只返回操作类型和目标数量，`!grouplist` 的私聊和群聊结果都只保留 `!sharelist` 引导，不展开联动组。完整联动组名和成员群号仅在管理员私聊使用 `!sharelist` 时返回。`remove tag` 清除目标群全部标签；`remove share` 只移除指定联动组中的目标群，空组自动删除。`add subadmin` 通过 AstrBot 的 NapCat 群资料接口读取目标群当前群主和群管理员，读取任一目标失败则整批不保存；再次执行可刷新授权名单。
 - 当前词库管理命令：`/ncl search <关键词>`、`/ncl show <问题ID>`、`/ncl add <问题> => <答案>`、`/ncl add-regex <表达式> => <答案>`、`/ncl weight <答案ID> <权重>`、`/ncl delete-answer <答案ID>`、`/ncl delete-question <问题ID>`。
 - 词库管理命令始终限定当前群作用域。全局管理员和插件管理员仍按当前群操作；群子管理员不能借助问题或答案 ID 访问其他群。
 - WebUI 词库页复用同一应用服务；读取要求一小时服务端会话，新增与权重修改要求 CSRF，答案和问题删除还要求二次确认与删除前数据库备份。

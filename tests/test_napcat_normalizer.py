@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from new_chat_learning.platform.napcat.normalizer import (
     enrich_long_tail_components,
     normalize_group_message,
+    parse_group_increase_notice,
     parse_recall_notice,
     reply_matching_key,
 )
@@ -250,6 +251,27 @@ def test_parses_group_recall_notice():
     assert result is not None
     assert result.group_id == "10001"
     assert result.message_id == "88"
+
+
+def test_parses_group_increase_notice_and_ignores_bot_itself():
+    event = Event(
+        {
+            "post_type": "notice",
+            "notice_type": "group_increase",
+            "group_id": 10001,
+            "user_id": 12345,
+            "self_id": 9,
+        }
+    )
+
+    result = parse_group_increase_notice(event)
+
+    assert result is not None
+    assert result.group_id == "10001"
+    assert result.user_id == "12345"
+
+    event.message_obj.raw_message["user_id"] = 9
+    assert parse_group_increase_notice(event) is None
 
 
 def test_reply_key_ignores_bot_mention_and_quote():

@@ -61,3 +61,10 @@ class RecallNotice:
     platform: str
     group_id: str
     message_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class GroupIncreaseNotice:
+    platform: str
+    group_id: str
+    user_id: str

@@ -404,6 +404,12 @@
                 "type": "list",
                 "items": {"type": "string"},
                 "default": []
+              },
+              "welcome_message": {
+                "description": "新成员欢迎语",
+                "type": "string",
+                "hint": "新成员加入该联动组任一成员群时，Bot 会先 @ 新成员再发送此文本。留空表示关闭。",
+                "default": ""
               }
             }
           }

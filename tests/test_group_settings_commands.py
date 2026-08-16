@@ -78,6 +78,25 @@ def test_parse_legacy_group_commands():
         "20",
         "text",
     )
+    assert parse_legacy_group_command(
+        "！add wellcome 博士，欢迎加入这盛大的庆典！ 牛牛联动组"
+    ) == CrossGroupCommand(
+        "add",
+        "share_welcome",
+        tag="牛牛联动组",
+        message="博士，欢迎加入这盛大的庆典！",
+    )
+    assert parse_legacy_group_command(
+        '!add welcome "欢迎 新成员" "联动 词库"'
+    ) == CrossGroupCommand(
+        "add",
+        "share_welcome",
+        tag="联动 词库",
+        message="欢迎 新成员",
+    )
+    assert parse_legacy_group_command(
+        '!remove wellcome "联动 词库"'
+    ) == CrossGroupCommand("remove", "share_welcome", tag="联动 词库")
 
 
 def test_legacy_parser_does_not_intercept_unrelated_forms():
@@ -89,6 +108,9 @@ def test_legacy_parser_does_not_intercept_unrelated_forms():
     assert parse_legacy_group_command("!globe on") is None
     assert parse_legacy_group_command("!add share 10001") == CrossGroupCommand(
         "add", "share"
+    )
+    assert parse_legacy_group_command("!add wellcome only-message") == CrossGroupCommand(
+        "add", "share_welcome"
     )
 
 

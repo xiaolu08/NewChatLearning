@@ -22,6 +22,7 @@ class CrossGroupCommand:
     group_ids: tuple[str, ...] = ()
     tag: str | None = None
     message_type: str | None = None
+    message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,23 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
     if command in {"!add", "!remove"} and arguments:
         action = "add" if command == "!add" else "remove"
         category = arguments[0]
+        if category in {"welcome", "wellcome"}:
+            if action == "add":
+                if len(raw_arguments) < 3:
+                    return CrossGroupCommand(action, "share_welcome")
+                return CrossGroupCommand(
+                    action,
+                    "share_welcome",
+                    tag=raw_arguments[-1],
+                    message=" ".join(raw_arguments[1:-1]).strip(),
+                )
+            if len(raw_arguments) != 2:
+                return CrossGroupCommand(action, "share_welcome")
+            return CrossGroupCommand(
+                action,
+                "share_welcome",
+                tag=raw_arguments[1],
+            )
         if category not in {
             "learning",
             "learnings",

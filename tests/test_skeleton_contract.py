@@ -48,6 +48,8 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert schema["library"]["items"]["group_tags"]["default"] == []
     assert schema["library"]["items"]["share_groups"]["type"] == "template_list"
     assert schema["library"]["items"]["share_groups"]["default"] == []
+    share_items = schema["library"]["items"]["share_groups"]["templates"]["share_groups"]["items"]
+    assert share_items["welcome_message"]["type"] == "string"
     assert schema["tts"]["items"]["enabled"]["default"] is False
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
@@ -58,6 +60,10 @@ def test_config_schema_and_dashboard_entry_are_valid():
     )
     assert 'id="library"' in dashboard
     assert 'id="tab-groups"' in dashboard
+    assert 'id="share-welcome-group"' in dashboard
+    assert 'id="share-welcome-message"' in dashboard
+    assert 'apiGet("api/share-groups")' in dashboard
+    assert 'postSecure("api/share-groups/welcome"' in dashboard
     assert 'id="overview-refresh"' in dashboard
     assert 'id="tab-audit"' in dashboard
     assert 'id="tab-permissions"' in dashboard

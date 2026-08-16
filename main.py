@@ -59,12 +59,14 @@ from new_chat_learning.platform.astrbot.renderer import render_message_chain
 from new_chat_learning.platform.napcat import normalizer as _napcat_normalizer
 from new_chat_learning.platform.napcat.actions import (
     recall_message,
+    send_group_welcome,
     send_group_message_with_id,
 )
 
 enrich_long_tail_components = _napcat_normalizer.enrich_long_tail_components
 normalize_group_message = _napcat_normalizer.normalize_group_message
 parse_recall_notice = _napcat_normalizer.parse_recall_notice
+parse_group_increase_notice = _napcat_normalizer.parse_group_increase_notice
 reply_matching_key = _napcat_normalizer.reply_matching_key
 from new_chat_learning.web.auth import COOKIE_NAME, SESSION_TTL_SECONDS
 
@@ -113,6 +115,13 @@ class NewChatLearningPlugin(star.Star):
             ),
             ("media/groups", self.web_media_groups, ["GET"], "NewChatLearning 媒体群列表"),
             ("groups", self.web_groups, ["GET"], "NewChatLearning 群聊列表"),
+            ("share-groups", self.web_share_groups, ["GET"], "NewChatLearning 联动组设置"),
+            (
+                "share-groups/welcome",
+                self.web_share_group_welcome_update,
+                ["POST"],
+                "NewChatLearning 保存联动组欢迎语",
+            ),
             ("groups/settings", self.web_group_settings, ["GET"], "NewChatLearning 群聊设置"),
             (
                 "groups/settings/update",
@@ -325,6 +334,25 @@ class NewChatLearningPlugin(star.Star):
     )
     async def capture_group_message(self, event: AstrMessageEvent) -> None:
         if self.app is None:
+            return
+        group_increase = parse_group_increase_notice(event)
+        if group_increase is not None:
+            for message in self.app.config.share_welcome_messages_for(
+                group_increase.group_id
+            ):
+                try:
+                    sent = await send_group_welcome(
+                        event,
+                        group_id=group_increase.group_id,
+                        user_id=group_increase.user_id,
+                        message=message,
+                    )
+                    if sent:
+                        self._record_diagnostic(
+                            group_increase.group_id, "welcome_messages_sent"
+                        )
+                except Exception:
+                    self.logger.exception("Failed to send share-group welcome message.")
             return
         recall = parse_recall_notice(event)
         if recall is not None:
@@ -552,7 +580,9 @@ class NewChatLearningPlugin(star.Star):
                 "!add globe <群号...> - 允许目标群使用全局或标签共享词库\n"
                 "!remove globe <群号...> - 目标群仅使用本群词库\n"
                 "!add share <群号...> <联动组名> - 创建或加入群聊联动词库\n"
-                "!remove share <群号...> <联动组名> - 移除联动组成员"
+                "!remove share <群号...> <联动组名> - 移除联动组成员\n"
+                "!add wellcome <欢迎语> <联动组名> - 设置新成员欢迎语\n"
+                "!remove wellcome <联动组名> - 关闭该组欢迎语"
             )
         )
 
@@ -1182,6 +1212,38 @@ class NewChatLearningPlugin(star.Star):
                 text = "联动群聊列表包含跨群信息，请私聊 Bot 使用 !sharelist 查看。"
             event.set_result(MessageEventResult().message(text))
             return
+        if command.category == "share_welcome":
+            usage = self._cross_group_command_usage(command.category)
+            if not command.tag or (command.action == "add" and not command.message):
+                event.set_result(MessageEventResult().message(usage))
+                return
+            try:
+                result = await self.app.update_share_welcome_message(
+                    group_name=command.tag,
+                    message=command.message if command.action == "add" else None,
+                    expected_revision=settings["revision"],
+                    actor_id=event.get_sender_id(),
+                    source="legacy_private_command" if private else "legacy_group_command",
+                )
+            except ValueError as exc:
+                if str(exc) == "revision_conflict":
+                    text = "配置已被其他入口修改，请重试。"
+                elif str(exc) == "unknown_share_group":
+                    text = "指定的联动词库组不存在，请先使用 !add share 创建。"
+                else:
+                    text = usage
+                event.set_result(MessageEventResult().message(text))
+                return
+            except (OSError, RuntimeError):
+                self.logger.exception("Failed to persist share welcome from command.")
+                event.set_result(MessageEventResult().message("联动组欢迎语保存失败，原配置已保留。"))
+                return
+            action_text = "已设置" if command.action == "add" else "已关闭"
+            text = f"联动组新成员欢迎语{action_text}。"
+            if private:
+                text = f"{text}\n{self._format_share_groups(result)}"
+            event.set_result(MessageEventResult().message(text))
+            return
 
         group_ids = [self._web_group_id(value) for value in command.group_ids]
         if not group_ids or any(group_id is None for group_id in group_ids):
@@ -1383,6 +1445,7 @@ class NewChatLearningPlugin(star.Star):
             "unmerge": "全局词库来源排除",
             "globe": "全局词库查询范围",
             "share": "联动词库成员",
+            "share_welcome": "联动组新成员欢迎语",
             "reply_probability": "独立回复概率",
             "reply_type_probability": "消息类型触发回复概率",
         }.get(category, "跨群设置")
@@ -1398,6 +1461,10 @@ class NewChatLearningPlugin(star.Star):
             "unmerge": "用法：!add/remove unmerge <群号...>",
             "globe": "用法：!add/remove globe <群号...>",
             "share": "用法：!add/remove share <群号...> <联动组名>",
+            "share_welcome": (
+                "用法：!add wellcome <欢迎语> <联动组名> 或 "
+                "!remove wellcome <联动组名>；组名含空格时请使用引号"
+            ),
             "reply_probability": (
                 "用法：!reply -s <0-100> <群号...> 或 !reply -d <群号...>"
             ),
@@ -1421,7 +1488,8 @@ class NewChatLearningPlugin(star.Star):
                 str(value) for value in entry.get("group_ids", []) if str(value)
             ]
             if name and group_ids:
-                values.append(f"{name}（{'、'.join(group_ids)}）")
+                welcome = "，已设置欢迎语" if str(entry.get("welcome_message", "")).strip() else ""
+                values.append(f"{name}（{'、'.join(group_ids)}{welcome}）")
         return "；".join(values) if values else "无"
 
     @staticmethod
@@ -1604,6 +1672,82 @@ class NewChatLearningPlugin(star.Star):
                 "data": {
                     "group_ids": group_ids,
                     "revision": self.app.config.revision,
+                },
+            }
+        )
+
+    async def web_share_groups(self):
+        error = await self._authorized_web_read()
+        if error is not None:
+            return error
+        settings = self.app.config.cross_group_settings()
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "share_groups": settings.get("share_groups", []),
+                    "revision": settings["revision"],
+                },
+            }
+        )
+
+    async def web_share_group_welcome_update(self):
+        payload, error = await self._authorized_web_payload()
+        if error is not None:
+            return error
+        group_name = str(payload.get("group_name", "")).strip()
+        revision = str(payload.get("revision", "")).strip()
+        raw_message = payload.get("message")
+        message = None if raw_message is None else str(raw_message).strip()
+        if not group_name or len(group_name) > 64 or (message is not None and not message):
+            return self._web_json(
+                {"status": "error", "message": "联动组名称或欢迎语无效。"},
+                status_code=400,
+            )
+        if message is not None and len(message) > 1000:
+            return self._web_json(
+                {"status": "error", "message": "欢迎语不能超过 1000 字。"},
+                status_code=400,
+            )
+        try:
+            result = await self.app.update_share_welcome_message(
+                group_name=group_name,
+                message=message,
+                expected_revision=revision,
+                actor_id=self._web_actor_id(),
+                source="webui",
+            )
+        except ValueError as exc:
+            if str(exc) == "revision_conflict":
+                return self._web_json(
+                    {
+                        "status": "error",
+                        "message": "配置已被其他入口修改，请刷新后重试。",
+                        "data": {"revision": self.app.config.revision},
+                    },
+                    status_code=409,
+                )
+            if str(exc) == "unknown_share_group":
+                return self._web_json(
+                    {"status": "error", "message": "联动词库组已不存在。"},
+                    status_code=404,
+                )
+            return self._web_json(
+                {"status": "error", "message": "联动组欢迎语无效。"},
+                status_code=400,
+            )
+        except (OSError, RuntimeError):
+            self.logger.exception("Failed to persist share welcome from WebUI.")
+            return self._web_json(
+                {"status": "error", "message": "AstrBot 插件配置保存失败。"},
+                status_code=503,
+            )
+        return self._web_json(
+            {
+                "status": "ok",
+                "data": {
+                    "share_groups": result.get("share_groups", []),
+                    "revision": result["revision"],
                 },
             }
         )

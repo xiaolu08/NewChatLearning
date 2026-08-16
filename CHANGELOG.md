@@ -12,6 +12,7 @@
 - 将公开 Beta 版本统一命名为 `0.2.0-beta`，同步更新插件元数据、运行版本、安装说明和 Release Notes 文件名。
 - 修复 GitHub 源码包中 `metadata.yaml`、更新日志和内嵌 WebUI 页面因编码转换出现问号的问题。
 - WebUI 保持紧凑控制台、无密码进入、一小时管理会话和高风险操作二次确认。
+- 联动词库组新增自定义新成员欢迎语；支持 `!add/remove wellcome`、`welcome` 拼写别名和 WebUI 同源管理，仅在成员群收到 NapCat 入群通知时发送 `@新成员 + 文本`。
 
 ## 0.1.0-beta.31.post22 - 2026-08-15
 

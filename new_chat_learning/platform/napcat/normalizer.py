@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from new_chat_learning.domain.message import (
+    GroupIncreaseNotice,
     NormalizedMessage,
     RecallNotice,
     normalized_components_key,
@@ -111,6 +112,22 @@ def parse_recall_notice(event: Any) -> RecallNotice | None:
         platform=str(getattr(event, "get_platform_name", lambda: "aiocqhttp")()),
         group_id=group_id,
         message_id=message_id,
+    )
+
+
+def parse_group_increase_notice(event: Any) -> GroupIncreaseNotice | None:
+    raw = _raw_event_dict(event)
+    if raw.get("post_type") != "notice" or raw.get("notice_type") != "group_increase":
+        return None
+    group_id = str(raw.get("group_id") or "")
+    user_id = str(raw.get("user_id") or "")
+    self_id = str(raw.get("self_id") or getattr(event, "get_self_id", lambda: "")())
+    if not group_id or not user_id or user_id == self_id:
+        return None
+    return GroupIncreaseNotice(
+        platform=str(getattr(event, "get_platform_name", lambda: "aiocqhttp")()),
+        group_id=group_id,
+        user_id=user_id,
     )
 
 

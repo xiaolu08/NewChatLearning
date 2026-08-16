@@ -1,7 +1,7 @@
 ---
 title: NewChatLearning NapCat 消息兼容矩阵
-version: 0.3
-date: 2026-08-13
+version: 0.4
+date: 2026-08-16
 status: 当前有效
 ---
 
@@ -38,6 +38,12 @@ status: 当前有效
 - 尚在学习链中的消息立即移除并修复前后关系。
 - 已形成问答的消息默认不自动删除，以避免历史权重突然变化；提供配置项和审计操作按贡献删除。
 
+### 群成员加入
+
+- 读取 OneBot `notice_type=group_increase` 的 `group_id`、`user_id` 与 `self_id`，忽略 Bot 自身入群事件。
+- 仅当事件群直接属于配置了欢迎语的联动词库组时，使用 NapCat `send_group_msg` 发送 `at` 与 `text` 两个消息段。
+- 欢迎消息不进入学习链，不继承全局词库、外部词库或其他联动组权限，也不会发送到事件群之外。
+
 ### 媒体健康
 
 - 状态：`healthy`、`missing`、`expired_remote`、`unsupported`、`quarantined`。
@@ -67,3 +73,4 @@ status: 当前有效
 | 2026-08-13 | 0.1 | 建立原版消息类型到 NapCat/AstrBot 的兼容策略。 |
 | 2026-08-13 | 0.2 | 实现核心媒体本地化、去重、配额、SSRF 防护与本地优先重发。 |
 | 2026-08-14 | 0.3 | 实现合并转发受限展开与 Nodes 重建、商城表情原始段补全、XML 限长重发及转发内媒体递归持久化。 |
+| 2026-08-16 | 0.4 | 支持 `group_increase` 入群通知，并为命名联动组发送限定成员群范围的自定义欢迎消息。 |

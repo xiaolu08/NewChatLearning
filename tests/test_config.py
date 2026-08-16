@@ -345,6 +345,60 @@ def test_share_group_membership_is_created_updated_and_removed_atomically():
     assert result["share_groups"] == []
 
 
+def test_share_group_welcome_can_be_set_used_preserved_and_removed():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    service = ConfigService(
+        Source(
+            {
+                "library": {
+                    "share_groups": [
+                        {"name": "牛牛联动组", "group_ids": ["10001", "10002"]}
+                    ]
+                }
+            }
+        )
+    )
+    result = asyncio.run(
+        service.update_share_welcome_message(
+            group_name="牛牛联动组",
+            message="博士，欢迎加入这盛大的庆典！",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"][0]["welcome_message"] == "博士，欢迎加入这盛大的庆典！"
+    assert service.share_welcome_messages_for("10001") == (
+        "博士，欢迎加入这盛大的庆典！",
+    )
+    assert service.share_welcome_messages_for("99999") == ()
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="share",
+            group_ids=["10003"],
+            tag="牛牛联动组",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"][0]["welcome_message"] == "博士，欢迎加入这盛大的庆典！"
+    assert service.share_welcome_messages_for("10003") == (
+        "博士，欢迎加入这盛大的庆典！",
+    )
+
+    result = asyncio.run(
+        service.update_share_welcome_message(
+            group_name="牛牛联动组",
+            message=None,
+            expected_revision=service.revision,
+        )
+    )
+    assert "welcome_message" not in result["share_groups"][0]
+    assert service.share_welcome_messages_for("10001") == ()
+
+
 def test_cross_group_settings_lists_effective_global_library_groups():
     service = ConfigService(
         {

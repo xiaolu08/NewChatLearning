@@ -382,6 +382,16 @@
           <div class="toolbar" style="margin-top:16px"><button id="group-save" type="button">保存群聊设置</button></div>
           <div id="group-message" class="result" role="status"></div>
         </section>
+        <section class="settings-band">
+          <h2>联动组新成员欢迎语</h2>
+          <div class="toolbar">
+            <div class="field"><label for="share-welcome-group">联动词库组</label><select id="share-welcome-group" aria-describedby="share-welcome-status"></select></div>
+          </div>
+          <label for="share-welcome-message">欢迎语</label>
+          <textarea id="share-welcome-message" maxlength="1000" aria-describedby="share-welcome-status" placeholder="Bot 会先 @ 新成员，再发送这里的文本"></textarea>
+          <div class="toolbar" style="margin-top:16px"><button id="share-welcome-save" type="button">保存欢迎语</button><button id="share-welcome-disable" class="secondary" type="button">关闭欢迎语</button></div>
+          <div id="share-welcome-status" class="result" role="status"></div>
+        </section>
       </div>
       <div id="library-view" class="hidden">
         <div class="toolbar">
@@ -709,6 +719,8 @@
       let currentQuestion = null;
       let pendingLibraryDelete = null;
       let groupRevision = null;
+      let shareWelcomeRevision = null;
+      let shareGroups = [];
       let filterRevision = null;
       let permissionRevision = null;
       let ttsRevision = null;
@@ -861,6 +873,7 @@
         setText("view-description", description);
         document.title = `${title} · NewChatLearning Beta`;
         closeNavigation();
+        if (groups) loadShareGroups().catch(error => setText("share-welcome-status", error?.message || "联动组读取失败。"));
         if (filters) loadFilterSettings().catch(error => setText("filters-message", error?.message || "过滤设置读取失败。"));
         if (permissions) loadPermissionSettings().catch(error => setText("permissions-message", error?.message || "权限设置读取失败。"));
         if (migration) Promise.all([loadMigrationStatus(), loadExternalLibraries()]).catch(error => setText("migration-message", error?.message || "迁移数据读取失败。"));
@@ -901,6 +914,37 @@
           ? `本群独立概率：${data.probability_percent}%（全局默认 ${data.global_probability_percent}%）`
           : `当前继承全局概率：${data.global_probability_percent}%。留空并保存时继续继承。`;
         updateTargetState(); setText("group-message", `已读取群 ${data.group_id} 的设置。`);
+      }
+
+      function renderSelectedShareWelcome() {
+        const selected = shareGroups.find(item => item.name === el("share-welcome-group").value);
+        el("share-welcome-message").value = selected?.welcome_message || "";
+        el("share-welcome-save").disabled = !selected;
+        el("share-welcome-disable").disabled = !selected || !selected.welcome_message;
+      }
+
+      async function loadShareGroups() {
+        const data = payloadData(await bridge.apiGet("api/share-groups"));
+        shareWelcomeRevision = data.revision;
+        shareGroups = data.share_groups || [];
+        const previous = el("share-welcome-group").value;
+        el("share-welcome-group").replaceChildren(...shareGroups.map(item => {
+          const option = document.createElement("option"); option.value = item.name; option.textContent = item.name; return option;
+        }));
+        if (shareGroups.some(item => item.name === previous)) el("share-welcome-group").value = previous;
+        renderSelectedShareWelcome();
+        setText("share-welcome-status", shareGroups.length ? `已读取 ${shareGroups.length} 个联动词库组。` : "尚未创建联动词库组。");
+      }
+
+      async function saveShareWelcome(message) {
+        const groupName = el("share-welcome-group").value;
+        if (!groupName) throw new Error("请先创建并选择联动词库组。");
+        el("share-welcome-save").disabled = true; el("share-welcome-disable").disabled = true;
+        try {
+          const data = await postSecure("api/share-groups/welcome", { group_name: groupName, message, revision: shareWelcomeRevision || "" });
+          shareWelcomeRevision = data.revision; shareGroups = data.share_groups || [];
+          setText("share-welcome-status", message === null ? "新成员欢迎语已关闭。" : "新成员欢迎语已保存到 AstrBot 插件配置。");
+        } finally { renderSelectedShareWelcome(); }
       }
 
       function updateTargetState() {
@@ -1689,6 +1733,18 @@
           const data = await postSecure("api/groups/settings/update", { group_id: selectedSettingsGroup(), mode, target_user_ids: targets, probability_percent: probability, revision: groupRevision || "" });
           groupRevision = data.revision; setText("group-message", "群聊设置已保存到 AstrBot 插件配置。"); await loadGroups();
         } catch (error) { setText("group-message", error?.message || "设置保存失败。"); }
+      });
+      el("share-welcome-group").addEventListener("change", renderSelectedShareWelcome);
+      el("share-welcome-save").addEventListener("click", async () => {
+        try {
+          const message = el("share-welcome-message").value.trim();
+          if (!message) throw new Error("欢迎语不能为空；如需关闭请使用关闭按钮。");
+          await saveShareWelcome(message);
+        } catch (error) { setText("share-welcome-status", error?.message || "欢迎语保存失败。"); }
+      });
+      el("share-welcome-disable").addEventListener("click", async () => {
+        try { await saveShareWelcome(null); }
+        catch (error) { setText("share-welcome-status", error?.message || "欢迎语关闭失败。"); }
       });
       el("library-search").addEventListener("click", async () => { try { await searchLibrary(); } catch (error) { setText("library-message", error?.message || "搜索失败。"); } });
       el("library-query").addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); el("library-search").click(); } });

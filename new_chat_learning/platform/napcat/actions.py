@@ -97,3 +97,31 @@ async def recall_message(event: Any, message_id: str) -> bool:
         **routing,
     )
     return True
+
+
+async def send_group_welcome(
+    event: Any,
+    *,
+    group_id: str,
+    user_id: str,
+    message: str,
+) -> bool:
+    bot = getattr(event, "bot", None)
+    if bot is None or not str(group_id).isdigit() or not str(user_id).isdigit():
+        return False
+    text = str(message).strip()
+    if not text:
+        return False
+    routing = {}
+    self_id = str(getattr(event, "get_self_id", lambda: "")())
+    if self_id:
+        routing["self_id"] = int(self_id) if self_id.isdigit() else self_id
+    await bot.send_group_msg(
+        group_id=int(group_id),
+        message=[
+            {"type": "at", "data": {"qq": str(user_id)}},
+            {"type": "text", "data": {"text": f" {text}"}},
+        ],
+        **routing,
+    )
+    return True

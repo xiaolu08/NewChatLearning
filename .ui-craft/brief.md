@@ -29,7 +29,7 @@ The primary user is a bot administrator who repeatedly scans status, changes gro
 
 ## Learned Constraints
 
-- Entry is passwordless and the primary entry action is labelled "??".
+- Entry is passwordless and the primary entry action is labelled "进入".
 - The dashboard should resemble a mature API operations console, not a card-heavy marketing template.
 - WebUI settings and AstrBot plugin configuration are two views of the same versioned configuration service.
 - Beta status must remain visible without dominating the interface.

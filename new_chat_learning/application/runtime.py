@@ -169,6 +169,34 @@ class RuntimeApplication:
             logger.exception("Cross-group settings were saved but audit recording failed.")
         return result
 
+    async def update_share_welcome_message(
+        self,
+        *,
+        group_name: str,
+        message: str | None,
+        expected_revision: str,
+        actor_id: str,
+        source: str = "legacy_command",
+    ) -> dict[str, Any]:
+        result = await self.config.update_share_welcome_message(
+            group_name=group_name,
+            message=message,
+            expected_revision=expected_revision,
+        )
+        try:
+            await self.store.record_audit(
+                actor_id=actor_id,
+                action="update_share_welcome_message",
+                target=f"share_group:{group_name}",
+                details={
+                    "operation": "set" if message is not None else "remove",
+                    "source": source,
+                },
+            )
+        except Exception:
+            logger.exception("Share welcome was saved but audit recording failed.")
+        return result
+
     async def update_global_switch(
         self,
         *,
