@@ -112,6 +112,16 @@ def test_parse_legacy_group_commands():
         "share_reply_cooldown",
         tag="牛牛 联动组",
     )
+    assert parse_legacy_group_command(
+        '！add sanhao "牛牛 联动组"'
+    ) == CrossGroupCommand(
+        "add", "share_sanhao_learning", tag="牛牛 联动组"
+    )
+    assert parse_legacy_group_command(
+        '!remove threegood "牛牛 联动组"'
+    ) == CrossGroupCommand(
+        "remove", "share_sanhao_learning", tag="牛牛 联动组"
+    )
 
 
 def test_legacy_parser_does_not_intercept_unrelated_forms():
@@ -129,6 +139,9 @@ def test_legacy_parser_does_not_intercept_unrelated_forms():
     )
     assert parse_legacy_group_command("!add reply cd fifty 牛牛联动组") == CrossGroupCommand(
         "add", "share_reply_cooldown", tag="牛牛联动组"
+    )
+    assert parse_legacy_group_command("!add sanhao") == CrossGroupCommand(
+        "add", "share_sanhao_learning"
     )
 
 

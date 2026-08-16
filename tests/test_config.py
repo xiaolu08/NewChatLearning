@@ -464,6 +464,65 @@ def test_share_group_reply_cooldown_can_be_set_used_preserved_and_removed():
         )
 
 
+def test_share_group_sanhao_learning_is_set_preserved_and_removed():
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    service = ConfigService(
+        Source(
+            {
+                "library": {
+                    "share_groups": [
+                        {
+                            "name": "牛牛联动组",
+                            "group_ids": ["10001", "10002"],
+                            "welcome_message": "欢迎加入！",
+                            "reply_cooldown_minutes": 50,
+                        }
+                    ]
+                }
+            }
+        )
+    )
+    result = asyncio.run(
+        service.update_share_sanhao_learning(
+            group_name="牛牛联动组",
+            enabled=True,
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"][0]["sanhao_learning_enabled"] is True
+    assert result["share_groups"][0]["welcome_message"] == "欢迎加入！"
+    assert result["share_groups"][0]["reply_cooldown_minutes"] == 50
+    assert service.sanhao_learning_enabled_for("10001") is True
+    assert service.sanhao_learning_enabled_for("99999") is False
+
+    result = asyncio.run(
+        service.update_cross_group_settings(
+            action="add",
+            category="share",
+            group_ids=["10003"],
+            tag="牛牛联动组",
+            expected_revision=service.revision,
+        )
+    )
+    assert result["share_groups"][0]["sanhao_learning_enabled"] is True
+    assert service.sanhao_learning_enabled_for("10003") is True
+
+    result = asyncio.run(
+        service.update_share_sanhao_learning(
+            group_name="牛牛联动组",
+            enabled=False,
+            expected_revision=service.revision,
+        )
+    )
+    assert "sanhao_learning_enabled" not in result["share_groups"][0]
+    assert result["share_groups"][0]["welcome_message"] == "欢迎加入！"
+    assert result["share_groups"][0]["reply_cooldown_minutes"] == 50
+    assert service.sanhao_learning_enabled_for("10001") is False
+
+
 def test_cross_group_settings_lists_effective_global_library_groups():
     service = ConfigService(
         {

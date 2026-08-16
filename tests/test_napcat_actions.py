@@ -165,3 +165,21 @@ def test_sends_group_welcome_with_mention_before_text():
             "self_id": 9,
         }
     ]
+
+
+def test_required_image_reply_never_falls_back_to_plain_text():
+    async def parser(_chain):
+        raise RuntimeError("expired image")
+
+    event = Event(parser)
+    result = asyncio.run(
+        send_group_message_with_id(
+            event,
+            Chain([Plain(), Image()]),
+            require_image=True,
+        )
+    )
+
+    assert result is None
+    assert event.bot.sent == []
+    assert event.sent == []

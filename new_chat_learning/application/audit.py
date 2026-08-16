@@ -34,6 +34,7 @@ ACTION_NAMES = {
     "update_cross_group_settings": "更新跨群设置",
     "update_share_welcome_message": "更新联动组欢迎语",
     "update_share_reply_cooldown": "更新联动组回复冷却",
+    "update_share_sanhao_learning": "更新联动组三好学习",
     "update_global_switch": "更新全局开关",
     "update_permission_settings": "更新权限设置",
     "update_tts_settings": "更新语音设置",

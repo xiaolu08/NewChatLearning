@@ -12,7 +12,12 @@ def _message_id(response: Any) -> str | None:
     return str(value) if value not in (None, "") else None
 
 
-async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
+async def send_group_message_with_id(
+    event: Any,
+    chain: Any,
+    *,
+    require_image: bool = False,
+) -> str | None:
     bot = getattr(event, "bot", None)
     parser = getattr(event.__class__, "_parse_onebot_json", None)
     group_id = str(getattr(event, "get_group_id", lambda: "")())
@@ -25,9 +30,16 @@ async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
     ):
         await event.send(chain)
         return None
+    if require_image and not any(
+        component.__class__.__name__.lower() in {"image", "flashimage"}
+        for component in getattr(chain, "chain", [])
+    ):
+        return None
     try:
         messages = await parser(chain)
     except Exception:  # noqa: BLE001 - media resolvers use adapter-specific exception types
+        if require_image:
+            return None
         # Expired media must not abort an otherwise valid text reply.
         fallback = type(chain)()
         fallback.chain = [
@@ -55,6 +67,8 @@ async def send_group_message_with_id(event: Any, chain: Any) -> str | None:
             **routing,
         )
     except Exception:  # noqa: BLE001 - OneBot adapters expose platform-specific failures
+        if require_image:
+            return None
         # A stale QQ media reference can parse successfully but fail only when NapCat
         # tries to download it. Retry once without media so mixed text replies survive.
         fallback = type(chain)()

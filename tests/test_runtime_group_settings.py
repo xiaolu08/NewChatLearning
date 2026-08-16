@@ -108,3 +108,39 @@ def test_runtime_share_reply_cooldown_records_minimal_audit(tmp_path):
         "cooldown_minutes": 50,
         "source": "legacy_command",
     }
+
+
+def test_runtime_sanhao_learning_records_minimal_audit(tmp_path):
+    class Source(dict):
+        async def save_config_async(self):
+            return True
+
+    async def scenario():
+        app = RuntimeApplication(
+            tmp_path,
+            Source(
+                {
+                    "library": {
+                        "share_groups": [
+                            {"name": "牛牛联动组", "group_ids": ["10001"]}
+                        ]
+                    }
+                }
+            ),
+        )
+        await app.start()
+        await app.update_share_sanhao_learning(
+            group_name="牛牛联动组",
+            enabled=True,
+            expected_revision=app.config.revision,
+            actor_id="7",
+        )
+        audit = await app.audit.list_entries(
+            action="update_share_sanhao_learning", limit=1
+        )
+        await app.stop()
+        return audit["entries"][0]
+
+    row = asyncio.run(scenario())
+    assert row["target"] == "share_group:牛牛联动组"
+    assert row["details"] == {"enabled": True, "source": "legacy_command"}

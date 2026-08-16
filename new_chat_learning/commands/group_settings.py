@@ -90,6 +90,14 @@ def parse_legacy_group_command(text: str) -> GroupSettingsCommand | CrossGroupCo
     if command in {"!add", "!remove"} and arguments:
         action = "add" if command == "!add" else "remove"
         category = arguments[0]
+        if category in {"sanhao", "threegood"}:
+            if len(raw_arguments) != 2:
+                return CrossGroupCommand(action, "share_sanhao_learning")
+            return CrossGroupCommand(
+                action,
+                "share_sanhao_learning",
+                tag=raw_arguments[1],
+            )
         if category == "reply" and len(arguments) >= 2 and arguments[1] == "cd":
             if action == "add":
                 if len(raw_arguments) != 4:

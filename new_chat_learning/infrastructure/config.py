@@ -216,6 +216,22 @@ class ConfigService:
             if group_id in members and name in cooldowns
         )
 
+    def sanhao_learning_enabled_for(self, group_id: str) -> bool:
+        snapshot = self.snapshot()
+        if not bool(snapshot["general"].get("enabled", True)):
+            return False
+        group_id = str(group_id)
+        share_groups = self._normalized_share_groups(
+            snapshot["library"].get("share_groups")
+        )
+        enabled_groups = self._normalized_share_sanhao_groups(
+            snapshot["library"].get("share_groups")
+        )
+        return any(
+            name in enabled_groups and group_id in members
+            for name, members in share_groups.items()
+        )
+
     def reply_settings(
         self,
         group_id: str | None = None,
@@ -511,6 +527,9 @@ class ConfigService:
         share_reply_cooldowns = self._normalized_share_reply_cooldowns(
             library.get("share_groups")
         )
+        share_sanhao_groups = self._normalized_share_sanhao_groups(
+            library.get("share_groups")
+        )
         permissions = self._validated_permission_update(snapshot["permissions"])
         reply_group_ids = self._normalized_group_ids(snapshot["reply"].get("group_ids", []))
         local_only_group_ids = self._normalized_group_ids(
@@ -566,6 +585,11 @@ class ConfigService:
                     **(
                         {"reply_cooldown_minutes": share_reply_cooldowns[name]}
                         if name in share_reply_cooldowns
+                        else {}
+                    ),
+                    **(
+                        {"sanhao_learning_enabled": True}
+                        if name in share_sanhao_groups
                         else {}
                     ),
                 }
@@ -771,6 +795,9 @@ class ConfigService:
                     share_reply_cooldowns = self._normalized_share_reply_cooldowns(
                         library.get("share_groups")
                     )
+                    share_sanhao_groups = self._normalized_share_sanhao_groups(
+                        library.get("share_groups")
+                    )
                     members = list(share_groups.get(normalized_tag, ()))
                     members = self._replace_group_memberships(
                         members, normalized_groups, enabled
@@ -791,6 +818,11 @@ class ConfigService:
                             **(
                                 {"reply_cooldown_minutes": share_reply_cooldowns[name]}
                                 if name in share_reply_cooldowns
+                                else {}
+                            ),
+                            **(
+                                {"sanhao_learning_enabled": True}
+                                if name in share_sanhao_groups
                                 else {}
                             ),
                         }
@@ -858,6 +890,9 @@ class ConfigService:
                 reply_cooldowns = self._normalized_share_reply_cooldowns(
                     library.get("share_groups")
                 )
+                sanhao_groups = self._normalized_share_sanhao_groups(
+                    library.get("share_groups")
+                )
                 if normalized_message is None:
                     welcome_messages.pop(normalized_name, None)
                 else:
@@ -874,6 +909,11 @@ class ConfigService:
                         **(
                             {"reply_cooldown_minutes": reply_cooldowns[name]}
                             if name in reply_cooldowns
+                            else {}
+                        ),
+                        **(
+                            {"sanhao_learning_enabled": True}
+                            if name in sanhao_groups
                             else {}
                         ),
                     }
@@ -919,6 +959,9 @@ class ConfigService:
                 reply_cooldowns = self._normalized_share_reply_cooldowns(
                     library.get("share_groups")
                 )
+                sanhao_groups = self._normalized_share_sanhao_groups(
+                    library.get("share_groups")
+                )
                 if minutes is None:
                     reply_cooldowns.pop(normalized_name, None)
                 else:
@@ -935,6 +978,74 @@ class ConfigService:
                         **(
                             {"reply_cooldown_minutes": reply_cooldowns[name]}
                             if name in reply_cooldowns
+                            else {}
+                        ),
+                        **(
+                            {"sanhao_learning_enabled": True}
+                            if name in sanhao_groups
+                            else {}
+                        ),
+                    }
+                    for name, group_ids in share_groups.items()
+                ]
+                await self._persist_source()
+            except Exception:
+                self._source.clear()
+                self._source.update(original)
+                raise
+            return self.cross_group_settings()
+
+    async def update_share_sanhao_learning(
+        self,
+        *,
+        group_name: str,
+        enabled: bool,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        normalized_name = self._bounded_text(group_name, 64)
+        if not normalized_name or not isinstance(enabled, bool):
+            raise ValueError("invalid_share_sanhao_learning")
+        async with self._lock:
+            if expected_revision != self.revision:
+                raise ValueError("revision_conflict")
+            original = self._backup_source()
+            try:
+                library = self._source.setdefault("library", {})
+                share_groups = self._normalized_share_groups(
+                    library.get("share_groups")
+                )
+                if normalized_name not in share_groups:
+                    raise ValueError("unknown_share_group")
+                welcome_messages = self._normalized_share_welcome_messages(
+                    library.get("share_groups")
+                )
+                reply_cooldowns = self._normalized_share_reply_cooldowns(
+                    library.get("share_groups")
+                )
+                sanhao_groups = self._normalized_share_sanhao_groups(
+                    library.get("share_groups")
+                )
+                if enabled:
+                    sanhao_groups.add(normalized_name)
+                else:
+                    sanhao_groups.discard(normalized_name)
+                library["share_groups"] = [
+                    {
+                        "name": name,
+                        "group_ids": list(group_ids),
+                        **(
+                            {"welcome_message": welcome_messages[name]}
+                            if name in welcome_messages
+                            else {}
+                        ),
+                        **(
+                            {"reply_cooldown_minutes": reply_cooldowns[name]}
+                            if name in reply_cooldowns
+                            else {}
+                        ),
+                        **(
+                            {"sanhao_learning_enabled": True}
+                            if name in sanhao_groups
                             else {}
                         ),
                     }
@@ -1440,6 +1551,25 @@ class ConfigService:
                 continue
             if name and 1 <= minutes <= 10080:
                 result[name] = minutes
+        return result
+
+    @classmethod
+    def _normalized_share_sanhao_groups(cls, value: Any) -> set[str]:
+        if not isinstance(value, list):
+            return set()
+        result: set[str] = set()
+        for entry in value[:100]:
+            if (
+                not isinstance(entry, dict)
+                or entry.get("sanhao_learning_enabled", False) is not True
+            ):
+                continue
+            try:
+                name = cls._bounded_text(entry.get("name"), 64)
+            except ValueError:
+                continue
+            if name:
+                result.add(name)
         return result
 
     @classmethod

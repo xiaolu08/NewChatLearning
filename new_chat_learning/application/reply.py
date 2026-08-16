@@ -119,6 +119,26 @@ class ReplyService:
         if not selections:
             return ReplyDecision(None, "filtered" if filtered_any else "no_match")
 
+        sanhao_enabled = getattr(
+            self.config, "sanhao_learning_enabled_for", lambda _group_id: False
+        )(group_id)
+        image_question = any(
+            str(component.get("type", "")).lower() in {"image", "flashimage"}
+            for component in trigger_components
+        )
+        if sanhao_enabled and image_question:
+            selections = [
+                selection
+                for selection in selections
+                if any(
+                    str(component.get("type", "")).lower()
+                    in {"image", "flashimage"}
+                    for component in selection[0].components
+                )
+            ]
+            if not selections:
+                return ReplyDecision(None, "sanhao_image_only")
+
         force_reply = mentioned_bot and bool(settings["at_force_reply"])
         probability = float(settings["probability_percent"]) / 100.0
         if not force_reply and self.random.random() > probability:

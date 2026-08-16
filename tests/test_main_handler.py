@@ -346,6 +346,45 @@ def test_render_failure_leaves_llm_flow_untouched(monkeypatch):
     assert event.stopped is False
 
 
+def test_sanhao_image_send_failure_stays_silent_and_stops_llm(monkeypatch):
+    main_module = load_main(monkeypatch)
+    candidate = SimpleNamespace(
+        answer_id=1,
+        question_id=2,
+        plain_text="",
+        components=({"type": "Image", "data": {"file": "answer.jpg"}},),
+        matching_components=({"type": "Image", "data": {"file": "question.jpg"}},),
+    )
+    plugin, reply, history = plugin_with(main_module, ReplyDecision(candidate, "exact"))
+
+    class SanhaoConfig(Config):
+        def sanhao_learning_enabled_for(self, group_id):
+            assert group_id == "10001"
+            return True
+
+    plugin.app.config = SanhaoConfig()
+    event = Event()
+    chain = SimpleNamespace(chain=["image"])
+    calls = []
+
+    async def send(_event, _chain, *, require_image=False):
+        calls.append(require_image)
+        return None
+
+    monkeypatch.setattr(main_module, "parse_recall_notice", lambda _event: None)
+    monkeypatch.setattr(main_module, "normalize_group_message", lambda _event: candidate)
+    monkeypatch.setattr(main_module, "reply_matching_key", lambda *_args: "key")
+    monkeypatch.setattr(main_module, "render_message_chain", lambda *_args, **_kwargs: chain)
+    monkeypatch.setattr(main_module, "send_group_message_with_id", send)
+
+    asyncio.run(plugin.capture_group_message(event))
+
+    assert calls == [True]
+    assert reply.marked == []
+    assert history.calls == []
+    assert event.stopped is True
+
+
 async def _send_without_id(event, chain):
     await event.send(chain)
 
@@ -1171,6 +1210,57 @@ def test_cross_group_reply_cooldown_command_updates_named_share_group(monkeypatc
     assert plugin.app.calls[0]["minutes"] == 50
     assert "成员群独立回复冷却已设置为 50 分钟" in event.result.text
     assert "回复冷却 50 分钟" in event.result.text
+
+
+def test_cross_group_sanhao_command_updates_named_share_group(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class CrossGroupConfig(Config):
+        def cross_group_settings(self):
+            return {
+                "share_groups": [
+                    {"name": "牛牛联动组", "group_ids": ["10001"]}
+                ],
+                "revision": "revision-1",
+            }
+
+    class App:
+        def __init__(self):
+            self.config = CrossGroupConfig()
+            self.calls = []
+
+        async def update_share_sanhao_learning(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                "share_groups": [
+                    {
+                        "name": "牛牛联动组",
+                        "group_ids": ["10001"],
+                        "sanhao_learning_enabled": kwargs["enabled"],
+                    }
+                ],
+                "revision": "revision-2",
+            }
+
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+    plugin.config = {"permissions": {"plugin_admin_ids": ["7"]}}
+    event = Event()
+
+    asyncio.run(
+        plugin._handle_cross_group_command(
+            event,
+            main_module.CrossGroupCommand(
+                "add", "share_sanhao_learning", tag="牛牛联动组"
+            ),
+            private=True,
+        )
+    )
+
+    assert plugin.app.calls[0]["group_name"] == "牛牛联动组"
+    assert plugin.app.calls[0]["enabled"] is True
+    assert "三好学习模式已开启" in event.result.text
+    assert "已开启三好学习" in event.result.text
 
 
 def test_group_increase_batches_members_then_recalls_welcome(monkeypatch):
@@ -2505,6 +2595,54 @@ def test_web_share_reply_cooldown_update_uses_revision_csrf_and_actor(monkeypatc
     plugin.app = App()
 
     response = asyncio.run(plugin.web_share_group_reply_cooldown_update())
+
+    assert response["status"] == "ok"
+    assert response["data"]["revision"] == "newrevision"
+
+
+def test_web_sanhao_learning_update_uses_revision_csrf_and_actor(monkeypatch):
+    main_module = load_main(monkeypatch)
+
+    class Auth:
+        async def authorize(self, token, csrf):
+            assert (token, csrf) == ("session", "csrf")
+            return True
+
+    class App:
+        web_auth = Auth()
+
+        async def update_share_sanhao_learning(self, **kwargs):
+            expected_actor = "webui:" + __import__("hashlib").sha256(b"session").hexdigest()[:16]
+            assert kwargs == {
+                "group_name": "牛牛联动组",
+                "enabled": True,
+                "expected_revision": "oldrevision",
+                "actor_id": expected_actor,
+                "source": "webui",
+            }
+            return {
+                "share_groups": [
+                    {
+                        "name": "牛牛联动组",
+                        "group_ids": ["10001"],
+                        "sanhao_learning_enabled": True,
+                    }
+                ],
+                "revision": "newrevision",
+            }
+
+    async def body():
+        return '{"group_name":"牛牛联动组","enabled":true,"revision":"oldrevision","csrf_token":"csrf"}'.encode()
+
+    monkeypatch.setattr(
+        main_module,
+        "request",
+        SimpleNamespace(cookies={"ncl_admin_session": "session"}, body=body),
+    )
+    plugin, _reply, _history = plugin_with(main_module, ReplyDecision(None, "no_match"))
+    plugin.app = App()
+
+    response = asyncio.run(plugin.web_share_group_sanhao_learning_update())
 
     assert response["status"] == "ok"
     assert response["data"]["revision"] == "newrevision"

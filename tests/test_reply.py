@@ -6,7 +6,11 @@ import sqlite3
 from new_chat_learning.application.learning import LearningService
 from new_chat_learning.application.library import LibraryService, plain_normalized_key
 from new_chat_learning.application.reply import ReplyService, cosine_similarity
-from new_chat_learning.domain.message import NormalizedMessage
+from new_chat_learning.domain.message import (
+    NormalizedMessage,
+    canonical_json,
+    normalized_components_key,
+)
 from new_chat_learning.infrastructure.config import ConfigService
 from new_chat_learning.infrastructure.database import SQLiteStore
 
@@ -206,6 +210,136 @@ def test_all_share_group_cooldowns_must_expire(tmp_path):
     assert first.should_reply is True
     assert still_blocked.reason == "share_cooldown"
     assert allowed.should_reply is True
+
+
+def test_sanhao_learning_only_uses_image_answers_for_image_questions(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "sanhao-learning.sqlite3")
+        await store.open()
+        image_question = [{"type": "Image", "data": {"file": "question.jpg"}}]
+        text_answer = [{"type": "Plain", "data": {"text": "纯文本答案"}}]
+        image_answer = [{"type": "Image", "data": {"file": "answer.jpg"}}]
+        question_key = normalized_components_key(image_question)
+        await store.add_custom_pair(
+            group_id="10001",
+            actor_id="7",
+            question_key=question_key,
+            question_components_json=canonical_json(
+                {"schema_version": 1, "components": image_question}
+            ),
+            question_text="",
+            answer_key=normalized_components_key(text_answer),
+            answer_components_json=canonical_json(
+                {"schema_version": 1, "components": text_answer}
+            ),
+            is_regex=False,
+        )
+        await store.add_custom_pair(
+            group_id="10001",
+            actor_id="7",
+            question_key=question_key,
+            question_components_json=canonical_json(
+                {"schema_version": 1, "components": image_question}
+            ),
+            question_text="",
+            answer_key=normalized_components_key(image_answer),
+            answer_components_json=canonical_json(
+                {"schema_version": 1, "components": image_answer}
+            ),
+            is_regex=False,
+        )
+        text_only_question = [{"type": "Image", "data": {"file": "other.jpg"}}]
+        text_only_key = normalized_components_key(text_only_question)
+        await store.add_custom_pair(
+            group_id="10001",
+            actor_id="7",
+            question_key=text_only_key,
+            question_components_json=canonical_json(
+                {"schema_version": 1, "components": text_only_question}
+            ),
+            question_text="",
+            answer_key=normalized_components_key([{"type": "Plain", "data": {"text": "只有文字"}}]),
+            answer_components_json=canonical_json(
+                {
+                    "schema_version": 1,
+                    "components": [{"type": "Plain", "data": {"text": "只有文字"}}],
+                }
+            ),
+            is_regex=False,
+        )
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "cooldown_seconds": 0,
+                },
+                "library": {
+                    "share_groups": [
+                        {
+                            "name": "牛牛联动组",
+                            "group_ids": ["10001"],
+                            "sanhao_learning_enabled": True,
+                        }
+                    ]
+                },
+            }
+        )
+        reply = ReplyService(store, config, random_source=random.Random(1))
+        try:
+            image_result = await reply.decide(
+                "10001", question_key, trigger_components=tuple(image_question)
+            )
+            blocked = await reply.decide(
+                "10001", text_only_key, trigger_components=tuple(text_only_question)
+            )
+        finally:
+            await store.close()
+        return image_result, blocked
+
+    image_result, blocked = asyncio.run(scenario())
+    assert image_result.should_reply is True
+    assert image_result.candidate.components[0]["type"] == "Image"
+    assert blocked.reason == "sanhao_image_only"
+
+
+def test_sanhao_learning_does_not_change_text_question_replies(tmp_path):
+    async def scenario():
+        store = SQLiteStore(tmp_path / "sanhao-text.sqlite3")
+        await store.open()
+        question = await seed_pair(store)
+        config = ConfigService(
+            {
+                "reply": {
+                    "enabled": True,
+                    "group_ids": ["10001"],
+                    "probability_percent": 100,
+                    "cooldown_seconds": 0,
+                },
+                "library": {
+                    "share_groups": [
+                        {
+                            "name": "牛牛联动组",
+                            "group_ids": ["10001"],
+                            "sanhao_learning_enabled": True,
+                        }
+                    ]
+                },
+            }
+        )
+        try:
+            return await ReplyService(store, config).decide(
+                "10001",
+                question.normalized_key,
+                trigger_components=question.matching_components,
+            )
+        finally:
+            await store.close()
+
+    result = asyncio.run(scenario())
+    assert result.should_reply is True
+    assert result.candidate.components[0]["data"]["text"] == "你好呀"
 
 
 def test_message_type_probability_controls_trigger_independently(tmp_path):

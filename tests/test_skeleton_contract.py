@@ -51,6 +51,7 @@ def test_config_schema_and_dashboard_entry_are_valid():
     share_items = schema["library"]["items"]["share_groups"]["templates"]["share_groups"]["items"]
     assert share_items["welcome_message"]["type"] == "string"
     assert share_items["reply_cooldown_minutes"]["type"] == "int"
+    assert share_items["sanhao_learning_enabled"]["type"] == "bool"
     assert schema["tts"]["items"]["enabled"]["default"] is False
     assert 'apiGet("api/status")' in dashboard
     assert 'apiGet("/NewChatLearning/api/status")' not in dashboard
@@ -64,9 +65,11 @@ def test_config_schema_and_dashboard_entry_are_valid():
     assert 'id="share-welcome-group"' in dashboard
     assert 'id="share-welcome-message"' in dashboard
     assert 'id="share-reply-cooldown"' in dashboard
+    assert 'id="share-sanhao-learning"' in dashboard
     assert 'apiGet("api/share-groups")' in dashboard
     assert 'postSecure("api/share-groups/welcome"' in dashboard
     assert 'postSecure("api/share-groups/reply-cooldown"' in dashboard
+    assert 'postSecure("api/share-groups/sanhao-learning"' in dashboard
     assert 'id="overview-refresh"' in dashboard
     assert 'id="tab-audit"' in dashboard
     assert 'id="tab-permissions"' in dashboard
